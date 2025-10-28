@@ -1,0 +1,51 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.env
+.venv/
+venv/
+env/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Unit test / coverage reports
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# IDE / editor artifacts
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data artifacts
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/external/*
+!data/external/.gitkeep
+evaluation/results/*
+!evaluation/results/.gitkeep
+notebooks/.ipynb_checkpoints/
+
+# Logs and cache
+logs/
+*.log
+.mypy_cache/
+.ruff_cache/
+
+# Local configuration
+*.env*
+config.yml
