@@ -58,12 +58,29 @@ The benchmark focuses on recent (2025) peer-reviewed papers that are certainly o
 ### Quickstart
 
 ```bash
-python3 -m venv .venv
+python scripts/bootstrap_env.py
 source .venv/bin/activate
-pip install -U pip
-pip install -r requirements.txt
-pre-commit install
+brew install ollama # or follow https://ollama.com/download
+ollama pull phi3:mini
 ```
+
+The bootstrap script installs both runtime and development dependencies in editable mode and wires up the `pre-commit` hook so formatting and linting run automatically. Re-run the script at any time to pick up dependency updates (pass `--no-dev` or `--no-pre-commit` if you want to opt out).
+
+### Local Inference (Ollama)
+
+1. Start the Ollama service: `ollama serve` (or rely on auto-start via `ollama run`).
+2. Generate text with the packaged helper:
+
+```python
+from beyond_the_cutoff import OllamaClient, load_config
+
+config = load_config()
+client = OllamaClient(model=config.inference.model, host=config.inference.host, port=config.inference.port)
+response = client.generate("Summarise the latest findings on generative retrieval.")
+print(response["response"])
+```
+
+The default configuration assumes the daemon listens on `http://localhost:11434` and that the `phi3:mini` tag is available. Update `configs/default.yaml` or provide an alternative config file to point at a different tag or host.
 
 ### Project Structure
 
@@ -90,6 +107,12 @@ pre-commit install
 - Pre-commit hooks enforce formatting and linting.
 - Configurable evaluation pipelines with Hydra or pydantic settings.
 - Ollama streamlines downloading and running lightweight (≤4B) models in Q4/Q8 formats optimized for MLX.
+
+### Configuration
+
+- Primary settings live in `configs/default.yaml` and are validated by `beyond_the_cutoff.load_config()` (default base model: `microsoft/Phi-3-mini-4k-instruct`).
+- Paths in the config resolve relative to the repository root so you can keep environment-specific overrides minimal.
+- Provide alternate configuration files per experiment and pass their paths to `load_config` when needed.
 
 ### Model Handling
 

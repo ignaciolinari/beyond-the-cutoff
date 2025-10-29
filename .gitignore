@@ -18,6 +18,7 @@ dist/
 .pytest_cache/
 .coverage
 .coverage.*
+*.DS_Store
 htmlcov/
 
 # Jupyter Notebook checkpoints
@@ -49,3 +50,7 @@ logs/
 # Local configuration
 *.env*
 config.yml
+
+# Personal notes
+notes.md
+notes.txt
