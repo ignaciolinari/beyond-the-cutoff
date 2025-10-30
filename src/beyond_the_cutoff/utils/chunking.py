@@ -53,23 +53,63 @@ def iter_chunk_texts(texts: Iterable[str], chunk_size: int, chunk_overlap: int) 
         yield from chunk_text(text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
 
-_SENT_BOUNDARY_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z(\[])")
+_ABBREVIATIONS = {
+    "al.",
+    "e.g.",
+    "i.e.",
+    "cf.",
+    "fig.",
+    "eq.",
+    "dr.",
+    "mr.",
+    "mrs.",
+    "ms.",
+    "sr.",
+    "jr.",
+    "vs.",
+    "prof.",
+}
 
 
 def split_into_sentences(text: str) -> list[str]:
-    """Heuristic sentence splitter for English/academic text.
+    """Heuristic sentence splitter with optional NLTK fallback."""
 
-    This avoids extra heavy dependencies and works reasonably for papers.
-    """
-
-    # Normalize whitespace
     cleaned = re.sub(r"\s+", " ", text).strip()
     if not cleaned:
         return []
-    parts = _SENT_BOUNDARY_RE.split(cleaned)
-    # Merge tiny trailing fragments if any
+
+    # Prefer NLTK Punkt if available (no hard dependency)
+    try:  # pragma: no cover - optional dependency
+        import nltk
+
+        if hasattr(nltk, "sent_tokenize"):
+            return [s.strip() for s in nltk.sent_tokenize(cleaned) if s.strip()]
+    except Exception:
+        pass
+
+    # Fallback heuristic splitter with abbreviation awareness
+    pieces: list[str] = []
+    start = 0
+    for match in re.finditer(r"[.!?]", cleaned):
+        end = match.end()
+        token = cleaned[start:end].strip()
+        if not token:
+            continue
+        lower_token = token.lower()
+        if any(lower_token.endswith(abbr) for abbr in _ABBREVIATIONS):
+            continue
+        pieces.append(token)
+        start = end
+    if start < len(cleaned):
+        tail = cleaned[start:].strip()
+        if tail:
+            pieces.append(tail)
+
+    if not pieces:
+        return [cleaned]
+
     sentences: list[str] = []
-    for part in parts:
+    for part in pieces:
         s = part.strip()
         if not s:
             continue

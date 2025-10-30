@@ -90,6 +90,7 @@ Build a local retrieval index over your PDFs and ask questions grounded in the p
 
 ```bash
 python scripts/ingest_and_index.py --config configs/default.yaml
+# add --no-page-sidecars to skip writing per-page JSONL sidecars
 ```
 
 Place your PDFs under `data/raw/` (or pass `--source PATH`). Processed text will be written to `data/processed/` and the index to `data/external/index/`.
@@ -118,9 +119,10 @@ Configuration knobs:
 
 Notes:
 - Uses `BAAI/bge-small-en-v1.5` for embeddings by default; adjust for quality/speed.
-- If a reranker is configured, top-k is reranked before prompting.
+- If a reranker is configured, top-k is reranked before prompting (with warnings logged when the reranker fails).
 - Answers are generated via your local Ollama model (default `phi3:mini`).
-- API responses include a `citations` array with `{id, source_path, page, score}`.
+- API responses include a `citations` array with `{id, source_path, page, token_start, token_end, score, excerpt}`.
+- Responses also expose `citation_verification` metadata summarising which inline markers were found and their lexical overlap with retrieved context.
 
 ### Project Structure
 

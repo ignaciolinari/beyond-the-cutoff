@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -18,6 +19,8 @@ from sentence_transformers import CrossEncoder, SentenceTransformer
 
 from ..config import ProjectConfig
 from ..models.ollama import OllamaClient
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -37,12 +40,18 @@ class RAGPipeline:
         if reranker_name:
             try:  # pragma: no cover - model download
                 self._reranker = CrossEncoder(reranker_name)
-            except Exception:
+            except Exception as exc:
                 self._reranker = None
+                logger.warning(
+                    "Failed to load reranker model %s; continuing without reranking. Error: %s",
+                    reranker_name,
+                    exc,
+                )
         # Load mapping rows: (text, source_path)
         self._texts: list[str] = []
         self._sources: list[str] = []
         self._pages: list[int | None] = []
+        self._token_spans: list[tuple[int | None, int | None]] = []
         with self.mapping_path.open("r", encoding="utf-8") as f:
             reader = csv.DictReader(f, delimiter="\t")
             for row in reader:
@@ -59,9 +68,24 @@ class RAGPipeline:
                             page_num = int(normalized)
                         except ValueError:
                             page_num = None
+                span_start: int | None = None
+                span_end: int | None = None
+                raw_start = row.get("token_start")
+                raw_end = row.get("token_end")
+                if isinstance(raw_start, str) and raw_start.strip():
+                    try:
+                        span_start = int(raw_start)
+                    except ValueError:
+                        span_start = None
+                if isinstance(raw_end, str) and raw_end.strip():
+                    try:
+                        span_end = int(raw_end)
+                    except ValueError:
+                        span_end = None
                 self._texts.append(text)
                 self._sources.append(source_path)
                 self._pages.append(page_num)
+                self._token_spans.append((span_start, span_end))
 
         # Validate index metadata if present
         meta_path = self.index_path.parent / "index_meta.json"
@@ -79,26 +103,41 @@ class RAGPipeline:
                 # Non-fatal; proceed with best effort
                 pass
 
-    def _retrieve(self, query: str, top_k: int) -> list[tuple[int, str, str, int | None, float]]:
-        """Return (id, text, source_path, page, score) for top_k chunks."""
+    def _retrieve(
+        self, query: str, top_k: int
+    ) -> list[tuple[int, str, str, int | None, tuple[int | None, int | None], float]]:
+        """Return (id, text, source_path, page, token_span, score) for top_k chunks."""
         query_embedding = self._embedder.encode([query], convert_to_numpy=True)
         query_array = np.asarray(query_embedding, dtype="float32")
         query_nd = cast(npt.NDArray[np.float32], query_array)
         faiss.normalize_L2(query_nd)
         scores, idx = self._index.search(query_nd, top_k)
-        results: list[tuple[int, str, str, int | None, float]] = []
+        results: list[tuple[int, str, str, int | None, tuple[int | None, int | None], float]] = []
         for j, score in zip(idx[0], scores[0], strict=True):
             if j == -1:
                 continue
-            results.append((int(j), self._texts[j], self._sources[j], self._pages[j], float(score)))
+            results.append(
+                (
+                    int(j),
+                    self._texts[j],
+                    self._sources[j],
+                    self._pages[j],
+                    self._token_spans[j] if j < len(self._token_spans) else (None, None),
+                    float(score),
+                )
+            )
 
         # Optional reranking with cross-encoder
         if self._reranker and results:
-            pairs = [(query, t) for (_id, t, _s, _p, _sc) in results]
+            pairs = [(query, t) for (_id, t, _src, _p, _span, _sc) in results]
             try:  # pragma: no cover - model inference
                 ce_scores = self._reranker.predict(pairs)
-            except Exception:
+            except Exception as exc:
                 ce_scores = None
+                logger.warning(
+                    "Cross-encoder reranker failed during prediction: %s. Falling back to dense scores.",
+                    exc,
+                )
             if ce_scores is not None:
                 with_scores = [(*r, float(ce)) for r, ce in zip(results, ce_scores, strict=False)]
                 with_scores.sort(key=lambda x: x[-1], reverse=True)
@@ -131,9 +170,9 @@ class RAGPipeline:
         top_k = self.config.retrieval.top_k
         max_chars = self.config.retrieval.max_context_chars
         retrieved = self._retrieve(question, top_k)
-        contexts = [t for (_id, t, _src, _p, _s) in retrieved]
+        contexts = [t for (_id, t, _src, _p, _span, _s) in retrieved]
         # Render sources with page numbers when available
-        sources = [f"{s}#page={p}" if p else s for (_id, _t, s, p, _s) in retrieved]
+        sources = [f"{s}#page={p}" if p else s for (_id, _t, s, p, _span, _s) in retrieved]
         prompt = self._build_prompt(question, contexts, max_chars)
 
         client = client or OllamaClient(
@@ -143,20 +182,59 @@ class RAGPipeline:
             timeout=self.config.inference.timeout,
         )
         result = client.generate(prompt)
+
+        def _excerpt(text: str, max_chars: int = 200) -> str:
+            snippet = text.strip().replace("\n", " ")
+            if len(snippet) <= max_chars:
+                return snippet
+            return snippet[: max_chars - 3].rstrip() + "..."
+
+        def _verify_citations(answer_text: str) -> dict[str, Any]:
+            import re
+
+            marks = [int(m) for m in re.findall(r"\[(\d+)\]", answer_text)]
+            unique_marks = sorted(set(marks))
+            total = len(retrieved)
+            missing = [i for i in range(1, total + 1) if i not in unique_marks]
+            extra = [i for i in unique_marks if i < 1 or i > total]
+
+            answer_words = set(answer_text.lower().split())
+            coverage: dict[int, float] = {}
+            for idx in unique_marks:
+                if idx < 1 or idx > total:
+                    continue
+                context_words = [w for w in contexts[idx - 1].lower().split() if len(w) > 3]
+                if not context_words:
+                    coverage[idx] = 0.0
+                    continue
+                overlap = sum(1 for w in context_words if w in answer_words)
+                coverage[idx] = overlap / max(len(context_words), 1)
+            return {
+                "referenced": unique_marks,
+                "missing": missing,
+                "extra": extra,
+                "coverage": coverage,
+            }
+
         citations = [
             {
                 "id": _id,
                 "source_path": _src,
                 "page": _p,
+                "token_start": _span[0],
+                "token_end": _span[1],
                 "score": _s,
+                "excerpt": _excerpt(_t),
             }
-            for (_id, _t, _src, _p, _s) in retrieved
+            for (_id, _t, _src, _p, _span, _s) in retrieved
         ]
+        answer_text = result.get("response", "")
         return {
-            "answer": result.get("response", ""),
+            "answer": answer_text,
             "contexts": contexts,
             "sources": sources,
-            "scores": [s for (_id, _t, _src, _p, s) in retrieved],
+            "scores": [s for (_id, _t, _src, _p, _span, s) in retrieved],
             "citations": citations,
             "model": client.model,
+            "citation_verification": _verify_citations(answer_text),
         }

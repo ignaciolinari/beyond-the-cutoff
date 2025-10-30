@@ -18,6 +18,7 @@ class PDFIngestor:
 
     source_dir: Path
     target_dir: Path
+    write_sidecars: bool = True
 
     def _pdf_paths(self) -> Iterable[Path]:
         yield from self.source_dir.rglob("*.pdf")
@@ -41,12 +42,13 @@ class PDFIngestor:
             pages = extract_pages_from_pdf(pdf_path)
             text = "\n\n".join(p for p in pages if p)
             out_path.write_text(text, encoding="utf-8")
-            # Write sidecar JSONL with per-page texts for downstream page-aware indexing
-            pages_path = out_path.with_suffix(".pages.jsonl")
-            with pages_path.open("w", encoding="utf-8") as f:
-                for i, page_text in enumerate(pages):
-                    rec = {"page": i + 1, "text": page_text or ""}
-                    f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            if self.write_sidecars:
+                # Write sidecar JSONL with per-page texts for downstream page-aware indexing
+                pages_path = out_path.with_suffix(".pages.jsonl")
+                with pages_path.open("w", encoding="utf-8") as f:
+                    for i, page_text in enumerate(pages):
+                        rec = {"page": i + 1, "text": page_text or ""}
+                        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
             outputs.append(out_path)
         return outputs
 

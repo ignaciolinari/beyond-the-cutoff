@@ -20,6 +20,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--config", default="configs/default.yaml", help="Path to config file")
     p.add_argument("--source", default=None, help="Override raw data dir of PDFs")
     p.add_argument("--out", default=None, help="Override index output directory")
+    p.add_argument(
+        "--no-page-sidecars",
+        action="store_true",
+        help="Skip writing per-page JSONL sidecars during ingestion",
+    )
     return p.parse_args()
 
 
@@ -31,7 +36,11 @@ def main() -> None:
     index_out = Path(args.out) if args.out else (cfg.paths.external_data / "index")
 
     # 1) Convert PDFs to text
-    ingestor = PDFIngestor(source_dir=raw_dir, target_dir=processed_dir)
+    ingestor = PDFIngestor(
+        source_dir=raw_dir,
+        target_dir=processed_dir,
+        write_sidecars=not args.no_page_sidecars,
+    )
     outputs = ingestor.convert_all()
     if not outputs:
         print(f"No PDFs found under {raw_dir}. Skipping index build.")

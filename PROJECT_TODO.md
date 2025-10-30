@@ -24,9 +24,9 @@ _Last updated: 2025-10-30_
 ## Model Adaptation
 - [ ] Set baseline model shortlist and document hardware requirements
 - [x] Implement RAG pipeline (index build + query API)
-- [ ] Add cross-encoder re-ranker after dense retrieval (e.g., bge-reranker-small)
-- [ ] Implement section-aware chunking using headings/page boundaries
-- [ ] Include page/section metadata in retrieval mapping and surface inline citations in answers
+- [x] Add cross-encoder re-ranker after dense retrieval (e.g., bge-reranker-small)
+- [~] Implement section-aware chunking using headings/page boundaries
+- [~] Include page/section metadata in retrieval mapping and surface inline citations in answers
 - [ ] Implement fine-tuning harness (LoRA/PEFT) with configuration options
 - [ ] Create scripts to sync fine-tuned checkpoints between local and cloud environments
 - [ ] Track experiment metadata (model version, dataset version, hyperparameters)
