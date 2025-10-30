@@ -174,7 +174,15 @@ class RAGPipeline:
                 results = [r[:-1] for r in with_scores]
         return results
 
-    def _build_prompt(self, query: str, contexts: list[str], max_chars: int) -> str:
+    def _build_prompt(
+        self,
+        query: str,
+        contexts: list[str],
+        max_chars: int,
+        *,
+        require_citations: bool = True,
+        extra_instructions: str | None = None,
+    ) -> str:
         # Concatenate contexts until max_chars is reached
         assembled: list[str] = []
         current = 0
@@ -186,81 +194,134 @@ class RAGPipeline:
         context_block = "\n\n".join(assembled)
         instructions = (
             "You are a research paper assistant. Answer the question using the provided context. "
-            "Cite the sources inline as [#] based on the order of the snippets. If the answer "
-            "is not in the context, say you don't know."
         )
+        if require_citations:
+            instructions += "Cite the sources inline as [#] based on the order of the snippets. "
+        else:
+            instructions += "Do not fabricate citations. "
+        instructions += "If the answer is not in the context, say you don't know."
+        if extra_instructions:
+            instructions += " " + extra_instructions.strip()
         return f"{instructions}\n\nContext:\n{context_block}\n\n" f"Question: {query}\nAnswer:"
+
+    @staticmethod
+    def _excerpt(text: str, max_chars: int = 200) -> str:
+        snippet = text.strip().replace("\n", " ")
+        if len(snippet) <= max_chars:
+            return snippet
+        return snippet[: max_chars - 3].rstrip() + "..."
+
+    @staticmethod
+    def _verify_citations(answer_text: str, contexts: list[str]) -> dict[str, Any]:
+        import re
+
+        marks = [int(m) for m in re.findall(r"\[(\d+)\]", answer_text)]
+        unique_marks = sorted(set(marks))
+        total = len(contexts)
+        missing = [i for i in range(1, total + 1) if i not in unique_marks]
+        extra = [i for i in unique_marks if i < 1 or i > total]
+
+        answer_words = set(answer_text.lower().split())
+        coverage: dict[int, float] = {}
+        for idx in unique_marks:
+            if idx < 1 or idx > total:
+                continue
+            context_words = [w for w in contexts[idx - 1].lower().split() if len(w) > 3]
+            if not context_words:
+                coverage[idx] = 0.0
+                continue
+            overlap = sum(1 for w in context_words if w in answer_words)
+            coverage[idx] = overlap / max(len(context_words), 1)
+        return {
+            "referenced": unique_marks,
+            "missing": missing,
+            "extra": extra,
+            "coverage": coverage,
+        }
+
+    def verify_citations(self, answer_text: str, contexts: list[str]) -> dict[str, Any]:
+        """Public wrapper around :meth:`_verify_citations` for reuse in tooling."""
+
+        return self._verify_citations(answer_text, contexts)
+
+    def prepare_prompt(
+        self,
+        question: str,
+        *,
+        require_citations: bool = True,
+        extra_instructions: str | None = None,
+    ) -> dict[str, Any]:
+        """Return retrieval artifacts and a rendered prompt without calling the LLM."""
+
+        top_k = self.config.retrieval.top_k
+        max_chars = self.config.retrieval.max_context_chars
+        retrieved = self._retrieve(question, top_k)
+        contexts = [t for (_id, t, _src, _p, _span, _s) in retrieved]
+        sources = [f"{s}#page={p}" if p else s for (_id, _t, s, p, _span, _s) in retrieved]
+        prompt = self._build_prompt(
+            question,
+            contexts,
+            max_chars,
+            require_citations=require_citations,
+            extra_instructions=extra_instructions,
+        )
+
+        retrieved_records = [
+            {
+                "id": _id,
+                "text": _t,
+                "source_path": _src,
+                "page": _p,
+                "token_start": _span[0],
+                "token_end": _span[1],
+                "score": _s,
+                "excerpt": self._excerpt(_t),
+            }
+            for (_id, _t, _src, _p, _span, _s) in retrieved
+        ]
+
+        return {
+            "prompt": prompt,
+            "contexts": contexts,
+            "sources": sources,
+            "retrieved": retrieved_records,
+            "scores": [rec["score"] for rec in retrieved_records],
+            "require_citations": require_citations,
+            "extra_instructions": extra_instructions,
+        }
 
     def ask(self, question: str, *, client: LLMClient | None = None) -> dict[str, Any]:
         """Answer a user question using retrieval-augmented generation.
 
         Returns a dict with keys: answer, contexts, sources, scores.
         """
-        top_k = self.config.retrieval.top_k
-        max_chars = self.config.retrieval.max_context_chars
-        retrieved = self._retrieve(question, top_k)
-        contexts = [t for (_id, t, _src, _p, _span, _s) in retrieved]
-        # Render sources with page numbers when available
-        sources = [f"{s}#page={p}" if p else s for (_id, _t, s, p, _span, _s) in retrieved]
-        prompt = self._build_prompt(question, contexts, max_chars)
 
+        prepared = self.prepare_prompt(question)
         client = client or self._get_client()
-        result = client.generate(prompt)
-
-        def _excerpt(text: str, max_chars: int = 200) -> str:
-            snippet = text.strip().replace("\n", " ")
-            if len(snippet) <= max_chars:
-                return snippet
-            return snippet[: max_chars - 3].rstrip() + "..."
-
-        def _verify_citations(answer_text: str) -> dict[str, Any]:
-            import re
-
-            marks = [int(m) for m in re.findall(r"\[(\d+)\]", answer_text)]
-            unique_marks = sorted(set(marks))
-            total = len(retrieved)
-            missing = [i for i in range(1, total + 1) if i not in unique_marks]
-            extra = [i for i in unique_marks if i < 1 or i > total]
-
-            answer_words = set(answer_text.lower().split())
-            coverage: dict[int, float] = {}
-            for idx in unique_marks:
-                if idx < 1 or idx > total:
-                    continue
-                context_words = [w for w in contexts[idx - 1].lower().split() if len(w) > 3]
-                if not context_words:
-                    coverage[idx] = 0.0
-                    continue
-                overlap = sum(1 for w in context_words if w in answer_words)
-                coverage[idx] = overlap / max(len(context_words), 1)
-            return {
-                "referenced": unique_marks,
-                "missing": missing,
-                "extra": extra,
-                "coverage": coverage,
-            }
+        result = client.generate(prepared["prompt"])
+        answer_text = result.get("response", "")
 
         citations = [
             {
-                "id": _id,
-                "source_path": _src,
-                "page": _p,
-                "token_start": _span[0],
-                "token_end": _span[1],
-                "score": _s,
-                "excerpt": _excerpt(_t),
+                "id": rec["id"],
+                "source_path": rec["source_path"],
+                "page": rec["page"],
+                "token_start": rec["token_start"],
+                "token_end": rec["token_end"],
+                "score": rec["score"],
+                "excerpt": rec["excerpt"],
             }
-            for (_id, _t, _src, _p, _span, _s) in retrieved
+            for rec in prepared["retrieved"]
         ]
-        answer_text = result.get("response", "")
+
         return {
             "answer": answer_text,
-            "contexts": contexts,
-            "sources": sources,
-            "scores": [s for (_id, _t, _src, _p, _span, s) in retrieved],
+            "contexts": prepared["contexts"],
+            "sources": prepared["sources"],
+            "scores": prepared["scores"],
             "citations": citations,
             "model": client.model,
-            "citation_verification": _verify_citations(answer_text),
+            "citation_verification": self._verify_citations(answer_text, prepared["contexts"]),
         }
 
     def _get_client(self) -> LLMClient:

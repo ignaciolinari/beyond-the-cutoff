@@ -103,8 +103,16 @@ class EvaluationConfig(BaseModel):
     metrics: list[str] = Field(default_factory=lambda: ["factuality", "citation_accuracy"])
     qa_dataset_path: Path = Field(default=Path("evaluation/datasets/qa_pairs.jsonl"))
     summary_dataset_path: Path = Field(default=Path("evaluation/datasets/summaries.jsonl"))
+    offline_tasks_path: Path = Field(default=Path("evaluation/datasets/offline_tasks.jsonl"))
+    offline_dataset_path: Path = Field(default=Path("evaluation/datasets/offline_dataset.jsonl"))
 
-    @field_validator("qa_dataset_path", "summary_dataset_path", mode="before")
+    @field_validator(
+        "qa_dataset_path",
+        "summary_dataset_path",
+        "offline_tasks_path",
+        "offline_dataset_path",
+        mode="before",
+    )
     @classmethod
     def _coerce_path(cls, value: Any) -> Path:
         if isinstance(value, Path):
@@ -117,6 +125,8 @@ class EvaluationConfig(BaseModel):
             update={
                 "qa_dataset_path": self._resolve_path(self.qa_dataset_path, base_dir),
                 "summary_dataset_path": self._resolve_path(self.summary_dataset_path, base_dir),
+                "offline_tasks_path": self._resolve_path(self.offline_tasks_path, base_dir),
+                "offline_dataset_path": self._resolve_path(self.offline_dataset_path, base_dir),
             }
         )
 
@@ -160,6 +170,42 @@ class InferenceConfig(BaseModel):
         return [str(value)]
 
 
+class DatasetGenerationConfig(BaseModel):
+    """Settings controlling offline dataset generation."""
+
+    generator: InferenceConfig = Field(default_factory=InferenceConfig)
+    output_dataset_path: Path = Field(default=Path("evaluation/datasets/offline_dataset.jsonl"))
+    raw_tasks_path: Path = Field(default=Path("evaluation/datasets/offline_tasks.jsonl"))
+    questions_per_document: int = Field(default=4, ge=0)
+    summary_prompts_per_document: int = Field(default=1, ge=0)
+    citation_prompts_per_document: int = Field(default=1, ge=0)
+    max_chunks_per_document: int = Field(default=6, ge=1)
+    max_chars_per_chunk: int = Field(default=1600, ge=256)
+    max_documents: int | None = Field(default=None, ge=1)
+    seed: int = Field(default=42)
+
+    @field_validator("output_dataset_path", "raw_tasks_path", mode="before")
+    @classmethod
+    def _coerce_path(cls, value: Any) -> Path:
+        if isinstance(value, Path):
+            return value
+        return Path(str(value))
+
+    def with_base(self, base_dir: Path) -> DatasetGenerationConfig:
+        """Return a copy with resolved output paths."""
+
+        return self.model_copy(
+            update={
+                "output_dataset_path": self._resolve_path(self.output_dataset_path, base_dir),
+                "raw_tasks_path": self._resolve_path(self.raw_tasks_path, base_dir),
+            }
+        )
+
+    @staticmethod
+    def _resolve_path(path: Path, base_dir: Path) -> Path:
+        return path if path.is_absolute() else (base_dir / path).resolve()
+
+
 class ProjectConfig(BaseModel):
     """Top-level configuration container."""
 
@@ -168,6 +214,7 @@ class ProjectConfig(BaseModel):
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
     fine_tuning: FineTuningConfig = Field(default_factory=FineTuningConfig)
     evaluation: EvaluationConfig = Field(default_factory=EvaluationConfig)
+    dataset_generation: DatasetGenerationConfig = Field(default_factory=DatasetGenerationConfig)
     inference: InferenceConfig = Field(default_factory=InferenceConfig)
 
     def with_base(self, base_dir: Path) -> ProjectConfig:
@@ -177,6 +224,7 @@ class ProjectConfig(BaseModel):
                 "paths": self.paths.with_base(base_dir),
                 "fine_tuning": self.fine_tuning.with_base(base_dir),
                 "evaluation": self.evaluation.with_base(base_dir),
+                "dataset_generation": self.dataset_generation.with_base(base_dir),
             }
         )
 
@@ -216,6 +264,7 @@ __all__ = [
     "RetrievalConfig",
     "FineTuningConfig",
     "EvaluationConfig",
+    "DatasetGenerationConfig",
     "InferenceConfig",
     "ProjectConfig",
     "load_config",

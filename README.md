@@ -131,6 +131,38 @@ Notes:
 - API responses include a `citations` array with `{id, source_path, page, token_start, token_end, score, excerpt}`.
 - Responses also expose `citation_verification` metadata summarising which inline markers were found and their lexical overlap with retrieved context.
 
+## Offline Prompt Pipeline
+
+Pre-compute task instructions, prompts, and gold answers once so you can evaluate fine-tuning, plain RAG, and hybrid RAG + fine-tuning on identical retrieval outputs.
+
+```bash
+python scripts/generate_offline_dataset.py \
+  --config configs/default.yaml \
+  --output evaluation/datasets/offline_dataset.jsonl \
+  --raw-tasks evaluation/datasets/offline_tasks.jsonl
+```
+
+The script orchestrates three steps:
+
+- samples chunks from each indexed paper and asks the configured **dataset_generation.generator** (e.g., GPT-4-class endpoint or a strong local model) to author QA, summary, and citation-check instructions;
+- runs the local `RAGPipeline.prepare_prompt` to attach the exact contexts, sources, and prompt that your assistant will see at inference time;
+- stores both the curated task bank (`offline_tasks.jsonl`) and the expanded RAG-ready dataset (`offline_dataset.jsonl`) with per-example metadata (chunk ids, citation requirements, generator provenance).
+
+Tune behaviour via `configs/default.yaml` → `dataset_generation` (counts per document, chunk limits, RNG seed, generator backend). Override paths or document caps with CLI flags like `--index-dir`, `--max-docs`, or `--output` when experimenting.
+
+## Fine-Tuning Workflow
+
+- Launch training from Colab/Kaggle notebooks that load `evaluation/datasets/offline_dataset.jsonl`, apply LoRA/PEFT using the `fine_tuning` config block, and export adapter weights (e.g., `adapter.safetensors`).
+- Store notebooks under `notebooks/finetuning/` so runs are reproducible; checkpoint artefacts should be synced back into `outputs/adapters/` (or another path declared in `fine_tuning.adapter_output_dir`).
+- Keep a manifest per run (model tag, dataset version, seeds, hyperparameters) so evaluations map cleanly back to the generated weights.
+
+## Evaluation Strategy
+
+- Use the offline dataset to compare three systems: baseline RAG, fine-tuned model without retrieval, and the hybrid fine-tuned+RAG assistant.
+- For automated scoring, rely on a stronger judge model (cloud API or high-quality local checkpoint) to grade factuality, citation adherence, and summaries; log judge prompts/responses for reproducibility.
+- Complement automatic grading with targeted human spot checks, prioritising disagreements or low-confidence judge outputs.
+- Track results in `evaluation/results/` so trends over time (different checkpoints or datasets) remain auditable.
+
 ### Project Structure
 
 ```
@@ -163,6 +195,7 @@ Notes:
 
 - Primary settings live in `configs/default.yaml` and are validated by `beyond_the_cutoff.load_config()` (default base model: `HuggingFaceTB/SmolLM2-135M`).
 - Paths in the config resolve relative to the repository root so you can keep environment-specific overrides minimal.
+- The evaluation block now exposes `offline_tasks_path` and `offline_dataset_path` to keep generated task banks and prompt/answer corpora alongside QA and summary sets.
 - Provide alternate configuration files per experiment and pass their paths to `load_config` when needed.
 
 ### Model Handling

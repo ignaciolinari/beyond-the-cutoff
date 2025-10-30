@@ -20,6 +20,7 @@ _Last updated: 2025-10-30_
 - [ ] Capture metadata catalog (CSV/Parquet) with title, authors, DOI/arXiv ID, subjects, publication date
 - [ ] Extract page numbers and section titles during parsing for downstream citation grounding
 - [ ] Write data quality checks and unit tests covering edge cases
+- [ ] Add validation pass for offline dataset outputs (duplicate prompts, empty answers, citation coverage)
 
 ## Model Adaptation
 - [ ] Set baseline model shortlist and document hardware requirements
@@ -28,12 +29,15 @@ _Last updated: 2025-10-30_
 - [~] Implement section-aware chunking using headings/page boundaries
 - [~] Include page/section metadata in retrieval mapping and surface inline citations in answers
 - [ ] Implement fine-tuning harness (LoRA/PEFT) with configuration options
+- [ ] Create Colab/Kaggle notebook that trains from `offline_dataset.jsonl`, logs hyperparameters, and exports adapter weights to `outputs/adapters/`
 - [ ] Create scripts to sync fine-tuned checkpoints between local and cloud environments
 - [ ] Track experiment metadata (model version, dataset version, hyperparameters)
 
 ## Evaluation Suite
 - [ ] Design evaluation dataset (QA pairs, summaries) and storage format
 - [ ] Implement automatic scoring metrics (factuality, citation accuracy, BLEU/BERTScore)
+- [ ] Build comparative evaluation harness for baseline RAG vs fine-tuned vs hybrid setups
+- [ ] Integrate large-model judge (cloud or local) for automated evaluations and capture prompt/response logs
 - [ ] Introduce a small evaluation harness (faithfulness, citation accuracy, retrieval hit@k/MRR)
 - [ ] Integrate human evaluation protocol
 - [ ] Provide CLI/report generator for comparative analysis
@@ -45,6 +49,7 @@ _Last updated: 2025-10-30_
 - [ ] Create contribution guidelines and coding standards
 - [ ] Summarize ongoing experiments in `evaluation/results/`
 - [ ] Optional: Streamlit mini app that calls the FastAPI `/ask` endpoint
+- [ ] Establish dataset manifest/versioning guidelines for generated offline corpora
 
 ## Inference
 - [x] Provide Ollama client wrapper and default config wiring

@@ -30,6 +30,26 @@ evaluation:
     - bertscore
   qa_dataset_path: evaluation/datasets/qa_pairs.jsonl
   summary_dataset_path: evaluation/datasets/summaries.jsonl
+  offline_tasks_path: evaluation/datasets/offline_tasks.jsonl
+  offline_dataset_path: evaluation/datasets/offline_dataset.jsonl
+dataset_generation:
+  generator:
+    provider: transformers
+    model: HuggingFaceTB/SmolLM2-135M
+    device: auto
+    torch_dtype: auto
+    max_new_tokens: 768
+    temperature: 0.5
+    top_p: 0.95
+    repetition_penalty: 1.05
+    stop_sequences: []
+  questions_per_document: 4
+  summary_prompts_per_document: 1
+  citation_prompts_per_document: 1
+  max_chunks_per_document: 6
+  max_chars_per_chunk: 1600
+  max_documents: null
+  seed: 42
 inference:
   provider: transformers
   model: HuggingFaceTB/SmolLM2-135M
