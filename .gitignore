@@ -54,3 +54,4 @@ config.yml
 # Personal notes
 notes.md
 notes.txt
+.todo/

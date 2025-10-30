@@ -82,6 +82,41 @@ print(response["response"])
 
 The default configuration assumes the daemon listens on `http://localhost:11434` and that the `phi3:mini` tag is available. Update `configs/default.yaml` or provide an alternative config file to point at a different tag or host.
 
+## Paper Assistant (RAG) Quickstart
+
+Build a local retrieval index over your PDFs and ask questions grounded in the papers.
+
+1) Ingest PDFs and build index (FAISS + sentence-transformers):
+
+```bash
+python scripts/ingest_and_index.py --config configs/default.yaml
+```
+
+Place your PDFs under `data/raw/` (or pass `--source PATH`). Processed text will be written to `data/processed/` and the index to `data/external/index/`.
+
+2) Ask a question from the command line:
+
+```bash
+python scripts/ask.py "What are the main contributions of paper X?"
+```
+
+3) Optional: start a minimal API server:
+
+```bash
+uvicorn beyond_the_cutoff.api.server:app --reload --port 8000
+```
+
+POST to `/ask` with a JSON body like `{ "question": "..." }`.
+
+Configuration knobs:
+- `retrieval.chunk_size` / `retrieval.chunk_overlap`: text chunking
+- `retrieval.top_k`: how many chunks to retrieve
+- `retrieval.max_context_chars`: max context passed into the prompt
+
+Notes:
+- Uses `sentence-transformers/all-MiniLM-L6-v2` for embeddings by default; adjust for quality/speed.
+- Answers are generated via your local Ollama model (default `phi3:mini`).
+
 ### Project Structure
 
 ```
@@ -97,6 +132,8 @@ The default configuration assumes the daemon listens on `http://localhost:11434`
     ├── __init__.py
     ├── data/            # Data loading and preprocessing modules
     ├── models/          # Fine-tuning wrappers, RAG components
+    ├── retrieval/       # Index builder and query-time RAG pipeline
+    ├── api/             # Optional FastAPI server for /ask
     ├── evaluation/      # Metric calculations, scoring tools
     └── utils/           # Shared helpers
 ```

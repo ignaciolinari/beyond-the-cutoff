@@ -55,6 +55,10 @@ class RetrievalConfig(BaseModel):
     embedding_model: str = Field(default="sentence-transformers/all-MiniLM-L6-v2")
     chunk_size: int = Field(default=512)
     chunk_overlap: int = Field(default=64, ge=0)
+    top_k: int = Field(default=4, ge=1)
+    max_context_chars: int = Field(
+        default=6000, ge=512
+    )  # soft cap to keep prompts within model context
 
 
 class FineTuningConfig(BaseModel):
