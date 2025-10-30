@@ -14,8 +14,8 @@ _Last updated: 2025-10-30_
 - [x] Define project-wide configuration schema (Hydra or Pydantic) under `configs/`
 
 ## Data Pipeline
-- [ ] Draft data sourcing plan (target venues, scraping approach, rate limits)
-- [ ] Implement arXiv downloader with rate limiting and retries to fetch 2025 papers into `data/raw/`
+- [x] Draft data sourcing plan (target venues, scraping approach, rate limits)
+- [x] Implement arXiv downloader with rate limiting and retries to fetch 2025 papers into `data/raw/`
 - [~] Build cleaner/normalizer to produce JSONL/text in `data/processed/` (partial: PDF → text)
 - [ ] Capture metadata catalog (CSV/Parquet) with title, authors, DOI/arXiv ID, subjects, publication date
 - [ ] Extract page numbers and section titles during parsing for downstream citation grounding

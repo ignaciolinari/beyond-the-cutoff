@@ -28,9 +28,21 @@ The benchmark focuses on recent (2025) peer-reviewed papers that are certainly o
 
 ### 1. Data Collection
 
-- Curate a corpus of 2025 scientific papers from open-access repositories (arXiv, bioRxiv, medRxiv, etc.).
-- Extract metadata (title, abstract, DOI, field) automatically.
-- Convert documents to clean text and JSONL format for fine-tuning and retrieval pipelines.
+- Curate a 2025 corpus with at least 100 arXiv papers post-training-cutoff (see `docs/data_sourcing_plan.md` for category mix and scheduling).
+- Extract metadata (title, abstract, authors, categories) automatically via the arXiv export API.
+- Convert downloaded PDFs to clean text and JSONL format for fine-tuning and retrieval pipelines.
+- Track manifest entries so downstream experiments can version the dataset alongside model checkpoints.
+
+#### arXiv Harvest Quickstart
+
+```bash
+python scripts/fetch_arxiv_corpus.py \
+  --contact-email you@example.com \
+  --total 100 \
+  --output-dir data/raw/arxiv_2025
+```
+
+The CLI respects arXiv rate limits, writes metadata to JSONL/CSV, persists a manifest, and downloads PDFs with configurable retries/backoff. Use `--category` flags to adjust subject coverage or increase `--total` (for example to 200 when expanding into other fields).
 
 ### 2. Model Adaptation
 

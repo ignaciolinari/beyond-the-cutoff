@@ -91,7 +91,9 @@ module = [
   "pypdf",
   "pypdf.*",
   "fastapi",
-  "fastapi.*"
+  "fastapi.*",
+  "httpx",
+  "httpx.*"
 ]
 ignore_missing_imports = true
 
