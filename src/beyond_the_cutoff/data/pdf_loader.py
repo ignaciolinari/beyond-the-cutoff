@@ -6,6 +6,7 @@ target directory, preserving relative filenames (with `.txt` extension).
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,16 +38,39 @@ class PDFIngestor:
             rel = pdf_path.relative_to(self.source_dir)
             out_path = (self.target_dir / rel).with_suffix(".txt")
             out_path.parent.mkdir(parents=True, exist_ok=True)
-            text = extract_text_from_pdf(pdf_path)
+            pages = extract_pages_from_pdf(pdf_path)
+            text = "\n\n".join(p for p in pages if p)
             out_path.write_text(text, encoding="utf-8")
+            # Write sidecar JSONL with per-page texts for downstream page-aware indexing
+            pages_path = out_path.with_suffix(".pages.jsonl")
+            with pages_path.open("w", encoding="utf-8") as f:
+                for i, page_text in enumerate(pages):
+                    rec = {"page": i + 1, "text": page_text or ""}
+                    f.write(json.dumps(rec, ensure_ascii=False) + "\n")
             outputs.append(out_path)
         return outputs
 
 
-def extract_text_from_pdf(path: Path) -> str:
-    """Extract text from a PDF file using pypdf with a simple heuristic."""
-    # Import locally to keep module importable without optional dependency
-    from pypdf import PdfReader  # type: ignore
+def extract_pages_from_pdf(path: Path) -> list[str]:
+    """Extract text per page from a PDF using PyMuPDF if available, else pypdf."""
+    # Try PyMuPDF for higher fidelity extraction
+    try:  # pragma: no cover - optional dependency
+        import fitz
+
+        doc = fitz.open(str(path))
+        pages = []
+        for page in doc:
+            try:
+                pages.append(page.get_text("text").strip())
+            except Exception:
+                pages.append("")
+        doc.close()
+        return pages
+    except Exception:
+        pass
+
+    # Fallback to pypdf
+    from pypdf import PdfReader
 
     reader = PdfReader(str(path))
     parts: list[str] = []
@@ -56,4 +80,9 @@ def extract_text_from_pdf(path: Path) -> str:
         except Exception:  # pragma: no cover - pypdf can raise on corrupt pages
             content = ""
         parts.append(content.strip())
-    return "\n\n".join(p for p in parts if p)
+    return parts
+
+
+def extract_text_from_pdf(path: Path) -> str:
+    """Backward-compatible wrapper returning entire document text."""
+    return "\n\n".join(p for p in extract_pages_from_pdf(path) if p)

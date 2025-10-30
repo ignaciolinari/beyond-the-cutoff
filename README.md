@@ -112,10 +112,15 @@ Configuration knobs:
 - `retrieval.chunk_size` / `retrieval.chunk_overlap`: text chunking
 - `retrieval.top_k`: how many chunks to retrieve
 - `retrieval.max_context_chars`: max context passed into the prompt
+- `retrieval.chunking_strategy`: `words` (fast) or `sentences` (section-friendlier)
+- `retrieval.embedding_model`: defaults to `BAAI/bge-small-en-v1.5`
+- `retrieval.reranker_model`: optional cross-encoder for reranking (e.g., `cross-encoder/ms-marco-MiniLM-L-6-v2`)
 
 Notes:
-- Uses `sentence-transformers/all-MiniLM-L6-v2` for embeddings by default; adjust for quality/speed.
+- Uses `BAAI/bge-small-en-v1.5` for embeddings by default; adjust for quality/speed.
+- If a reranker is configured, top-k is reranked before prompting.
 - Answers are generated via your local Ollama model (default `phi3:mini`).
+- API responses include a `citations` array with `{id, source_path, page, score}`.
 
 ### Project Structure
 

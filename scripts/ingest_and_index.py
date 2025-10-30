@@ -45,6 +45,7 @@ def main() -> None:
         output_dir=index_out,
         chunk_size=cfg.retrieval.chunk_size,
         chunk_overlap=cfg.retrieval.chunk_overlap,
+        chunking_strategy=cfg.retrieval.chunking_strategy,
     )
     print(f"Index written to {index_path}\nMapping written to {mapping_path}")
 

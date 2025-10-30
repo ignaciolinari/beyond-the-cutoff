@@ -59,6 +59,11 @@ class RetrievalConfig(BaseModel):
     max_context_chars: int = Field(
         default=6000, ge=512
     )  # soft cap to keep prompts within model context
+    # Chunking strategy: "words" (sliding window over whitespace tokens) or
+    # "sentences" (packs full sentences up to chunk_size tokens)
+    chunking_strategy: str = Field(default="words")
+    # Optional cross-encoder reranker model name (empty disables reranking)
+    reranker_model: str = Field(default="")
 
 
 class FineTuningConfig(BaseModel):

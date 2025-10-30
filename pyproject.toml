@@ -15,6 +15,7 @@ dependencies = [
   "peft>=0.12",
   "accelerate>=0.30",
   "pypdf>=4.3",
+  "pymupdf>=1.24",
   "faiss-cpu>=1.8",
   "chromadb>=0.5",
   "evaluate>=0.4",
@@ -81,6 +82,10 @@ module = [
   "faiss.*",
   "sentence_transformers",
   "sentence_transformers.*",
+  "fitz",
+  "fitz.*",
+  "pypdf",
+  "pypdf.*",
   "fastapi",
   "fastapi.*"
 ]

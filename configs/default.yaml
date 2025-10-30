@@ -7,11 +7,13 @@ paths:
   external_data: data/external
 retrieval:
   vector_store: faiss
-  embedding_model: sentence-transformers/all-MiniLM-L6-v2
-  chunk_size: 512
-  chunk_overlap: 64
+  embedding_model: BAAI/bge-small-en-v1.5
+  chunk_size: 800
+  chunk_overlap: 120
   top_k: 4
   max_context_chars: 6000
+  chunking_strategy: sentences
+  reranker_model: cross-encoder/ms-marco-MiniLM-L-6-v2
 fine_tuning:
   base_model: microsoft/Phi-3-mini-4k-instruct
   adapter_output_dir: outputs/adapters
