@@ -4,9 +4,19 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
+from importlib import import_module
 from typing import Any
 
-import httpx
+httpx: Any
+_HTTPX_IMPORT_ERROR: ModuleNotFoundError | None
+
+try:  # pragma: no cover - optional dependency
+    httpx = import_module("httpx")
+except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency
+    httpx = None
+    _HTTPX_IMPORT_ERROR = exc
+else:
+    _HTTPX_IMPORT_ERROR = None
 
 Message = Mapping[str, str]
 
@@ -67,6 +77,10 @@ class OllamaClient:
         self, method: str, path: str, payload: Mapping[str, Any] | None = None
     ) -> dict[str, Any]:
         url = f"{self.base_url}{path}"
+        if httpx is None:  # pragma: no cover - optional dependency guard
+            raise OllamaError(
+                "httpx is not installed. Install the 'httpx' extra to use the Ollama backend."
+            ) from _HTTPX_IMPORT_ERROR
         try:
             with httpx.Client(timeout=self.timeout, headers=self.headers) as client:
                 response = client.request(

@@ -9,16 +9,31 @@ import csv
 import json
 import logging
 from dataclasses import dataclass
+from importlib import import_module
 from pathlib import Path
 from typing import Any, cast
 
-import faiss
+from ..config import ProjectConfig
+from ..models import LLMClient, build_generation_client
+
+try:  # pragma: no cover - optional dependency
+    faiss = import_module("faiss")
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    from ..utils import faiss_stub as faiss
 import numpy as np
 import numpy.typing as npt
-from sentence_transformers import CrossEncoder, SentenceTransformer
 
-from ..config import ProjectConfig
-from ..models.ollama import OllamaClient
+CrossEncoderType = Any
+SentenceTransformerType = Any
+
+try:  # pragma: no cover - optional dependency
+    _sentence_transformers = import_module("sentence_transformers")
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    CrossEncoder = None
+    SentenceTransformer = None
+else:
+    CrossEncoder = getattr(_sentence_transformers, "CrossEncoder", None)
+    SentenceTransformer = getattr(_sentence_transformers, "SentenceTransformer", None)
 
 logger = logging.getLogger(__name__)
 
@@ -33,20 +48,32 @@ class RAGPipeline:
 
     def __post_init__(self) -> None:
         self._index = faiss.read_index(str(self.index_path))
-        self._embedder = SentenceTransformer(self.config.retrieval.embedding_model)
+        if SentenceTransformer is None:
+            raise RuntimeError("sentence-transformers is required to load the retrieval encoder.")
+        embedder_cls = cast(Any, SentenceTransformer)
+        self._embedder = cast(
+            SentenceTransformerType, embedder_cls(self.config.retrieval.embedding_model)
+        )
         # Optional cross-encoder reranker
-        self._reranker: CrossEncoder | None = None
+        self._reranker: CrossEncoderType | None = None
         reranker_name = (self.config.retrieval.reranker_model or "").strip()
         if reranker_name:
-            try:  # pragma: no cover - model download
-                self._reranker = CrossEncoder(reranker_name)
-            except Exception as exc:
-                self._reranker = None
+            if CrossEncoder is None:
                 logger.warning(
-                    "Failed to load reranker model %s; continuing without reranking. Error: %s",
+                    "sentence-transformers is not installed; reranker %s is disabled.",
                     reranker_name,
-                    exc,
                 )
+            else:
+                try:  # pragma: no cover - model download
+                    reranker_cls = cast(Any, CrossEncoder)
+                    self._reranker = cast(CrossEncoderType, reranker_cls(reranker_name))
+                except Exception as exc:
+                    self._reranker = None
+                    logger.warning(
+                        "Failed to load reranker model %s; continuing without reranking. Error: %s",
+                        reranker_name,
+                        exc,
+                    )
         # Load mapping rows: (text, source_path)
         self._texts: list[str] = []
         self._sources: list[str] = []
@@ -102,6 +129,8 @@ class RAGPipeline:
             except Exception:
                 # Non-fatal; proceed with best effort
                 pass
+
+        self._client: LLMClient | None = None
 
     def _retrieve(
         self, query: str, top_k: int
@@ -162,7 +191,7 @@ class RAGPipeline:
         )
         return f"{instructions}\n\nContext:\n{context_block}\n\n" f"Question: {query}\nAnswer:"
 
-    def ask(self, question: str, *, client: OllamaClient | None = None) -> dict[str, Any]:
+    def ask(self, question: str, *, client: LLMClient | None = None) -> dict[str, Any]:
         """Answer a user question using retrieval-augmented generation.
 
         Returns a dict with keys: answer, contexts, sources, scores.
@@ -175,12 +204,7 @@ class RAGPipeline:
         sources = [f"{s}#page={p}" if p else s for (_id, _t, s, p, _span, _s) in retrieved]
         prompt = self._build_prompt(question, contexts, max_chars)
 
-        client = client or OllamaClient(
-            model=self.config.inference.model,
-            host=self.config.inference.host,
-            port=self.config.inference.port,
-            timeout=self.config.inference.timeout,
-        )
+        client = client or self._get_client()
         result = client.generate(prompt)
 
         def _excerpt(text: str, max_chars: int = 200) -> str:
@@ -238,3 +262,8 @@ class RAGPipeline:
             "model": client.model,
             "citation_verification": _verify_citations(answer_text),
         }
+
+    def _get_client(self) -> LLMClient:
+        if self._client is None:
+            self._client = build_generation_client(self.config.inference)
+        return self._client

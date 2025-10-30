@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ask a question using the local RAG index and Ollama backend.
+"""Ask a question using the local RAG index and configured generation backend.
 
 Usage:
     python scripts/ask.py "What does paper X say about Y?"

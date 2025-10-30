@@ -11,13 +11,26 @@ import csv
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from importlib import import_module
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, Any, cast
 
-import faiss
+try:  # pragma: no cover - optional dependency
+    faiss = import_module("faiss")
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    from ..utils import faiss_stub as faiss
 import numpy as np
 import numpy.typing as npt
-from sentence_transformers import SentenceTransformer
+
+if TYPE_CHECKING:  # pragma: no cover - type checking only
+    from sentence_transformers import SentenceTransformer as SentenceTransformerType
+else:
+    SentenceTransformerType = Any
+
+try:  # pragma: no cover - optional dependency
+    SentenceTransformer = import_module("sentence_transformers").SentenceTransformer
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    SentenceTransformer = None
 
 from ..utils.chunking import chunk_text, chunk_text_sentences
 
@@ -28,8 +41,10 @@ class DocumentIndexer:
 
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
 
-    def _load_model(self) -> SentenceTransformer:
-        return SentenceTransformer(self.embedding_model)
+    def _load_model(self) -> SentenceTransformerType:
+        if SentenceTransformer is None:  # pragma: no cover - optional dependency guard
+            raise RuntimeError("sentence-transformers is required to build the retrieval index.")
+        return cast(SentenceTransformerType, SentenceTransformer(self.embedding_model))
 
     def build_index(
         self,

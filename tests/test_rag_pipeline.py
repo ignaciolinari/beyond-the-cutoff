@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar, cast
 
 import numpy as np
 import pytest
@@ -11,6 +11,9 @@ from beyond_the_cutoff.config import ProjectConfig
 from beyond_the_cutoff.models.ollama import OllamaClient
 from beyond_the_cutoff.retrieval.index import DocumentIndexer
 from beyond_the_cutoff.retrieval.query import RAGPipeline
+
+_FixtureFunc = TypeVar("_FixtureFunc", bound=Callable[..., object])
+auto_fixture = cast(Callable[[_FixtureFunc], _FixtureFunc], pytest.fixture(autouse=True))
 
 
 class DummySentenceTransformer:
@@ -49,7 +52,7 @@ class DummyOllamaClient(OllamaClient):
         return {"response": self._response}
 
 
-@pytest.fixture(autouse=True)  # type: ignore[misc]
+@auto_fixture
 def patch_sentence_transformer(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "beyond_the_cutoff.retrieval.index.SentenceTransformer", DummySentenceTransformer

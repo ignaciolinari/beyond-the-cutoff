@@ -15,7 +15,7 @@ retrieval:
   chunking_strategy: sentences
   reranker_model: cross-encoder/ms-marco-MiniLM-L-6-v2
 fine_tuning:
-  base_model: microsoft/Phi-3-mini-4k-instruct
+  base_model: HuggingFaceTB/SmolLM2-135M
   adapter_output_dir: outputs/adapters
   lora_rank: 16
   learning_rate: 0.0001
@@ -31,8 +31,15 @@ evaluation:
   qa_dataset_path: evaluation/datasets/qa_pairs.jsonl
   summary_dataset_path: evaluation/datasets/summaries.jsonl
 inference:
-  provider: ollama
-  model: phi3:mini
-  host: http://localhost
-  port: 11434
-  timeout: 60
+  provider: transformers
+  model: HuggingFaceTB/SmolLM2-135M
+  device: auto
+  torch_dtype: auto
+  max_new_tokens: 512
+  temperature: 0.1
+  top_p: 0.95
+  repetition_penalty: 1.05
+  stop_sequences: []
+  # When ready to graduate to a larger Phi checkpoint, switch to `provider: ollama`
+  # (or another deployment target) and update the `model` tag accordingly. The
+  # remaining parameters can stay as-is unless you need different sampling behavior.

@@ -4,7 +4,7 @@ from importlib import import_module
 from typing import Any
 
 from .config import ProjectConfig, load_config
-from .models import OllamaClient
+from .models import LLMClient, OllamaClient, TransformersClient, build_generation_client
 
 
 def _optional_attr(module_path: str, attr_name: str) -> Any:
@@ -23,7 +23,10 @@ DocumentIndexer = _optional_attr("beyond_the_cutoff.retrieval.index", "DocumentI
 __all__ = [
     "ProjectConfig",
     "load_config",
+    "LLMClient",
     "OllamaClient",
+    "TransformersClient",
+    "build_generation_client",
     "RAGPipeline",
     "DocumentIndexer",
     "__version__",

@@ -60,27 +60,34 @@ The benchmark focuses on recent (2025) peer-reviewed papers that are certainly o
 ```bash
 python scripts/bootstrap_env.py
 source .venv/bin/activate
-brew install ollama # or follow https://ollama.com/download
-ollama pull phi3:mini
+python - <<'PY'
+from transformers import AutoModelForCausalLM, AutoTokenizer
+AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M")
+AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM2-135M")
+PY
+# or use the helper script to seed a project-local cache
+python scripts/prefetch_models.py --cache-dir .cache/huggingface
+# Optional: install Ollama if you plan to graduate to Phi or other hosted tags
+# brew install ollama && ollama pull phi3:mini
 ```
 
 The bootstrap script installs both runtime and development dependencies in editable mode and wires up the `pre-commit` hook so formatting and linting run automatically. Re-run the script at any time to pick up dependency updates (pass `--no-dev` or `--no-pre-commit` if you want to opt out).
 
-### Local Inference (Ollama)
+### Local Inference (Transformers by default)
 
-1. Start the Ollama service: `ollama serve` (or rely on auto-start via `ollama run`).
-2. Generate text with the packaged helper:
+Once dependencies are installed, you can run the lightweight SmolLM2 checkpoint directly via Transformers:
 
 ```python
-from beyond_the_cutoff import OllamaClient, load_config
+from beyond_the_cutoff import load_config
+from beyond_the_cutoff.models import build_generation_client
 
 config = load_config()
-client = OllamaClient(model=config.inference.model, host=config.inference.host, port=config.inference.port)
+client = build_generation_client(config.inference)
 response = client.generate("Summarise the latest findings on generative retrieval.")
 print(response["response"])
 ```
 
-The default configuration assumes the daemon listens on `http://localhost:11434` and that the `phi3:mini` tag is available. Update `configs/default.yaml` or provide an alternative config file to point at a different tag or host.
+The default configuration loads `HuggingFaceTB/SmolLM2-135M` on whichever device is available (`cuda`, `mps`, or CPU). Override `configs/default.yaml` (or pass a custom config) to change devices, sampling parameters, or the model name. When you're ready to test a larger Phi checkpoint, set `inference.provider: ollama` and update `inference.model` to match the Ollama tag you pulled (for example `phi3:mini`).
 
 ## Paper Assistant (RAG) Quickstart
 
@@ -120,7 +127,7 @@ Configuration knobs:
 Notes:
 - Uses `BAAI/bge-small-en-v1.5` for embeddings by default; adjust for quality/speed.
 - If a reranker is configured, top-k is reranked before prompting (with warnings logged when the reranker fails).
-- Answers are generated via your local Ollama model (default `phi3:mini`).
+- Answers are generated via the configured backend (default: Transformers with `HuggingFaceTB/SmolLM2-135M`).
 - API responses include a `citations` array with `{id, source_path, page, token_start, token_end, score, excerpt}`.
 - Responses also expose `citation_verification` metadata summarising which inline markers were found and their lexical overlap with retrieved context.
 
@@ -150,17 +157,17 @@ Notes:
 - `pyproject.toml` defines dependencies and tooling (ruff, mypy, pytest, etc.).
 - Pre-commit hooks enforce formatting and linting.
 - Configurable evaluation pipelines with Hydra or pydantic settings.
-- Ollama streamlines downloading and running lightweight (≤4B) models in Q4/Q8 formats optimized for MLX.
+- Ollama (optional) streamlines downloading and running lightweight (≤4B) models in Q4/Q8 formats optimized for MLX when you switch to Phi or other quantized builds.
 
 ### Configuration
 
-- Primary settings live in `configs/default.yaml` and are validated by `beyond_the_cutoff.load_config()` (default base model: `microsoft/Phi-3-mini-4k-instruct`).
+- Primary settings live in `configs/default.yaml` and are validated by `beyond_the_cutoff.load_config()` (default base model: `HuggingFaceTB/SmolLM2-135M`).
 - Paths in the config resolve relative to the repository root so you can keep environment-specific overrides minimal.
 - Provide alternate configuration files per experiment and pass their paths to `load_config` when needed.
 
 ### Model Handling
 
-- Keep local models lightweight (Phi-3 mini, Qwen 2.5 3B) via Ollama (`ollama pull qwen2.5:3b`), Hugging Face MLX checkpoints, or GGUF conversions.
+- Start with compact checkpoints such as `HuggingFaceTB/SmolLM2-135M` (default) or other sub-1B models you can run via Transformers/MLX; keep Ollama around for heavier upgrades like Phi-3 mini or Qwen 3B when you need higher quality.
 - For 7B–8B models rely on quantized (Q4) variants and load them only when you have spare memory; close heavy processes before inference.
 - Sync fine-tuned checkpoints from Colab/Kaggle back into the local `models/` directory; keep quantized copies tailored to the local machine.
 - Manage caches under `~/.cache/beyond-the-cutoff/` or within Ollama to avoid repeated downloads.

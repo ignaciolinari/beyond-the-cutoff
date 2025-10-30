@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from importlib import import_module
 from pathlib import Path
 from typing import Any
 
-from omegaconf import OmegaConf
+try:  # pragma: no cover - optional dependency
+    OmegaConf = import_module("omegaconf").OmegaConf
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    OmegaConf = None
 from pydantic import BaseModel, Field, field_validator
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -69,7 +73,7 @@ class RetrievalConfig(BaseModel):
 class FineTuningConfig(BaseModel):
     """Fine-tuning hyperparameters."""
 
-    base_model: str = Field(default="microsoft/Phi-3-mini-4k-instruct")
+    base_model: str = Field(default="HuggingFaceTB/SmolLM2-135M")
     adapter_output_dir: Path = Field(default=Path("outputs/adapters"))
     lora_rank: int = Field(default=16, ge=1)
     learning_rate: float = Field(default=1e-4, gt=0)
@@ -122,13 +126,20 @@ class EvaluationConfig(BaseModel):
 
 
 class InferenceConfig(BaseModel):
-    """Settings for local inference backends (defaults to Ollama)."""
+    """Settings for local inference backends (defaults to Transformers)."""
 
-    provider: str = Field(default="ollama")
-    model: str = Field(default="phi3:mini")
+    provider: str = Field(default="transformers")
+    model: str = Field(default="HuggingFaceTB/SmolLM2-135M")
     host: str = Field(default="http://localhost")
     port: int | None = Field(default=11434)
     timeout: float = Field(default=60.0, gt=0.0)
+    device: str = Field(default="auto")
+    torch_dtype: str | None = Field(default="auto")
+    max_new_tokens: int = Field(default=512, ge=1)
+    temperature: float = Field(default=0.1, ge=0.0)
+    top_p: float = Field(default=0.95, gt=0.0, le=1.0)
+    repetition_penalty: float = Field(default=1.05, gt=0.0)
+    stop_sequences: list[str] = Field(default_factory=list)
 
     def base_url(self) -> str:
         """Return the full base URL for the inference endpoint."""
@@ -136,6 +147,17 @@ class InferenceConfig(BaseModel):
         if self.port is None:
             return root
         return f"{root}:{self.port}"
+
+    @field_validator("stop_sequences", mode="before")
+    @classmethod
+    def _validate_stop_sequences(cls, value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return [str(item) for item in value]
+        if isinstance(value, tuple):
+            return [str(item) for item in value]
+        return [str(value)]
 
 
 class ProjectConfig(BaseModel):
@@ -162,11 +184,22 @@ class ProjectConfig(BaseModel):
 def _load_raw_config(path: Path) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"Configuration file not found: {path}")
-    omega_conf = OmegaConf.load(str(path))
-    container = OmegaConf.to_container(omega_conf, resolve=True)
-    if not isinstance(container, dict):
-        raise TypeError(f"Expected config to deserialize into a mapping, got {type(container)!r}")
-    return {str(key): value for key, value in container.items()}
+    if OmegaConf is not None:
+        omega_conf = OmegaConf.load(str(path))
+        container = OmegaConf.to_container(omega_conf, resolve=True)
+        if not isinstance(container, dict):
+            raise TypeError(
+                f"Expected config to deserialize into a mapping, got {type(container)!r}"
+            )
+        return {str(key): value for key, value in container.items()}
+
+    import yaml  # type: ignore[import-untyped]
+
+    with path.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle)
+    if not isinstance(data, dict):
+        raise TypeError(f"Expected config to deserialize into a mapping, got {type(data)!r}")
+    return {str(key): value for key, value in data.items()}
 
 
 def load_config(path: Path | str | None = None) -> ProjectConfig:
