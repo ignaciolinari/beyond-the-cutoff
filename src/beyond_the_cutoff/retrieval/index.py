@@ -72,6 +72,9 @@ class DocumentIndexer:
         strategy = (chunking_strategy or "words").lower()
 
         for path in sorted(input_dir.rglob(pattern)):
+            chunk_counter = 0
+            token_start_counter = 0
+            token_stride = max(1, chunk_size - chunk_overlap)
             # Prefer page-aware sidecar if present
             pages_sidecar = path.with_suffix(".pages.jsonl")
             if pages_sidecar.exists():
@@ -86,6 +89,7 @@ class DocumentIndexer:
                         page_text = str(rec.get("text", ""))
                         if not page_text.strip():
                             continue
+                        section_title = rec.get("section_title")
                         if strategy == "sentences":
                             chunks = chunk_text_sentences(
                                 page_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap
@@ -94,21 +98,21 @@ class DocumentIndexer:
                             chunks = chunk_text(
                                 page_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap
                             )
-                        start_token = 0
-                        for ci, ch in enumerate(chunks):
+                        for ch in chunks:
                             token_len = len(ch.split())
                             texts.append(ch)
                             meta_rows.append(
                                 {
                                     "source_path": str(path),
                                     "page": page_idx,
-                                    "chunk_index": ci,
-                                    "token_start": start_token,
-                                    "token_end": start_token + token_len,
+                                    "chunk_index": chunk_counter,
+                                    "token_start": token_start_counter,
+                                    "token_end": token_start_counter + token_len,
+                                    "section_title": section_title,
                                 }
                             )
-                            # next chunk starts advance by (chunk_size - overlap)
-                            start_token += max(1, chunk_size - chunk_overlap)
+                            chunk_counter += 1
+                            token_start_counter += token_stride
                 continue
 
             # Fallback: whole-document text
@@ -119,20 +123,21 @@ class DocumentIndexer:
                 )
             else:
                 chunks = chunk_text(content, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-            start_token = 0
-            for ci, ch in enumerate(chunks):
+            for ch in chunks:
                 token_len = len(ch.split())
                 texts.append(ch)
                 meta_rows.append(
                     {
                         "source_path": str(path),
                         "page": None,
-                        "chunk_index": ci,
-                        "token_start": start_token,
-                        "token_end": start_token + token_len,
+                        "chunk_index": chunk_counter,
+                        "token_start": token_start_counter,
+                        "token_end": token_start_counter + token_len,
+                        "section_title": None,
                     }
                 )
-                start_token += max(1, chunk_size - chunk_overlap)
+                chunk_counter += 1
+                token_start_counter += token_stride
 
         if not texts:
             raise ValueError(f"No text files matching {pattern!r} found under {input_dir}")
@@ -157,6 +162,7 @@ class DocumentIndexer:
                     "chunk_index",
                     "token_start",
                     "token_end",
+                    "section_title",
                     "text",
                 ]
             )  # header
@@ -169,6 +175,7 @@ class DocumentIndexer:
                         row.get("chunk_index", 0),
                         row.get("token_start", ""),
                         row.get("token_end", ""),
+                        row.get("section_title", ""),
                         texts[idx],
                     ]
                 )
@@ -189,6 +196,7 @@ class DocumentIndexer:
                 "chunk_index",
                 "token_start",
                 "token_end",
+                "section_title",
                 "text",
             ],
         }

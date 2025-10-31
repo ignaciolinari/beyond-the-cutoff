@@ -32,8 +32,25 @@ def main() -> None:
     result = pipeline.ask(args.question)
     print("\nAnswer:\n" + result["answer"].strip())
     print("\nSources:")
-    for i, src in enumerate(result["sources"], start=1):
-        print(f"[{i}] {src}")
+    for idx, citation in enumerate(result["citations"], start=1):
+        source_path = citation.get("source_path") or "(unknown)"
+        section = citation.get("section_title")
+        page = citation.get("page")
+        meta_bits = []
+        if section:
+            meta_bits.append(section)
+        if page is not None:
+            meta_bits.append(f"page {page}")
+        suffix = f" ({', '.join(meta_bits)})" if meta_bits else ""
+        print(f"[{idx}] {source_path}{suffix}")
+
+        rendered = citation.get("rendered_context") or citation.get("excerpt")
+        if rendered:
+            preview = rendered.strip().splitlines()
+            snippet = preview[0]
+            if len(snippet) > 160:
+                snippet = snippet[:157].rstrip() + "..."
+            print(f"    {snippet}")
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 from typing import Any
@@ -141,9 +142,13 @@ def test_offline_dataset_generation(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     summary_entry = next(item for item in dataset_lines if item["task_type"] == "summaries")
     assert "Summarize the main contribution" in summary_entry["instruction"]
     assert not summary_entry["metadata"]["require_citations"]
+    assert "retrieved_section_titles" in summary_entry["metadata"]
 
     citation_entry = next(item for item in dataset_lines if item["task_type"] == "citations")
     assert citation_entry["metadata"]["require_citations"]
+    citation_meta = citation_entry["rag"]["citations"][0]
+    assert citation_meta.get("section_title") is None
+    assert "rendered_context" in citation_meta
 
     raw_payloads = [
         json.loads(line) for line in raw_tasks.read_text(encoding="utf-8").strip().splitlines()
@@ -153,3 +158,42 @@ def test_offline_dataset_generation(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
     # Ensure the generator was invoked
     assert generator_client.calls, "Generator client should have been called"
+
+
+def test_chunk_index_monotonic_with_sidecars(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "beyond_the_cutoff.retrieval.index.SentenceTransformer",
+        DummySentenceTransformer,
+    )
+
+    processed_dir = tmp_path / "processed"
+    processed_dir.mkdir()
+    text_path = processed_dir / "paper.txt"
+    text_path.write_text("placeholder", encoding="utf-8")
+    pages_path = text_path.with_suffix(".pages.jsonl")
+    with pages_path.open("w", encoding="utf-8") as handle:
+        for page_num in range(1, 3):
+            payload = {
+                "page": page_num,
+                "text": " ".join(["token"] * 60),
+            }
+            handle.write(json.dumps(payload) + "\n")
+
+    index_dir = tmp_path / "index"
+    indexer = DocumentIndexer(embedding_model="dummy")
+    _index_path, mapping_path = indexer.build_index(
+        input_dir=processed_dir,
+        output_dir=index_dir,
+        chunk_size=20,
+        chunk_overlap=5,
+        chunking_strategy="words",
+    )
+
+    with mapping_path.open("r", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        chunk_indices = [int(row["chunk_index"]) for row in reader]
+
+    assert chunk_indices == sorted(chunk_indices)
+    assert len(chunk_indices) == len(set(chunk_indices))

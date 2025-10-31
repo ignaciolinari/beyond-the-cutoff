@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, TypeVar, cast
+from typing import Any
 
 import numpy as np
 import pytest
@@ -12,8 +12,17 @@ from beyond_the_cutoff.models.ollama import OllamaClient
 from beyond_the_cutoff.retrieval.index import DocumentIndexer
 from beyond_the_cutoff.retrieval.query import RAGPipeline
 
-_FixtureFunc = TypeVar("_FixtureFunc", bound=Callable[..., object])
-auto_fixture = cast(Callable[[_FixtureFunc], _FixtureFunc], pytest.fixture(autouse=True))
+
+# pytest's decorator lacks precise typing under strict mypy, ignore the mismatch.
+@pytest.fixture(autouse=True)  # type: ignore[misc]
+def _patch_sentence_transformer(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "beyond_the_cutoff.retrieval.index.SentenceTransformer", DummySentenceTransformer
+    )
+    monkeypatch.setattr(
+        "beyond_the_cutoff.retrieval.query.SentenceTransformer", DummySentenceTransformer
+    )
+    monkeypatch.setattr("beyond_the_cutoff.retrieval.query.CrossEncoder", DummyCrossEncoder)
 
 
 class DummySentenceTransformer:
@@ -44,23 +53,15 @@ class DummyOllamaClient(OllamaClient):
 
     def generate(
         self,
-        _prompt: str,
+        prompt: str,
         *,
         stream: bool = False,
         options: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
+        _ = prompt  # unused
+        _ = stream
+        _ = options
         return {"response": self._response}
-
-
-@auto_fixture
-def patch_sentence_transformer(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "beyond_the_cutoff.retrieval.index.SentenceTransformer", DummySentenceTransformer
-    )
-    monkeypatch.setattr(
-        "beyond_the_cutoff.retrieval.query.SentenceTransformer", DummySentenceTransformer
-    )
-    monkeypatch.setattr("beyond_the_cutoff.retrieval.query.CrossEncoder", DummyCrossEncoder)
 
 
 def test_rag_pipeline_basic(tmp_path: Path) -> None:
@@ -101,6 +102,7 @@ def test_rag_pipeline_basic(tmp_path: Path) -> None:
     assert result["answer"] == dummy_answer
     assert result["citations"], "Expected citations in the response"
     assert "excerpt" in result["citations"][0]
+    assert "rendered_context" in result["citations"][0]
 
     verification = result["citation_verification"]
     assert verification["referenced"] == [1]

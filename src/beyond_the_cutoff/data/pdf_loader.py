@@ -7,6 +7,7 @@ target directory, preserving relative filenames (with `.txt` extension).
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +23,27 @@ class PDFIngestor:
 
     def _pdf_paths(self) -> Iterable[Path]:
         yield from self.source_dir.rglob("*.pdf")
+
+    @staticmethod
+    def _guess_section_title(page_text: str) -> str | None:
+        """Heuristically extract a section heading from the page text if present."""
+
+        heading_pattern = re.compile(r"^(?:\d+(?:\.\d+)*)\s+.+$")
+        for raw_line in page_text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if len(line) > 120:
+                continue
+            if heading_pattern.match(line):
+                return line
+            if any(c.isalpha() for c in line):
+                if line.isupper() and len(line.split()) <= 12:
+                    return line
+                title_case = line.title()
+                if line == title_case and len(line.split()) <= 10:
+                    return line
+        return None
 
     def convert_all(self) -> list[Path]:
         """Convert all PDFs under `source_dir` to `.txt` under `target_dir`.
@@ -47,7 +69,10 @@ class PDFIngestor:
                 pages_path = out_path.with_suffix(".pages.jsonl")
                 with pages_path.open("w", encoding="utf-8") as f:
                     for i, page_text in enumerate(pages):
+                        section_title = self._guess_section_title(page_text or "")
                         rec = {"page": i + 1, "text": page_text or ""}
+                        if section_title:
+                            rec["section_title"] = section_title
                         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
             outputs.append(out_path)
         return outputs
@@ -63,7 +88,10 @@ def extract_pages_from_pdf(path: Path) -> list[str]:
         pages = []
         for page in doc:
             try:
-                pages.append(page.get_text("text").strip())
+                text = page.get_text("text")
+                if not isinstance(text, str):
+                    text = ""
+                pages.append(text.strip())
             except Exception:
                 pages.append("")
         doc.close()

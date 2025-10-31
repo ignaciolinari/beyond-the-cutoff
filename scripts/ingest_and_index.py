@@ -11,6 +11,8 @@ import argparse
 from pathlib import Path
 
 from beyond_the_cutoff.config import load_config
+from beyond_the_cutoff.data.catalog import build_metadata_catalog
+from beyond_the_cutoff.data.manifest import build_processed_manifest
 from beyond_the_cutoff.data.pdf_loader import PDFIngestor
 from beyond_the_cutoff.retrieval.index import DocumentIndexer
 
@@ -47,7 +49,22 @@ def main() -> None:
         return
     print(f"Converted {len(outputs)} PDFs to text under {processed_dir}")
 
-    # 2) Build FAISS index
+    # 2) Refresh processed manifest and metadata catalog
+    manifest_path = build_processed_manifest(processed_dir)
+    print(f"Processed manifest written to {manifest_path}")
+
+    catalog_prefix = processed_dir / "metadata_catalog"
+    artifacts = build_metadata_catalog(
+        config=cfg,
+        manifest_path=manifest_path,
+        output_prefix=catalog_prefix,
+    )
+    print(
+        "Metadata catalog written to "
+        f"{artifacts.csv_path}, {artifacts.parquet_path}, {artifacts.corpus_path}"
+    )
+
+    # 3) Build FAISS index
     indexer = DocumentIndexer(embedding_model=cfg.retrieval.embedding_model)
     index_path, mapping_path = indexer.build_index(
         input_dir=processed_dir,

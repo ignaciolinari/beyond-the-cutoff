@@ -2,9 +2,9 @@ project:
   name: "Beyond the Cutoff"
   seed: 42
 paths:
-  raw_data: data/raw
-  processed_data: data/processed
-  external_data: data/external
+  raw_data: ../data/raw
+  processed_data: ../data/processed
+  external_data: ../data/external
 retrieval:
   vector_store: faiss
   embedding_model: BAAI/bge-small-en-v1.5

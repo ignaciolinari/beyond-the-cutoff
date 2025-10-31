@@ -25,6 +25,7 @@ class MappingRow:
     chunk_id: int
     source_path: str
     page: int | None
+    section_title: str | None
     chunk_index: int
     token_start: int | None
     token_end: int | None
@@ -302,6 +303,7 @@ class OfflineDatasetGenerator:
             "task_index": task_index,
             "require_citations": require_citations,
             "retrieved_chunk_ids": [rec.get("id") for rec in prepared["retrieved"]],
+            "retrieved_section_titles": [rec.get("section_title") for rec in prepared["retrieved"]],
             "selected_chunk_ids": [row.chunk_id for row in selected_rows],
         }
         if extra_metadata:
@@ -321,10 +323,12 @@ class OfflineDatasetGenerator:
                     "id": rec.get("id"),
                     "source_path": rec.get("source_path"),
                     "page": rec.get("page"),
+                    "section_title": rec.get("section_title"),
                     "token_start": rec.get("token_start"),
                     "token_end": rec.get("token_end"),
                     "score": rec.get("score"),
                     "excerpt": rec.get("excerpt"),
+                    "rendered_context": rec.get("rendered_context"),
                 }
                 for rec in prepared["retrieved"]
             ],
@@ -364,6 +368,7 @@ class OfflineDatasetGenerator:
                 "chunk_id": row.chunk_id,
                 "chunk_index": row.chunk_index,
                 "page": row.page,
+                "section_title": row.section_title,
                 "token_start": row.token_start,
                 "token_end": row.token_end,
                 "text": row.trimmed_text(max_chars),
@@ -378,7 +383,7 @@ class OfflineDatasetGenerator:
         rows: Sequence[MappingRow],
         cfg: Any,
     ) -> str:
-        header = (
+        preamble = (
             "You are assisting in building a dataset for a retrieval-augmented research assistant. "
             "Given the numbered excerpts from a scientific paper, create diverse tasks."
         )
@@ -396,11 +401,19 @@ class OfflineDatasetGenerator:
         )
         context_lines = []
         for idx, row in enumerate(rows, start=1):
-            context_lines.append(f"[{idx}] {row.trimmed_text(cfg.max_chars_per_chunk)}")
+            meta_bits: list[str] = []
+            if row.section_title:
+                meta_bits.append(f"Section: {row.section_title}")
+            if row.page is not None:
+                meta_bits.append(f"Page {row.page}")
+            entry_header = f"[{idx}]"
+            if meta_bits:
+                entry_header = f"{entry_header} {' | '.join(meta_bits)}"
+            context_lines.append(f"{entry_header}\n{row.trimmed_text(cfg.max_chars_per_chunk)}")
         context_block = "\n".join(context_lines)
 
         return (
-            f"{header}\n{instructions}\n{schema}\n\n"
+            f"{preamble}\n{instructions}\n{schema}\n\n"
             f"Document: {source_path}\n"
             f"Context Excerpts:\n{context_block}\n\n"
             "Return the JSON now."
@@ -454,10 +467,12 @@ class OfflineDatasetGenerator:
                 token_start = self._maybe_int(row.get("token_start"))
                 token_end = self._maybe_int(row.get("token_end"))
                 text = str(row.get("text", ""))
+                section_title = row.get("section_title")
                 mapping_row = MappingRow(
                     chunk_id=chunk_id,
                     source_path=source_path,
                     page=page,
+                    section_title=section_title if section_title else None,
                     chunk_index=chunk_index,
                     token_start=token_start,
                     token_end=token_end,

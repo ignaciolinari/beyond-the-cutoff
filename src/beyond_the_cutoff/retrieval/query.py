@@ -78,6 +78,7 @@ class RAGPipeline:
         self._texts: list[str] = []
         self._sources: list[str] = []
         self._pages: list[int | None] = []
+        self._sections: list[str | None] = []
         self._token_spans: list[tuple[int | None, int | None]] = []
         with self.mapping_path.open("r", encoding="utf-8") as f:
             reader = csv.DictReader(f, delimiter="\t")
@@ -112,6 +113,8 @@ class RAGPipeline:
                 self._texts.append(text)
                 self._sources.append(source_path)
                 self._pages.append(page_num)
+                section = row.get("section_title")
+                self._sections.append(section if section else None)
                 self._token_spans.append((span_start, span_end))
 
         # Validate index metadata if present
@@ -134,14 +137,16 @@ class RAGPipeline:
 
     def _retrieve(
         self, query: str, top_k: int
-    ) -> list[tuple[int, str, str, int | None, tuple[int | None, int | None], float]]:
-        """Return (id, text, source_path, page, token_span, score) for top_k chunks."""
+    ) -> list[tuple[int, str, str, int | None, str | None, tuple[int | None, int | None], float]]:
+        """Return (id, text, source_path, page, section_title, token_span, score)."""
         query_embedding = self._embedder.encode([query], convert_to_numpy=True)
         query_array = np.asarray(query_embedding, dtype="float32")
         query_nd = cast(npt.NDArray[np.float32], query_array)
         faiss.normalize_L2(query_nd)
         scores, idx = self._index.search(query_nd, top_k)
-        results: list[tuple[int, str, str, int | None, tuple[int | None, int | None], float]] = []
+        results: list[
+            tuple[int, str, str, int | None, str | None, tuple[int | None, int | None], float]
+        ] = []
         for j, score in zip(idx[0], scores[0], strict=True):
             if j == -1:
                 continue
@@ -151,6 +156,7 @@ class RAGPipeline:
                     self._texts[j],
                     self._sources[j],
                     self._pages[j],
+                    self._sections[j] if j < len(self._sections) else None,
                     self._token_spans[j] if j < len(self._token_spans) else (None, None),
                     float(score),
                 )
@@ -158,7 +164,7 @@ class RAGPipeline:
 
         # Optional reranking with cross-encoder
         if self._reranker and results:
-            pairs = [(query, t) for (_id, t, _src, _p, _span, _sc) in results]
+            pairs = [(query, t) for (_id, t, _src, _p, _sec, _span, _sc) in results]
             try:  # pragma: no cover - model inference
                 ce_scores = self._reranker.predict(pairs)
             except Exception as exc:
@@ -256,8 +262,15 @@ class RAGPipeline:
         top_k = self.config.retrieval.top_k
         max_chars = self.config.retrieval.max_context_chars
         retrieved = self._retrieve(question, top_k)
-        contexts = [t for (_id, t, _src, _p, _span, _s) in retrieved]
-        sources = [f"{s}#page={p}" if p else s for (_id, _t, s, p, _span, _s) in retrieved]
+        contexts = [
+            self._render_context(
+                text=_t,
+                section_title=_sec,
+                page=_p,
+            )
+            for (_id, _t, _src, _p, _sec, _span, _s) in retrieved
+        ]
+        sources = [f"{s}#page={p}" if p else s for (_id, _t, s, p, _sec, _span, _s) in retrieved]
         prompt = self._build_prompt(
             question,
             contexts,
@@ -272,12 +285,14 @@ class RAGPipeline:
                 "text": _t,
                 "source_path": _src,
                 "page": _p,
+                "section_title": _sec,
                 "token_start": _span[0],
                 "token_end": _span[1],
                 "score": _s,
                 "excerpt": self._excerpt(_t),
+                "rendered_context": contexts[idx] if idx < len(contexts) else _t,
             }
-            for (_id, _t, _src, _p, _span, _s) in retrieved
+            for idx, (_id, _t, _src, _p, _sec, _span, _s) in enumerate(retrieved)
         ]
 
         return {
@@ -308,8 +323,10 @@ class RAGPipeline:
                 "page": rec["page"],
                 "token_start": rec["token_start"],
                 "token_end": rec["token_end"],
+                "section_title": rec.get("section_title"),
                 "score": rec["score"],
                 "excerpt": rec["excerpt"],
+                "rendered_context": rec.get("rendered_context"),
             }
             for rec in prepared["retrieved"]
         ]
@@ -328,3 +345,22 @@ class RAGPipeline:
         if self._client is None:
             self._client = build_generation_client(self.config.inference)
         return self._client
+
+    @staticmethod
+    def _render_context(
+        text: str,
+        *,
+        section_title: str | None,
+        page: int | None,
+    ) -> str:
+        """Add lightweight metadata headers to retrieved context chunks."""
+
+        metadata: list[str] = []
+        if section_title:
+            metadata.append(f"Section: {section_title.strip()}")
+        if page is not None:
+            metadata.append(f"Page {page}")
+        if not metadata:
+            return text
+        header = " | ".join(metadata)
+        return f"{header}\n{text}"

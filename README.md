@@ -32,7 +32,7 @@ The benchmark focuses on recent (2025) peer-reviewed papers that are certainly o
 - Curate a 2025 corpus with at least 100 arXiv papers post-training-cutoff (see `docs/data_sourcing_plan.md` for category mix and scheduling).
 - Extract metadata (title, abstract, authors, categories) automatically via the arXiv export API.
 - Convert downloaded PDFs to clean text and JSONL format for fine-tuning and retrieval pipelines.
-- Track manifest entries so downstream experiments can version the dataset alongside model checkpoints.
+- Track manifest entries so downstream experiments can version the dataset alongside model checkpoints. A consolidated `manifest.json` plus metadata catalog exports (`metadata_catalog.csv` / `.parquet` and `corpus.jsonl`) are produced during ingestion so every run captures the exact document set.
 
 #### arXiv Harvest Quickstart
 
@@ -101,7 +101,7 @@ The default configuration connects to the Ollama daemon at `http://localhost:114
 
 ## Pipeline Workflow
 
-- **Ingestion/indexing**: run `python scripts/ingest_and_index.py --config configs/default.yaml` to turn the downloaded PDFs into text chunks and rebuild the FAISS index under `data/external/index`.
+- **Ingestion/indexing**: run `python scripts/ingest_and_index.py --config configs/default.yaml` to turn the downloaded PDFs into text chunks and rebuild the FAISS index under `data/external/index`. Each run refreshes `data/processed/manifest.json` and writes metadata catalog exports under `data/processed/metadata_catalog*` for downstream analysis/versioning.
 - **Offline tasks**: once the index exists, call `python scripts/generate_offline_dataset.py --config configs/default.yaml` so the `qwen2:1.5b-instruct-q4_0` generator can produce QA/summaries/citation tasks backed by those chunks.
 - **Fine-tuning**: take the resulting JSONL plus your assistant prompts into Colab/Kaggle, fine-tune `Qwen/Qwen2-0.5B-Instruct` with LoRA, export the adapter/full weights, and keep the safetensors checkpoints.
 - **Deployment**: convert that tuned checkpoint to GGUF (e.g., `llama.cpp convert` + `quantize`) and load it into Ollama; update `configs/default.yaml` with the new tag when ready, and pull the 1.5B/3B Qwen tags locally via `ollama pull`.
@@ -119,13 +119,23 @@ python scripts/ingest_and_index.py --config configs/default.yaml
 # add --no-page-sidecars to skip writing per-page JSONL sidecars
 ```
 
-Place your PDFs under `data/raw/` (or pass `--source PATH`). Processed text will be written to `data/processed/` and the index to `data/external/index/`.
+Place your PDFs under `data/raw/` (or pass `--source PATH`). Processed text will be written to `data/processed/`, the processed manifest and metadata catalog will be regenerated under the same directory, and the FAISS index will be updated in `data/external/index/`.
+
+Need to rebuild just the catalog? Use:
+
+```bash
+python scripts/build_metadata_catalog.py --config configs/default.yaml
+```
+
+Pass `--manifest` to reuse an existing manifest or `--output-prefix` to direct the CSV/Parquet/corpus files elsewhere.
 
 2) Ask a question from the command line:
 
 ```bash
 python scripts/ask.py "What are the main contributions of paper X?"
 ```
+
+The CLI now surfaces inline citations with optional section headings and page numbers, plus a short snippet for quick scanning.
 
 3) Optional: start a minimal API server:
 
