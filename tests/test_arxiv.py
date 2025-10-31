@@ -16,7 +16,7 @@ def test_build_category_query_multiple_categories() -> None:
     end = datetime(2025, 10, 30, tzinfo=timezone.utc)
     query = build_category_query(["cs.AI", "cs.CL"], submitted_after=start, submitted_before=end)
     assert query.startswith("(cat:cs.AI+OR+cat:cs.CL)+AND+submittedDate:")
-    assert "20250701000000" in query and "20251030000000" in query
+    assert "202507010000" in query and "202510300000" in query
 
 
 def test_parse_response_single_entry() -> None:
@@ -53,5 +53,6 @@ def test_parse_response_single_entry() -> None:
     assert paper.categories == ["cs.CL", "cs.AI"]
     assert paper.link.endswith("2508.12345v2")
     assert paper.pdf_url.endswith("2508.12345v2.pdf")
+    assert paper.pdf_url.startswith("https://")
     assert paper.published == datetime(2025, 8, 10, 10, 0, tzinfo=timezone.utc)
     assert paper.updated == datetime(2025, 8, 11, 12, 0, tzinfo=timezone.utc)

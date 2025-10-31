@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated, ParamSpec, TypeVar, cast
+from typing import Annotated, cast
 
 import typer  # type: ignore[import-not-found]
 
@@ -17,9 +17,8 @@ from beyond_the_cutoff.data import ArxivClient, ArxivPaper, build_category_query
 
 app = typer.Typer(add_completion=False, pretty_exceptions_enable=False)
 
-P = ParamSpec("P")
-R = TypeVar("R")
-command = cast(Callable[[Callable[P, R]], Callable[P, R]], app.command())
+# Simpler type annotation to avoid ParamSpec/TypeVar issues with some type checkers
+command = cast(Callable[[Callable[..., object]], Callable[..., object]], app.command())
 
 DEFAULT_CATEGORIES = ["cs.AI", "cs.CL", "cs.LG", "stat.ML"]
 DEFAULT_START = datetime(2025, 7, 1, tzinfo=timezone.utc)
@@ -72,7 +71,6 @@ def main(  # noqa: PLR0913 - CLI signature prioritises explicit options
     output_dir: Annotated[
         Path,
         typer.Option(
-            DEFAULT_OUTPUT_DIR,
             "--output-dir",
             "-o",
             help="Directory to store metadata, manifest, and PDFs.",
@@ -81,7 +79,6 @@ def main(  # noqa: PLR0913 - CLI signature prioritises explicit options
     category: Annotated[
         list[str],
         typer.Option(
-            DEFAULT_CATEGORIES,
             "--category",
             "-c",
             help="arXiv categories to include (repeatable).",
@@ -90,7 +87,6 @@ def main(  # noqa: PLR0913 - CLI signature prioritises explicit options
     total: Annotated[
         int,
         typer.Option(
-            100,
             "--total",
             "-n",
             help="Total number of unique papers to fetch.",
@@ -99,7 +95,6 @@ def main(  # noqa: PLR0913 - CLI signature prioritises explicit options
     start_date: Annotated[
         str,
         typer.Option(
-            DEFAULT_START.strftime("%Y-%m-%d"),
             "--start-date",
             help="Lower bound (inclusive) for submission date (YYYY-MM-DD).",
         ),
@@ -107,7 +102,6 @@ def main(  # noqa: PLR0913 - CLI signature prioritises explicit options
     end_date: Annotated[
         str | None,
         typer.Option(
-            None,
             "--end-date",
             help="Upper bound (inclusive) for submission date (YYYY-MM-DD). Defaults to today UTC.",
         ),
@@ -115,7 +109,6 @@ def main(  # noqa: PLR0913 - CLI signature prioritises explicit options
     oversample: Annotated[
         float,
         typer.Option(
-            1.6,
             "--oversample",
             help="Multiplier per category to mitigate duplicates when pooling results.",
         ),
@@ -123,7 +116,6 @@ def main(  # noqa: PLR0913 - CLI signature prioritises explicit options
     max_results: Annotated[
         int,
         typer.Option(
-            200,
             "--max-results",
             help="Maximum results to request per category query (capped at arXiv limit 2000).",
         ),
@@ -131,7 +123,6 @@ def main(  # noqa: PLR0913 - CLI signature prioritises explicit options
     download_pdfs: Annotated[
         bool,
         typer.Option(
-            True,
             "--download-pdfs/--skip-pdfs",
             help="Toggle PDF downloads.",
         ),
@@ -139,7 +130,6 @@ def main(  # noqa: PLR0913 - CLI signature prioritises explicit options
     force: Annotated[
         bool,
         typer.Option(
-            False,
             "--force",
             help="Re-download PDFs even if they already exist.",
         ),
@@ -147,7 +137,6 @@ def main(  # noqa: PLR0913 - CLI signature prioritises explicit options
     download_retries: Annotated[
         int,
         typer.Option(
-            3,
             "--download-retries",
             help="Number of attempts per PDF before recording a failure.",
         ),
@@ -155,7 +144,6 @@ def main(  # noqa: PLR0913 - CLI signature prioritises explicit options
     retry_backoff: Annotated[
         float,
         typer.Option(
-            2.0,
             "--retry-backoff",
             help="Base backoff (seconds) used for exponential retry delays.",
         ),
@@ -277,12 +265,22 @@ def _collect_papers(
     for category in categories:
         limit = min(per_query_limit, int(desired_per_category * oversample))
         limit = max(desired_per_category, limit)
-        query = build_category_query([category], submitted_after=start_dt, submitted_before=end_dt)
         typer.echo(f"Querying {category} with max_results={limit}")
+        query = build_category_query([category], submitted_after=start_dt, submitted_before=end_dt)
         result = client.search(search_query=query, max_results=limit)
-        if not result.papers:
+        papers_for_category = result.papers
+        if not papers_for_category:
+            typer.echo(
+                f"No results for category {category} using submittedDate filter; retrying without date filter"
+            )
+            query = build_category_query([category], submitted_after=None, submitted_before=None)
+            result = client.search(search_query=query, max_results=limit)
+            papers_for_category = result.papers
+        if not papers_for_category:
             typer.echo(f"No results for category {category}")
-        for paper in result.papers:
+        for paper in papers_for_category:
+            if paper.published < start_dt or paper.published > end_dt:
+                continue
             canonical_map.setdefault(paper.canonical_id, paper)
 
     papers = list(canonical_map.values())

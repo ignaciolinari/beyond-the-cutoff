@@ -10,6 +10,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode
 
+
+def _ensure_https(url: str) -> str:
+    if url.startswith("http://"):
+        return "https://" + url[len("http://") :]
+    return url
+
+
 ATOM_NS = "{http://www.w3.org/2005/Atom}"
 ARXIV_NS = "{http://arxiv.org/schemas/atom}"
 OPENSEARCH_NS = "{http://a9.com/-/spec/opensearch/1.1/}"
@@ -82,7 +89,11 @@ class ArxivClient:
         self.contact_email = _require_contact_email(contact_email)
         self.rate_limit_seconds = rate_limit_seconds
         agent = f"{user_agent_app} (mailto:{self.contact_email})"
-        self._client = httpx.Client(timeout=timeout, headers={"User-Agent": agent})
+        self._client = httpx.Client(
+            timeout=timeout,
+            headers={"User-Agent": agent},
+            follow_redirects=True,
+        )
         self._last_request_ts = 0.0
 
     def close(self) -> None:
@@ -132,14 +143,21 @@ class ArxivClient:
 
 
 def build_category_query(
-    categories: Iterable[str], *, submitted_after: datetime, submitted_before: datetime
+    categories: Iterable[str],
+    *,
+    submitted_after: datetime | None,
+    submitted_before: datetime | None,
 ) -> str:
     cats = "+OR+".join(f"cat:{cat}" for cat in categories)
-    window = (
-        f"submittedDate:[{submitted_after.strftime('%Y%m%d%H%M%S')}+TO+"
-        f"{submitted_before.strftime('%Y%m%d%H%M%S')}]"
-    )
-    return f"({cats})+AND+{window}"
+    window = ""
+    if submitted_after is not None and submitted_before is not None:
+        after_utc = submitted_after.astimezone(timezone.utc)
+        before_utc = submitted_before.astimezone(timezone.utc)
+        window = (
+            f"+AND+submittedDate:[{after_utc.strftime('%Y%m%d%H%M')}+TO+"
+            f"{before_utc.strftime('%Y%m%d%H%M')}]"
+        )
+    return f"({cats}){window}"
 
 
 def format_query_params_for_logging(params: dict[str, str]) -> str:
@@ -210,12 +228,12 @@ def _extract_pdf_url(entry: ET.Element) -> str:
         if link.get("type") == "application/pdf":
             href = link.get("href")
             if href:
-                pdf_links.append(href)
+                pdf_links.append(_ensure_https(href))
     if pdf_links:
         return pdf_links[0]
     entry_id = entry.findtext(f"{ATOM_NS}id")
     if entry_id:
-        return entry_id.replace("/abs/", "/pdf/") + ".pdf"
+        return _ensure_https(entry_id).replace("/abs/", "/pdf/") + ".pdf"
     msg = "PDF link not found in entry and fallback failed"
     raise ValueError(msg)
 
