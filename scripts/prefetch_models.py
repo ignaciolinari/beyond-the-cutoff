@@ -2,7 +2,7 @@
 """Prefetch Hugging Face models into the local cache.
 
 This is useful for speeding up local development or seeding a shared cache in CI
-environments. By default it downloads ``HuggingFaceTB/SmolLM2-135M`` but you can
+environments. By default it downloads ``Qwen/Qwen2-0.5B-Instruct`` but you can
 pass one or more alternative model ids on the command line.
 """
 
@@ -16,7 +16,7 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any, cast
 
-DEFAULT_MODEL = "HuggingFaceTB/SmolLM2-135M"
+DEFAULT_MODEL = "Qwen/Qwen2-0.5B-Instruct"
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:

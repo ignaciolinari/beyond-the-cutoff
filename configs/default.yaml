@@ -15,7 +15,7 @@ retrieval:
   chunking_strategy: sentences
   reranker_model: cross-encoder/ms-marco-MiniLM-L-6-v2
 fine_tuning:
-  base_model: HuggingFaceTB/SmolLM2-135M
+  base_model: Qwen/Qwen2-0.5B-Instruct
   adapter_output_dir: outputs/adapters
   lora_rank: 16
   learning_rate: 0.0001
@@ -34,9 +34,12 @@ evaluation:
   offline_dataset_path: evaluation/datasets/offline_dataset.jsonl
 dataset_generation:
   generator:
-    provider: transformers
-    model: HuggingFaceTB/SmolLM2-135M
-    device: auto
+    provider: ollama
+    model: qwen2:1.5b-instruct-q4_0
+    host: http://localhost
+    port: 11434
+    timeout: 120.0
+    device: auto  # retained for interface parity with transformers backend
     torch_dtype: auto
     max_new_tokens: 768
     temperature: 0.5
@@ -51,15 +54,16 @@ dataset_generation:
   max_documents: null
   seed: 42
 inference:
-  provider: transformers
-  model: HuggingFaceTB/SmolLM2-135M
+  provider: ollama
+  model: qwen2:0.5b-instruct-q4_0
+  host: http://localhost
+  port: 11434
+  timeout: 120.0
   device: auto
   torch_dtype: auto
   max_new_tokens: 512
-  temperature: 0.1
-  top_p: 0.95
+  temperature: 0.0
+  top_p: 0.9
   repetition_penalty: 1.05
   stop_sequences: []
-  # When ready to graduate to a larger Phi checkpoint, switch to `provider: ollama`
-  # (or another deployment target) and update the `model` tag accordingly. The
-  # remaining parameters can stay as-is unless you need different sampling behavior.
+  # Swap this tag to your fine-tuned adapter (or a larger checkpoint) once available.

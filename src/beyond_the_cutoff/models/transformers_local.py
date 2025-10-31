@@ -39,7 +39,7 @@ _OPTION_KEYS = {"max_new_tokens", "temperature", "top_p", "repetition_penalty"}
 class TransformersClient:
     """Thin wrapper around ``AutoModelForCausalLM.generate`` suitable for local tests."""
 
-    model: str = "HuggingFaceTB/SmolLM2-135M"
+    model: str = "Qwen/Qwen2-0.5B-Instruct"
     device: str = "auto"
     torch_dtype: str | None = "auto"
     max_new_tokens: int = 512

@@ -20,7 +20,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--generator-config",
         default=None,
-        help="Optional config file whose inference section will be used for task generation",
+        help=(
+            "Optional config file whose dataset_generation.generator section will be used for "
+            "task generation (falls back to its inference block when no generator override is "
+            "provided)"
+        ),
     )
     parser.add_argument(
         "--processed-dir",
@@ -102,7 +106,16 @@ def main() -> None:
     if args.max_docs is not None:
         files = files[: args.max_docs]
 
-    generator_client = build_generation_client(generator_cfg.inference)
+    generator_settings = generator_cfg.dataset_generation.generator
+    if args.generator_config:
+        base_generator = base_cfg.dataset_generation.generator
+        if (
+            generator_settings.model == base_generator.model
+            and generator_cfg.inference.model != base_generator.model
+        ):
+            generator_settings = generator_cfg.inference
+
+    generator_client = build_generation_client(generator_settings)
     allowed_types = tuple(args.task_types) if args.task_types else None
     task_generator = TaskGenerator(
         generator_client,

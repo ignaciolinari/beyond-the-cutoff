@@ -73,7 +73,7 @@ class RetrievalConfig(BaseModel):
 class FineTuningConfig(BaseModel):
     """Fine-tuning hyperparameters."""
 
-    base_model: str = Field(default="HuggingFaceTB/SmolLM2-135M")
+    base_model: str = Field(default="Qwen/Qwen2-0.5B-Instruct")
     adapter_output_dir: Path = Field(default=Path("outputs/adapters"))
     lora_rank: int = Field(default=16, ge=1)
     learning_rate: float = Field(default=1e-4, gt=0)
@@ -136,18 +136,18 @@ class EvaluationConfig(BaseModel):
 
 
 class InferenceConfig(BaseModel):
-    """Settings for local inference backends (defaults to Transformers)."""
+    """Settings for local inference backends (defaults to Ollama)."""
 
-    provider: str = Field(default="transformers")
-    model: str = Field(default="HuggingFaceTB/SmolLM2-135M")
+    provider: str = Field(default="ollama")
+    model: str = Field(default="qwen2:0.5b-instruct-q4_0")
     host: str = Field(default="http://localhost")
     port: int | None = Field(default=11434)
     timeout: float = Field(default=60.0, gt=0.0)
     device: str = Field(default="auto")
     torch_dtype: str | None = Field(default="auto")
     max_new_tokens: int = Field(default=512, ge=1)
-    temperature: float = Field(default=0.1, ge=0.0)
-    top_p: float = Field(default=0.95, gt=0.0, le=1.0)
+    temperature: float = Field(default=0.0, ge=0.0)
+    top_p: float = Field(default=0.9, gt=0.0, le=1.0)
     repetition_penalty: float = Field(default=1.05, gt=0.0)
     stop_sequences: list[str] = Field(default_factory=list)
 
@@ -170,10 +170,29 @@ class InferenceConfig(BaseModel):
         return [str(value)]
 
 
+def _default_generator_config() -> InferenceConfig:
+    """Return the default generator backend (1.5B Ollama tag)."""
+
+    return InferenceConfig(
+        provider="ollama",
+        model="qwen2:1.5b-instruct-q4_0",
+        host="http://localhost",
+        port=11434,
+        timeout=120.0,
+        device="auto",
+        torch_dtype="auto",
+        max_new_tokens=768,
+        temperature=0.5,
+        top_p=0.95,
+        repetition_penalty=1.05,
+        stop_sequences=[],
+    )
+
+
 class DatasetGenerationConfig(BaseModel):
     """Settings controlling offline dataset generation."""
 
-    generator: InferenceConfig = Field(default_factory=InferenceConfig)
+    generator: InferenceConfig = Field(default_factory=_default_generator_config)
     output_dataset_path: Path = Field(default=Path("evaluation/datasets/offline_dataset.jsonl"))
     raw_tasks_path: Path = Field(default=Path("evaluation/datasets/offline_tasks.jsonl"))
     questions_per_document: int = Field(default=4, ge=0)

@@ -1,6 +1,6 @@
 # Beyond the Cutoff – Lightweight Project Tracker
 
-_Last updated: 2025-10-30_
+_Last updated: 2025-10-31_
 
 ## Status Legend
 - [ ] Backlog
@@ -19,8 +19,14 @@ _Last updated: 2025-10-30_
 - [~] Build cleaner/normalizer to produce JSONL/text in `data/processed/` (partial: PDF → text)
 - [ ] Capture metadata catalog (CSV/Parquet) with title, authors, DOI/arXiv ID, subjects, publication date
 - [ ] Extract page numbers and section titles during parsing for downstream citation grounding
-- [ ] Write data quality checks and unit tests covering edge cases
+- [ ] Ingest downloaded PDFs and rebuild the FAISS index via `python scripts/ingest_and_index.py --config configs/default.yaml`
+- [ ] Generate offline QA/summary/citation tasks with `python scripts/generate_offline_dataset.py --config configs/default.yaml`
 - [ ] Add validation pass for offline dataset outputs (duplicate prompts, empty answers, citation coverage)
+- [ ] Write data quality checks and unit tests covering edge cases
+- [ ] Fine-tune `Qwen/Qwen2-0.5B-Instruct` (LoRA) in Colab/Kaggle using the offline JSONL outputs; export adapters and full checkpoints
+- [ ] Quantize the tuned checkpoint to GGUF (`llama.cpp convert` + `quantize`) and register it with Ollama; update `configs/default.yaml` with the new model tag
+- [ ] Evaluate with the 3B judge using the refreshed datasets (or swap to a cloud judge/generator as needed)
+- [ ] Run `pytest tests/test_config.py` after each stage to confirm configuration wiring remains consistent
 
 ## Model Adaptation
 - [ ] Set baseline model shortlist and document hardware requirements

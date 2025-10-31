@@ -24,6 +24,7 @@ The benchmark focuses on recent (2025) peer-reviewed papers that are certainly o
 - Provide a reproducible evaluation framework for testing LLM knowledge updating.
 - Explore implications for building adaptive research assistants capable of staying current with new literature.
 
+
 ## Methodology
 
 ### 1. Data Collection
@@ -65,29 +66,26 @@ The CLI respects arXiv rate limits, writes metadata to JSONL/CSV, persists a man
 - Python ≥ 3.10
 - [Apple MLX](https://github.com/ml-explore/mlx) for accelerated inference
 - Sufficient free memory for 3B–4B parameter models (prefer 4-bit quantization); avoid swap usage on 8 GB devices
-- [Ollama](https://ollama.com/) (optional) for downloading/serving macOS-ready quantized models
+- [Ollama](https://ollama.com/) for downloading/serving the default quantized Qwen models
 
 ### Quickstart
 
 ```bash
 python scripts/bootstrap_env.py
 source .venv/bin/activate
-python - <<'PY'
-from transformers import AutoModelForCausalLM, AutoTokenizer
-AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M")
-AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM2-135M")
-PY
-# or use the helper script to seed a project-local cache
-python scripts/prefetch_models.py --cache-dir .cache/huggingface
-# Optional: install Ollama if you plan to graduate to Phi or other hosted tags
-# brew install ollama && ollama pull phi3:mini
+# Optional: seed a local Hugging Face cache for Colab/Kaggle syncs
+python scripts/prefetch_models.py --cache-dir .cache/huggingface Qwen/Qwen2-0.5B-Instruct
+# Pull the Ollama baselines (0.5B assistant, 1.5B generator, 3B judge)
+ollama pull qwen2:0.5b-instruct-q4_0
+ollama pull qwen2:1.5b-instruct-q4_0
+ollama pull qwen2:3b-instruct-q4_0
 ```
 
 The bootstrap script installs both runtime and development dependencies in editable mode and wires up the `pre-commit` hook so formatting and linting run automatically. Re-run the script at any time to pick up dependency updates (pass `--no-dev` or `--no-pre-commit` if you want to opt out).
 
-### Local Inference (Transformers by default)
+### Local Inference (Ollama by default)
 
-Once dependencies are installed, you can run the lightweight SmolLM2 checkpoint directly via Transformers:
+With Ollama running locally, the default configuration calls the `qwen2:0.5b-instruct-q4_0` tag for retrieval-augmented answering:
 
 ```python
 from beyond_the_cutoff import load_config
@@ -99,7 +97,16 @@ response = client.generate("Summarise the latest findings on generative retrieva
 print(response["response"])
 ```
 
-The default configuration loads `HuggingFaceTB/SmolLM2-135M` on whichever device is available (`cuda`, `mps`, or CPU). Override `configs/default.yaml` (or pass a custom config) to change devices, sampling parameters, or the model name. When you're ready to test a larger Phi checkpoint, set `inference.provider: ollama` and update `inference.model` to match the Ollama tag you pulled (for example `phi3:mini`).
+The default configuration connects to the Ollama daemon at `http://localhost:11434` and queries `qwen2:0.5b-instruct-q4_0`. Override `configs/default.yaml` (or pass a custom config) to toggle providers, sampling parameters, or model tags—for example, swap in your fine-tuned checkpoint once it has been quantized and registered with Ollama.
+
+## Pipeline Workflow
+
+- **Ingestion/indexing**: run `python scripts/ingest_and_index.py --config configs/default.yaml` to turn the downloaded PDFs into text chunks and rebuild the FAISS index under `data/external/index`.
+- **Offline tasks**: once the index exists, call `python scripts/generate_offline_dataset.py --config configs/default.yaml` so the `qwen2:1.5b-instruct-q4_0` generator can produce QA/summaries/citation tasks backed by those chunks.
+- **Fine-tuning**: take the resulting JSONL plus your assistant prompts into Colab/Kaggle, fine-tune `Qwen/Qwen2-0.5B-Instruct` with LoRA, export the adapter/full weights, and keep the safetensors checkpoints.
+- **Deployment**: convert that tuned checkpoint to GGUF (e.g., `llama.cpp convert` + `quantize`) and load it into Ollama; update `configs/default.yaml` with the new tag when ready, and pull the 1.5B/3B Qwen tags locally via `ollama pull`.
+- **Evaluation**: reuse `python scripts/ingest_and_index.py` results plus the evaluation datasets with the 3B judge (`qwen2:3b-instruct-q4_0`) or a cloud grader by flipping the provider/model in the config.
+- **Verification**: after each stage, run `pytest tests/test_config.py` (and the broader suite once the pipeline is populated) to ensure the configuration and adapters remain wired correctly.
 
 ## Paper Assistant (RAG) Quickstart
 
@@ -139,7 +146,7 @@ Configuration knobs:
 Notes:
 - Uses `BAAI/bge-small-en-v1.5` for embeddings by default; adjust for quality/speed.
 - If a reranker is configured, top-k is reranked before prompting (with warnings logged when the reranker fails).
-- Answers are generated via the configured backend (default: Transformers with `HuggingFaceTB/SmolLM2-135M`).
+- Answers are generated via the configured backend (default: Ollama with `qwen2:0.5b-instruct-q4_0`).
 - API responses include a `citations` array with `{id, source_path, page, token_start, token_end, score, excerpt}`.
 - Responses also expose `citation_verification` metadata summarising which inline markers were found and their lexical overlap with retrieved context.
 
@@ -201,25 +208,24 @@ Tune behaviour via `configs/default.yaml` → `dataset_generation` (counts per d
 - `pyproject.toml` defines dependencies and tooling (ruff, mypy, pytest, etc.).
 - Pre-commit hooks enforce formatting and linting.
 - Configurable evaluation pipelines with Hydra or pydantic settings.
-- Ollama (optional) streamlines downloading and running lightweight (≤4B) models in Q4/Q8 formats optimized for MLX when you switch to Phi or other quantized builds.
+- Ollama streamlines downloading and running lightweight (≤4B) models in Q4/Q8 formats optimized for MLX when you switch to larger checkpoints.
 
 ### Configuration
 
-- Primary settings live in `configs/default.yaml` and are validated by `beyond_the_cutoff.load_config()` (default base model: `HuggingFaceTB/SmolLM2-135M`).
+- Primary settings live in `configs/default.yaml` and are validated by `beyond_the_cutoff.load_config()` (default fine-tuning base: `Qwen/Qwen2-0.5B-Instruct`).
 - Paths in the config resolve relative to the repository root so you can keep environment-specific overrides minimal.
-- The evaluation block now exposes `offline_tasks_path` and `offline_dataset_path` to keep generated task banks and prompt/answer corpora alongside QA and summary sets.
+- The evaluation block exposes `offline_tasks_path` and `offline_dataset_path` to keep generated task banks and prompt/answer corpora alongside QA and summary sets.
 - Provide alternate configuration files per experiment and pass their paths to `load_config` when needed.
 
 ### Model Handling
 
-- Start with compact checkpoints such as `HuggingFaceTB/SmolLM2-135M` (default) or other sub-1B models you can run via Transformers/MLX; keep Ollama around for heavier upgrades like Phi-3 mini or Qwen 3B when you need higher quality.
-- For 7B–8B models rely on quantized (Q4) variants and load them only when you have spare memory; close heavy processes before inference.
-- Sync fine-tuned checkpoints from Colab/Kaggle back into the local `models/` directory; keep quantized copies tailored to the local machine.
-- Manage caches under `~/.cache/beyond-the-cutoff/` or within Ollama to avoid repeated downloads.
+- Start with compact checkpoints such as `Qwen/Qwen2-0.5B-Instruct` for LoRA (default assistant), then rely on Ollama tags like `qwen2:1.5b-instruct-q4_0` for task generation and `qwen2:3b-instruct-q4_0` (or a cloud API) for judging.
+- Sync fine-tuned checkpoints from Colab/Kaggle back into the local `models/` directory; keep quantized copies (GGUF) tailored to the local machine.
+- Register custom quantized builds with Ollama via `ollama create` or `Modelfile` definitions so they can drop in for inference.
 
 ### Data & Checkpoints Sync
 
-- Scripts in `scripts/` should handle downloading, cleaning, and converting recent papers to JSONL; keep inputs in `data/raw/` and processed assets in `data/processed/`.
+- Scripts in `scripts/` handle downloading, cleaning, and converting recent papers to JSONL; keep inputs in `data/raw/` and processed assets in `data/processed/`.
 - Use cloud storage (Drive, S3, Hugging Face Hub) to move LoRA/PEFT checkpoints trained on remote notebooks; document sync commands (e.g., `scripts/sync_checkpoints.py`, to be created).
 - Track versioning and quantization metadata inside each checkpoint to map evaluations back to the corresponding model.
 
@@ -227,7 +233,7 @@ Tune behaviour via `configs/default.yaml` → `dataset_generation` (counts per d
 
 1. Implement reproducible data ingestion pipeline for 2025 papers.
 2. Build QA generation scripts and evaluation dataset.
-3. Develop RAG baseline with FAISS/Chroma + local inference via MLX.
+3. Develop RAG baseline with FAISS/Chroma + local inference via Ollama-backed models.
 4. Orchestrate fine-tuning workflows on cloud notebooks (LoRA/PEFT) and sync checkpoints.
 5. Run comparative evaluation suite; summarize findings with visualizations.
 
