@@ -73,8 +73,7 @@ class DocumentIndexer:
 
         for path in sorted(input_dir.rglob(pattern)):
             chunk_counter = 0
-            token_start_counter = 0
-            token_stride = max(1, chunk_size - chunk_overlap)
+            token_cursor_global = 0
             # Prefer page-aware sidecar if present
             pages_sidecar = path.with_suffix(".pages.jsonl")
             if pages_sidecar.exists():
@@ -88,6 +87,7 @@ class DocumentIndexer:
                         page_idx = int(rec.get("page", page_idx + 1))
                         page_text = str(rec.get("text", ""))
                         if not page_text.strip():
+                            token_cursor_global += len(page_text.split())
                             continue
                         section_title = rec.get("section_title")
                         if strategy == "sentences":
@@ -98,21 +98,34 @@ class DocumentIndexer:
                             chunks = chunk_text(
                                 page_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap
                             )
+
+                        token_cursor_local = 0
+                        overlap_for_next = 0
                         for ch in chunks:
-                            token_len = len(ch.split())
+                            tokens = ch.split()
+                            token_len = len(tokens)
+                            token_start = token_cursor_global + token_cursor_local
+                            token_end = token_start + token_len
                             texts.append(ch)
                             meta_rows.append(
                                 {
                                     "source_path": str(path),
                                     "page": page_idx,
                                     "chunk_index": chunk_counter,
-                                    "token_start": token_start_counter,
-                                    "token_end": token_start_counter + token_len,
+                                    "token_start": token_start,
+                                    "token_end": token_end,
                                     "section_title": section_title,
                                 }
                             )
                             chunk_counter += 1
-                            token_start_counter += token_stride
+
+                            advance = token_len - overlap_for_next
+                            if advance < 0:
+                                advance = 0
+                            token_cursor_local += advance
+                            overlap_for_next = min(chunk_overlap, token_len)
+
+                        token_cursor_global += len(page_text.split())
                 continue
 
             # Fallback: whole-document text
@@ -123,21 +136,29 @@ class DocumentIndexer:
                 )
             else:
                 chunks = chunk_text(content, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+            overlap_for_next = 0
             for ch in chunks:
-                token_len = len(ch.split())
+                tokens = ch.split()
+                token_len = len(tokens)
+                token_start = token_cursor_global
+                token_end = token_start + token_len
                 texts.append(ch)
                 meta_rows.append(
                     {
                         "source_path": str(path),
                         "page": None,
                         "chunk_index": chunk_counter,
-                        "token_start": token_start_counter,
-                        "token_end": token_start_counter + token_len,
+                        "token_start": token_start,
+                        "token_end": token_end,
                         "section_title": None,
                     }
                 )
                 chunk_counter += 1
-                token_start_counter += token_stride
+                advance = token_len - overlap_for_next
+                if advance < 0:
+                    advance = 0
+                token_cursor_global += advance
+                overlap_for_next = min(chunk_overlap, token_len)
 
         if not texts:
             raise ValueError(f"No text files matching {pattern!r} found under {input_dir}")

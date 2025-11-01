@@ -58,7 +58,10 @@ def main() -> None:
     )
 
     print(f"Wrote {artifacts.csv_path}")
-    print(f"Wrote {artifacts.parquet_path}")
+    if artifacts.parquet_path is not None:
+        print(f"Wrote {artifacts.parquet_path}")
+    else:
+        print("Skipped parquet export (install 'pyarrow' or 'fastparquet' to enable)")
     print(f"Wrote {artifacts.corpus_path}")
 
 

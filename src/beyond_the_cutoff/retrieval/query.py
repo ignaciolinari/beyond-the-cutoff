@@ -8,7 +8,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib import import_module
 from pathlib import Path
 from typing import Any, cast
@@ -38,13 +38,42 @@ else:
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(slots=True)
+class RetrievedChunk:
+    """Representation of a retrieved chunk with scoring metadata."""
+
+    chunk_id: int
+    text: str
+    source_path: str
+    page: int | None
+    section_title: str | None
+    token_span: tuple[int | None, int | None]
+    similarity_score: float
+    reranker_score: float | None = None
+
+    @property
+    def ordering_score(self) -> float:
+        return self.reranker_score if self.reranker_score is not None else self.similarity_score
+
+
+@dataclass(slots=True)
 class RAGPipeline:
     """Load a persisted FAISS index and answer questions with retrieved context."""
 
     config: ProjectConfig
     index_path: Path
     mapping_path: Path
+    _index: Any = field(init=False, repr=False)
+    _embedder: SentenceTransformerType = field(init=False, repr=False)
+    _reranker: CrossEncoderType | None = field(init=False, repr=False, default=None)
+    _texts: list[str] = field(init=False, repr=False, default_factory=list)
+    _sources: list[str] = field(init=False, repr=False, default_factory=list)
+    _pages: list[int | None] = field(init=False, repr=False, default_factory=list)
+    _sections: list[str | None] = field(init=False, repr=False, default_factory=list)
+    _token_spans: list[tuple[int | None, int | None]] = field(
+        init=False, repr=False, default_factory=list
+    )
+    _client: LLMClient | None = field(init=False, repr=False, default=None)
 
     def __post_init__(self) -> None:
         self._index = faiss.read_index(str(self.index_path))
@@ -55,7 +84,6 @@ class RAGPipeline:
             SentenceTransformerType, embedder_cls(self.config.retrieval.embedding_model)
         )
         # Optional cross-encoder reranker
-        self._reranker: CrossEncoderType | None = None
         reranker_name = (self.config.retrieval.reranker_model or "").strip()
         if reranker_name:
             if CrossEncoder is None:
@@ -75,11 +103,11 @@ class RAGPipeline:
                         exc,
                     )
         # Load mapping rows: (text, source_path)
-        self._texts: list[str] = []
-        self._sources: list[str] = []
-        self._pages: list[int | None] = []
-        self._sections: list[str | None] = []
-        self._token_spans: list[tuple[int | None, int | None]] = []
+        self._texts.clear()
+        self._sources.clear()
+        self._pages.clear()
+        self._sections.clear()
+        self._token_spans.clear()
         with self.mapping_path.open("r", encoding="utf-8") as f:
             reader = csv.DictReader(f, delimiter="\t")
             for row in reader:
@@ -135,36 +163,33 @@ class RAGPipeline:
 
         self._client: LLMClient | None = None
 
-    def _retrieve(
-        self, query: str, top_k: int
-    ) -> list[tuple[int, str, str, int | None, str | None, tuple[int | None, int | None], float]]:
-        """Return (id, text, source_path, page, section_title, token_span, score)."""
+    def _retrieve(self, query: str, top_k: int) -> list[RetrievedChunk]:
+        """Return retrieved chunk metadata ordered by relevance."""
+
         query_embedding = self._embedder.encode([query], convert_to_numpy=True)
         query_array = np.asarray(query_embedding, dtype="float32")
         query_nd = cast(npt.NDArray[np.float32], query_array)
         faiss.normalize_L2(query_nd)
         scores, idx = self._index.search(query_nd, top_k)
-        results: list[
-            tuple[int, str, str, int | None, str | None, tuple[int | None, int | None], float]
-        ] = []
+        results: list[RetrievedChunk] = []
         for j, score in zip(idx[0], scores[0], strict=True):
             if j == -1:
                 continue
             results.append(
-                (
-                    int(j),
-                    self._texts[j],
-                    self._sources[j],
-                    self._pages[j],
-                    self._sections[j] if j < len(self._sections) else None,
-                    self._token_spans[j] if j < len(self._token_spans) else (None, None),
-                    float(score),
+                RetrievedChunk(
+                    chunk_id=int(j),
+                    text=self._texts[j],
+                    source_path=self._sources[j],
+                    page=self._pages[j],
+                    section_title=self._sections[j] if j < len(self._sections) else None,
+                    token_span=self._token_spans[j] if j < len(self._token_spans) else (None, None),
+                    similarity_score=float(score),
                 )
             )
 
         # Optional reranking with cross-encoder
         if self._reranker and results:
-            pairs = [(query, t) for (_id, t, _src, _p, _sec, _span, _sc) in results]
+            pairs = [(query, chunk.text) for chunk in results]
             try:  # pragma: no cover - model inference
                 ce_scores = self._reranker.predict(pairs)
             except Exception as exc:
@@ -174,10 +199,20 @@ class RAGPipeline:
                     exc,
                 )
             if ce_scores is not None:
-                with_scores = [(*r, float(ce)) for r, ce in zip(results, ce_scores, strict=False)]
-                with_scores.sort(key=lambda x: x[-1], reverse=True)
-                # Strip ce score column
-                results = [r[:-1] for r in with_scores]
+                for chunk, ce in zip(results, ce_scores, strict=False):
+                    if chunk is None:
+                        continue
+                    chunk.reranker_score = float(ce)
+                results.sort(
+                    key=lambda c: c.reranker_score
+                    if c.reranker_score is not None
+                    else c.similarity_score,
+                    reverse=True,
+                )
+            else:
+                results.sort(key=lambda c: c.similarity_score, reverse=True)
+        else:
+            results.sort(key=lambda c: c.similarity_score, reverse=True)
         return results
 
     def _build_prompt(
@@ -262,18 +297,25 @@ class RAGPipeline:
         top_k = self.config.retrieval.top_k
         max_chars = self.config.retrieval.max_context_chars
         retrieved = self._retrieve(question, top_k)
-        contexts = [
+        contexts_raw = [
             self._render_context(
-                text=_t,
-                section_title=_sec,
-                page=_p,
+                text=chunk.text,
+                section_title=chunk.section_title,
+                page=chunk.page,
             )
-            for (_id, _t, _src, _p, _sec, _span, _s) in retrieved
+            for chunk in retrieved
         ]
-        sources = [f"{s}#page={p}" if p else s for (_id, _t, s, p, _sec, _span, _s) in retrieved]
+        numbered_contexts = [
+            self._prefix_context_with_index(idx, ctx)
+            for idx, ctx in enumerate(contexts_raw, start=1)
+        ]
+        sources = [
+            f"{chunk.source_path}#page={chunk.page}" if chunk.page else chunk.source_path
+            for chunk in retrieved
+        ]
         prompt = self._build_prompt(
             question,
-            contexts,
+            numbered_contexts,
             max_chars,
             require_citations=require_citations,
             extra_instructions=extra_instructions,
@@ -281,23 +323,29 @@ class RAGPipeline:
 
         retrieved_records = [
             {
-                "id": _id,
-                "text": _t,
-                "source_path": _src,
-                "page": _p,
-                "section_title": _sec,
-                "token_start": _span[0],
-                "token_end": _span[1],
-                "score": _s,
-                "excerpt": self._excerpt(_t),
-                "rendered_context": contexts[idx] if idx < len(contexts) else _t,
+                "id": chunk.chunk_id,
+                "text": chunk.text,
+                "source_path": chunk.source_path,
+                "page": chunk.page,
+                "section_title": chunk.section_title,
+                "token_start": chunk.token_span[0],
+                "token_end": chunk.token_span[1],
+                "score": chunk.ordering_score,
+                "similarity_score": chunk.similarity_score,
+                "reranker_score": chunk.reranker_score,
+                "excerpt": self._excerpt(chunk.text),
+                "rendered_context": numbered_contexts[idx]
+                if idx < len(numbered_contexts)
+                else chunk.text,
+                "ordinal": idx + 1,
             }
-            for idx, (_id, _t, _src, _p, _sec, _span, _s) in enumerate(retrieved)
+            for idx, chunk in enumerate(retrieved)
         ]
 
         return {
             "prompt": prompt,
-            "contexts": contexts,
+            "contexts": numbered_contexts,
+            "raw_contexts": contexts_raw,
             "sources": sources,
             "retrieved": retrieved_records,
             "scores": [rec["score"] for rec in retrieved_records],
@@ -325,6 +373,9 @@ class RAGPipeline:
                 "token_end": rec["token_end"],
                 "section_title": rec.get("section_title"),
                 "score": rec["score"],
+                "similarity_score": rec.get("similarity_score"),
+                "reranker_score": rec.get("reranker_score"),
+                "ordinal": rec.get("ordinal"),
                 "excerpt": rec["excerpt"],
                 "rendered_context": rec.get("rendered_context"),
             }
@@ -345,6 +396,14 @@ class RAGPipeline:
         if self._client is None:
             self._client = build_generation_client(self.config.inference)
         return self._client
+
+    @staticmethod
+    def _prefix_context_with_index(index: int, context: str) -> str:
+        label = f"[{index}]"
+        context = context.strip()
+        if not context:
+            return label
+        return f"{label} {context}"
 
     @staticmethod
     def _render_context(

@@ -15,6 +15,18 @@ from ..models import LLMClient
 
 logger = logging.getLogger(__name__)
 
+_TASK_TYPE_ALIASES = {
+    "qa": "qa",
+    "questionanswer": "qa",
+    "questionanswering": "qa",
+    "summary": "summaries",
+    "summaries": "summaries",
+    "summarization": "summaries",
+    "citation": "citations",
+    "citations": "citations",
+    "citationcheck": "citations",
+}
+
 
 @dataclass
 class TaskRecord:
@@ -83,9 +95,8 @@ class TaskGenerator:
     ) -> None:
         self._client = client
         self.max_tasks_per_doc = max(1, max_tasks_per_doc)
-        self.allowed_task_types = {
-            t.strip().lower() for t in (allowed_task_types or ("qa", "summary", "citation"))
-        }
+        allowed = allowed_task_types or ("qa", "summaries", "citations")
+        self.allowed_task_types = {self._canonical_task_type(t.strip().lower()) for t in allowed}
         self.document_char_limit = max(512, document_char_limit)
         self.language_hint = language_hint
 
@@ -195,6 +206,7 @@ class TaskGenerator:
     ) -> TaskRecord:
         raw_type = str(item.get("task_type") or item.get("type") or "qa").strip().lower()
         normalized_type = re.sub(r"[^a-z]+", "", raw_type) or "qa"
+        canonical_type = self._canonical_task_type(normalized_type)
 
         instruction_val = item.get("instruction") or item.get("prompt") or ""
         instruction = str(instruction_val).strip()
@@ -216,11 +228,11 @@ class TaskGenerator:
 
         metadata.setdefault("raw_task", item)
 
-        task_id = f"{slug}-{normalized_type}-{counter:02d}"
+        task_id = f"{slug}-{canonical_type}-{counter:02d}"
 
         return TaskRecord(
             task_id=task_id,
-            task_type=normalized_type,
+            task_type=canonical_type,
             instruction=instruction,
             doc_path=str(doc_path) if doc_path else None,
             requires_citations=requires_citations,
@@ -249,3 +261,8 @@ class TaskGenerator:
         name = Path(doc_path).stem
         slug = re.sub(r"[^a-zA-Z0-9]+", "-", name.lower()).strip("-")
         return slug or "doc"
+
+    @staticmethod
+    def _canonical_task_type(value: str) -> str:
+        value = value.strip().lower()
+        return _TASK_TYPE_ALIASES.get(value, value or "qa")

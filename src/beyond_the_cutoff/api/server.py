@@ -40,6 +40,15 @@ def ask(payload: dict[str, Any]) -> dict[str, Any]:
     question = payload.get("question")
     if not question or not isinstance(question, str):
         raise HTTPException(status_code=400, detail="Missing 'question' in request body")
-    pipeline = _load_pipeline()
+    try:
+        pipeline = _load_pipeline()
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "index_missing",
+                "message": str(exc),
+            },
+        ) from exc
     result = pipeline.ask(question)
     return result

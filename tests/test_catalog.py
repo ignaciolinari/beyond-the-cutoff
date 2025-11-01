@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 from collections.abc import Iterable, Mapping
 from pathlib import Path
@@ -98,7 +99,12 @@ def test_build_metadata_catalog(tmp_path: Path) -> None:
     )
 
     assert artifacts.csv_path.exists()
-    assert artifacts.parquet_path.exists()
+    if artifacts.parquet_path is None:
+        has_pyarrow = importlib.util.find_spec("pyarrow") is not None
+        has_fastparquet = importlib.util.find_spec("fastparquet") is not None
+        assert not has_pyarrow and not has_fastparquet
+    else:
+        assert artifacts.parquet_path.exists()
     assert artifacts.corpus_path.exists()
 
     df = pd.read_csv(artifacts.csv_path, dtype={"canonical_id": str})

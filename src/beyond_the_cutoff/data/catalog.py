@@ -20,7 +20,7 @@ class CatalogArtifacts:
     """Paths to generated catalog artifacts."""
 
     csv_path: Path
-    parquet_path: Path
+    parquet_path: Path | None
     corpus_path: Path
 
 
@@ -211,7 +211,16 @@ def build_metadata_catalog(
     csv_path.parent.mkdir(parents=True, exist_ok=True)
 
     df.to_csv(csv_path, index=False)
-    df.to_parquet(parquet_path, index=False)
+    parquet_path_option: Path | None = parquet_path
+    try:
+        df.to_parquet(parquet_path, index=False)
+    except ImportError as exc:
+        parquet_path_option = None
+        print(
+            "Warning: Skipping parquet export because no compatible engine is installed. "
+            "Install 'pyarrow' or 'fastparquet' to enable parquet output."
+        )
+        print(f"Details: {exc}")
 
     generated_at = datetime.now(timezone.utc).isoformat()
     with corpus_path.open("w", encoding="utf-8") as handle:
@@ -219,7 +228,11 @@ def build_metadata_catalog(
             payload = {"generated_at": generated_at, **record}
             handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
-    return CatalogArtifacts(csv_path=csv_path, parquet_path=parquet_path, corpus_path=corpus_path)
+    return CatalogArtifacts(
+        csv_path=csv_path,
+        parquet_path=parquet_path_option,
+        corpus_path=corpus_path,
+    )
 
 
 __all__ = ["build_metadata_catalog", "CatalogArtifacts"]
