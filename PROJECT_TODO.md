@@ -1,6 +1,6 @@
 # Beyond the Cutoff – Lightweight Project Tracker
 
-_Last updated: 2025-10-31_
+_Last updated: 2025-11-01_
 
 ## Status Legend
 - [ ] Backlog
@@ -44,11 +44,11 @@ _Last updated: 2025-10-31_
 ## Evaluation Suite
 - [ ] Design evaluation dataset (QA pairs, summaries) and storage format
 - [ ] Implement automatic scoring metrics (factuality, citation accuracy, BLEU/BERTScore)
-- [ ] Build comparative evaluation harness for baseline RAG vs fine-tuned vs hybrid setups
-- [ ] Integrate large-model judge (cloud or local) for automated evaluations and capture prompt/response logs
+- [~] Build comparative evaluation harness for baseline RAG vs fine-tuned vs hybrid setups
+- [~] Integrate large-model judge (cloud or local) for automated evaluations and capture prompt/response logs
 - [ ] Introduce a small evaluation harness (faithfulness, citation accuracy, retrieval hit@k/MRR)
 - [ ] Integrate human evaluation protocol
-- [ ] Provide CLI/report generator for comparative analysis
+- [~] Provide CLI/report generator for comparative analysis
 - [ ] Add regression tests ensuring evaluation metrics run end-to-end
 
 ## Documentation & Reporting

@@ -1,0 +1,11 @@
+id: method_compare
+owner: Ignacio
+last_updated: 2025-11-01
+description: Compare methodologies across multiple papers with higher recall
+settings:
+  embedding_model: BAAI/bge-small-en-v1.5
+  chunk_size: 384
+  chunk_overlap: 80
+  top_k: 8
+  reranker_model: cross-encoder/ms-marco-MiniLM-L-6-v2
+  max_context_chars: 7000

@@ -1,0 +1,12 @@
+provider: ollama
+model: qwen2:3b-instruct-q4_0
+host: http://localhost
+port: 11434
+timeout: 180.0
+device: auto
+torch_dtype: auto
+max_new_tokens: 512
+temperature: 0.0
+top_p: 0.9
+repetition_penalty: 1.05
+stop_sequences: []

@@ -1,0 +1,61 @@
+name: scientific_default
+version: 0.1.0
+description: >-
+  Judge rubric for evaluating retrieval-augmented answers to post-cutoff scientific questions.
+  Enforces citation grounding, factual accuracy, and clarity.
+prompt: |
+  You are a meticulous scientific reviewer. Evaluate the ASSISTANT_RESPONSE against the QUESTION
+  and the referenced CONTEXTS extracted from recent papers. Only rely on the provided context; if
+  necessary evidence is missing, penalize the response.
+
+  Requirements:
+  1. Reward answers that cite evidence inline using bracketed numbers (e.g., [1], [2]) matching the
+     provided contexts. Penalize fabricated or missing citations.
+  2. Confirm the answer is factually supported by the context. Flag speculative or contradictory
+     statements.
+  3. Prefer responses that explain methods and results with clear, concise scientific language.
+  4. Ensure the answer addresses the entire question. Partial coverage should be penalized.
+  5. Note whether the assistant explicitly acknowledges when the context lacks the requested
+     information.
+
+  Produce a JSON object following the FORMAT specification. Do not include additional commentary.
+criteria:
+  - id: factuality
+    label: Factual Accuracy
+    weight: 0.40
+    description: Measures whether each claim is supported by the provided contexts.
+  - id: grounding
+    label: Citation Grounding
+    weight: 0.30
+    description: Evaluates correctness and completeness of inline citations relative to contexts.
+  - id: completeness
+    label: Answer Completeness
+    weight: 0.20
+    description: Assesses coverage of the question scope, including methods/results emphasis.
+  - id: communication
+    label: Scientific Clarity
+    weight: 0.10
+    description: Rewards well-structured, scientifically toned explanations without fluff.
+format:
+  type: json
+  schema: |
+    {
+      "scores": {
+        "factuality": <float 0-1>,
+        "grounding": <float 0-1>,
+        "completeness": <float 0-1>,
+        "communication": <float 0-1>
+      },
+      "verdict": "pass" | "fail",
+      "reasoning": "Concise justification referencing context IDs" ,
+      "missing_citations": [<int>],
+      "hallucinated_citations": [<int>]
+    }
+references:
+  citation_marker_regex: "\\[(\\d+)\\]"
+  coverage_threshold: 0.35
+  fail_on_fabricated_citations: true
+notes:
+  - Normalize scores to 0–1 before computing overall metrics.
+  - Overall score suggestion: sum(weight * score).
+  - Treat absent citations as hallucinated when the answer introduces new markers not in CONTEXTS.
