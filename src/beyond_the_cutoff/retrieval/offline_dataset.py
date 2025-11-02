@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import random
-import re
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -407,9 +406,20 @@ class OfflineDatasetGenerator:
         if not instruction_clean or not expected_clean:
             return None
 
+        extra_instructions = None
+        top_k_override: int | None = None
+        if require_citations:
+            extra_instructions = (
+                "Use the numbered excerpts as explicit evidence. When more than one excerpt is relevant, cite each distinct snippet at least once using its [#] marker. "
+                "Write complete sentences grounded in the excerpt content, and avoid recycling the same citation for unrelated statements or fabricating references."
+            )
+            top_k_override = 1
+
         prepared = self.pipeline.prepare_prompt(
             instruction_clean,
             require_citations=require_citations,
+            extra_instructions=extra_instructions,
+            top_k_override=top_k_override,
         )
 
         enforcement_meta: dict[str, Any] | None = None
@@ -522,12 +532,13 @@ class OfflineDatasetGenerator:
             f"Produce up to {cfg.questions_per_document} question-answer pairs, "
             f"{cfg.summary_prompts_per_document} summary instructions, and "
             f"{cfg.citation_prompts_per_document} citation-check tasks. "
-            "Answers must be grounded in the text. Return ONLY valid JSON with keys 'qa', 'summaries', 'citations'."
+            "Answers must be grounded in the text. For citation tasks, ensure responses contain inline [#] markers that reference the numbered excerpts. Return ONLY valid JSON with keys 'qa', 'summaries', 'citations'."
         )
         schema = (
             "- Each item in 'qa' must include 'question' and 'answer'.\n"
             "- Each item in 'summaries' must include 'instruction' and 'response'.\n"
-            "- Each item in 'citations' must include 'instruction' and 'answer'.\n"
+            "- Each item in 'citations' must include non-empty 'instruction' and 'answer'. Citation answers must cite relevant excerpts using inline markers such as [1], [2] and should draw on multiple distinct snippets when evidence exists.\n"
+            "- Avoid null values. If a field is unknown, omit the item instead of returning null.\n"
             "- Use concise academic tone. Avoid speculative statements."
         )
         context_lines = []
@@ -583,7 +594,7 @@ class OfflineDatasetGenerator:
 
         verification = self.pipeline.verify_citations(cleaned_answer, list(contexts))
         enforcement["verification"] = verification
-        if verification.get("referenced"):
+        if verification.get("referenced") and not verification.get("extra"):
             return cleaned_answer, enforcement
 
         attempts = max(0, self.config.dataset_generation.citation_rewrite_attempts)
@@ -617,7 +628,7 @@ class OfflineDatasetGenerator:
             if not candidate:
                 continue
             verification = self.pipeline.verify_citations(candidate, list(contexts))
-            if verification.get("referenced"):
+            if verification.get("referenced") and not verification.get("extra"):
                 enforcement.update(
                     {
                         "status": "rewrite_success",
@@ -626,32 +637,9 @@ class OfflineDatasetGenerator:
                 )
                 return candidate, enforcement
 
-        fallback = self._fallback_citation_injection(candidate, len(contexts))
-        if fallback is None:
-            enforcement.update({"status": "failed"})
-            logger.warning("Dropping task for %s due to missing citations", source_path)
-            return None
-
-        verification = self.pipeline.verify_citations(fallback, list(contexts))
-        enforcement.update(
-            {
-                "status": "fallback",
-                "verification": verification,
-            }
-        )
-        return fallback, enforcement
-
-    @staticmethod
-    def _fallback_citation_injection(answer: str, context_count: int) -> str | None:
-        text = answer.strip()
-        if not text:
-            return None
-        if context_count <= 0:
-            return text
-        if re.search(r"\[\s*\d+\s*\]", text):
-            return text
-        marker = "[1]"
-        return (text + " " + marker).strip()
+        enforcement.update({"status": "failed"})
+        logger.warning("Dropping task for %s due to missing citations", source_path)
+        return None
 
     @staticmethod
     def _build_citation_rewrite_prompt(
@@ -664,8 +652,8 @@ class OfflineDatasetGenerator:
         return (
             "You are revising an answer for a retrieval-augmented research assistant. "
             "Ensure the answer includes inline citations using square brackets with numbers, such as [1], "
-            "that refer to the numbered contexts. Cite only relevant contexts and do not fabricate. "
-            "Rewrite the answer if needed to include citations and keep it concise.\n\n"
+            "that refer to the numbered contexts. Cite only relevant contexts, do not fabricate, and draw on multiple different snippets when they contain supporting evidence. "
+            "Rewrite the answer if needed to include distinct citations and keep it concise.\n\n"
             f"Question: {question}\n\n"
             "Numbered contexts:\n"
             f"{context_block}\n\n"

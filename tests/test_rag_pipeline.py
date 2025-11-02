@@ -108,3 +108,17 @@ def test_rag_pipeline_basic(tmp_path: Path) -> None:
     assert verification["referenced"] == [1]
     assert verification["extra"] == []
     assert 1 in verification["coverage"]
+
+
+def test_verify_citations_filters_out_of_range_markers() -> None:
+    contexts = [
+        "[1] Example context discussing retrieval.",
+        "[2] Additional context about evaluation.",
+    ]
+    # Response cites values outside the available context range; these should be flagged as extras,
+    # and the referenced list should remain empty so downstream enforcement retriggers a rewrite.
+    verification = RAGPipeline._verify_citations("Refer to [3] and [99] for details.", contexts)
+
+    assert verification["referenced"] == []
+    assert verification["missing"] == [1, 2]
+    assert verification["extra"] == [3, 99]

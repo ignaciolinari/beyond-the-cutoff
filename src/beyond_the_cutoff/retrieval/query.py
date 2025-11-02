@@ -259,14 +259,13 @@ class RAGPipeline:
         marks = [int(m) for m in re.findall(r"\[(\d+)\]", answer_text)]
         unique_marks = sorted(set(marks))
         total = len(contexts)
-        missing = [i for i in range(1, total + 1) if i not in unique_marks]
-        extra = [i for i in unique_marks if i < 1 or i > total]
+        valid_marks = [idx for idx in unique_marks if 1 <= idx <= total]
+        missing = [i for i in range(1, total + 1) if i not in valid_marks]
+        extra = [i for i in unique_marks if i not in valid_marks]
 
         answer_words = set(answer_text.lower().split())
         coverage: dict[int, float] = {}
-        for idx in unique_marks:
-            if idx < 1 or idx > total:
-                continue
+        for idx in valid_marks:
             context_words = [w for w in contexts[idx - 1].lower().split() if len(w) > 3]
             if not context_words:
                 coverage[idx] = 0.0
@@ -274,7 +273,7 @@ class RAGPipeline:
             overlap = sum(1 for w in context_words if w in answer_words)
             coverage[idx] = overlap / max(len(context_words), 1)
         return {
-            "referenced": unique_marks,
+            "referenced": valid_marks,
             "missing": missing,
             "extra": extra,
             "coverage": coverage,
@@ -291,10 +290,13 @@ class RAGPipeline:
         *,
         require_citations: bool = True,
         extra_instructions: str | None = None,
+        top_k_override: int | None = None,
     ) -> dict[str, Any]:
         """Return retrieval artifacts and a rendered prompt without calling the LLM."""
 
-        top_k = self.config.retrieval.top_k
+        top_k = top_k_override if top_k_override is not None else self.config.retrieval.top_k
+        if top_k <= 0:
+            raise ValueError("top_k must be positive")
         max_chars = self.config.retrieval.max_context_chars
         retrieved = self._retrieve(question, top_k)
         contexts_raw = [
