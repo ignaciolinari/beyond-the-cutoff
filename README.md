@@ -78,7 +78,7 @@ python scripts/prefetch_models.py --cache-dir .cache/huggingface Qwen/Qwen2-0.5B
 # Pull the Ollama baselines (0.5B assistant, 1.5B generator, 3B judge)
 ollama pull qwen2:0.5b-instruct-q4_0
 ollama pull qwen2:1.5b-instruct-q4_0
-ollama pull qwen2:3b-instruct-q4_0
+ollama pull qwen2.5:3b-instruct-q4_K_M
 ```
 
 The bootstrap script installs both runtime and development dependencies in editable mode and wires up the `pre-commit` hook so formatting and linting run automatically. Re-run the script at any time to pick up dependency updates (pass `--no-dev` or `--no-pre-commit` if you want to opt out).
@@ -105,7 +105,7 @@ The default configuration connects to the Ollama daemon at `http://localhost:114
 - **Offline tasks**: once the index exists, call `python scripts/generate_offline_dataset.py --config configs/default.yaml` so the `qwen2:1.5b-instruct-q4_0` generator can produce QA/summaries/citation tasks backed by those chunks.
 - **Fine-tuning**: take the resulting JSONL plus your assistant prompts into Colab/Kaggle, fine-tune `Qwen/Qwen2-0.5B-Instruct` with LoRA, export the adapter/full weights, and keep the safetensors checkpoints.
 - **Deployment**: convert that tuned checkpoint to GGUF (e.g., `llama.cpp convert` + `quantize`) and load it into Ollama; update `configs/default.yaml` with the new tag when ready, and pull the 1.5B/3B Qwen tags locally via `ollama pull`.
-- **Evaluation**: reuse `python scripts/ingest_and_index.py` results plus the evaluation datasets with the 3B judge (`qwen2:3b-instruct-q4_0`) or a cloud grader by flipping the provider/model in the config.
+- **Evaluation**: reuse `python scripts/ingest_and_index.py` results plus the evaluation datasets with the 3B judge (`qwen2.5:3b-instruct-q4_K_M`) or a cloud grader by flipping the provider/model in the config.
 - **Verification**: after each stage, run `pytest tests/test_config.py` (and the broader suite once the pipeline is populated) to ensure the configuration and adapters remain wired correctly.
 
 ## Paper Assistant (RAG) Quickstart
@@ -229,7 +229,7 @@ Tune behaviour via `configs/default.yaml` → `dataset_generation` (counts per d
 
 ### Model Handling
 
-- Start with compact checkpoints such as `Qwen/Qwen2-0.5B-Instruct` for LoRA (default assistant), then rely on Ollama tags like `qwen2:1.5b-instruct-q4_0` for task generation and `qwen2:3b-instruct-q4_0` (or a cloud API) for judging.
+- Start with compact checkpoints such as `Qwen/Qwen2-0.5B-Instruct` for LoRA (default assistant), then rely on Ollama tags like `qwen2:1.5b-instruct-q4_0` for task generation and `qwen2.5:3b-instruct-q4_K_M` (or a cloud API) for judging.
 - Sync fine-tuned checkpoints from Colab/Kaggle back into the local `models/` directory; keep quantized copies (GGUF) tailored to the local machine.
 - Register custom quantized builds with Ollama via `ollama create` or `Modelfile` definitions so they can drop in for inference.
 

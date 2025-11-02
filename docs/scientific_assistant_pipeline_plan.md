@@ -76,7 +76,7 @@ _Last updated: 2025-11-01_
   - Judge models (see 5.2) for qualitative scoring.
 
 ### 5.2 Judge Strategy
-- Choose default local judge (e.g., `qwen2:3b-instruct-q4_0`) and optional cloud judge (GPT-4o) for calibration.
+- Choose default local judge (e.g., `qwen2.5:3b-instruct-q4_K_M`) and optional cloud judge (GPT-4o) for calibration.
 - Draft evaluation prompts emphasizing scientific grounding and citation verification.
 - Store judge configuration specs under `configs/judges/`.
 
