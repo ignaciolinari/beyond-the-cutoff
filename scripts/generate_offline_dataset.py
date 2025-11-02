@@ -37,6 +37,17 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Limit the number of source documents to process",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Append to existing outputs and skip documents already present in raw tasks",
+    )
+    parser.add_argument(
+        "--parse-retries",
+        type=int,
+        default=None,
+        help="Number of additional retries when generator output cannot be parsed",
+    )
     return parser.parse_args()
 
 
@@ -83,6 +94,8 @@ def main() -> None:
     counters = generator.generate(
         output_dataset_path=output_path,
         raw_tasks_path=raw_tasks_path,
+        resume=args.resume,
+        parse_retries=args.parse_retries,
     )
 
     summary = (

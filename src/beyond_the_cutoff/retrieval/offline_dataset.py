@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import re
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -109,6 +110,8 @@ class OfflineDatasetGenerator:
         *,
         output_dataset_path: Path | None = None,
         raw_tasks_path: Path | None = None,
+        resume: bool = False,
+        parse_retries: int | None = None,
     ) -> dict[str, int]:
         """Generate offline dataset artifacts and return counters."""
 
@@ -118,27 +121,51 @@ class OfflineDatasetGenerator:
         dataset_path.parent.mkdir(parents=True, exist_ok=True)
         tasks_path.parent.mkdir(parents=True, exist_ok=True)
 
+        processed_documents: set[str] = set()
+        dataset_mode = "w"
+        tasks_mode = "w"
+
+        if resume:
+            processed_documents = self._load_processed_documents(tasks_path)
+            dataset_mode = "a"
+            tasks_mode = "a"
+
+        effective_parse_retries = (
+            dataset_cfg.parse_retries if parse_retries is None else max(0, parse_retries)
+        )
+
         grouped = self._load_mapping(self.mapping_path)
         max_docs = dataset_cfg.max_documents
         counters = {"documents": 0, "qa": 0, "summaries": 0, "citations": 0, "examples": 0}
 
         with (
-            tasks_path.open("w", encoding="utf-8") as raw_file,
-            dataset_path.open("w", encoding="utf-8") as dataset_file,
+            tasks_path.open(tasks_mode, encoding="utf-8") as raw_file,
+            dataset_path.open(dataset_mode, encoding="utf-8") as dataset_file,
         ):
             for doc_index, (source_path, rows) in enumerate(grouped.items()):
                 if max_docs is not None and counters["documents"] >= max_docs:
                     break
 
+                if resume and source_path in processed_documents:
+                    logger.debug(
+                        "Skipping %s; already present in raw tasks (resume mode)", source_path
+                    )
+                    continue
+
                 examples, raw_payload = self._generate_for_document(
                     doc_index=doc_index,
                     source_path=source_path,
                     rows=rows,
+                    parse_retries=effective_parse_retries,
                 )
 
                 if not examples:
+                    if raw_payload:
+                        raw_payload.setdefault("status", "error")
+                        raw_file.write(json.dumps(raw_payload, ensure_ascii=False) + "\n")
                     continue
 
+                raw_payload.setdefault("status", "success")
                 raw_file.write(json.dumps(raw_payload, ensure_ascii=False) + "\n")
 
                 for example in examples:
@@ -156,6 +183,7 @@ class OfflineDatasetGenerator:
         doc_index: int,
         source_path: str,
         rows: Sequence[MappingRow],
+        parse_retries: int,
     ) -> tuple[list[OfflineExample], dict[str, Any]]:
         dataset_cfg = self.config.dataset_generation
         selected_rows = self._select_rows(rows, dataset_cfg.max_chunks_per_document)
@@ -168,11 +196,69 @@ class OfflineDatasetGenerator:
             rows=selected_rows,
             cfg=dataset_cfg,
         )
-        response = self.generator.generate(generator_prompt)
-        raw_text = response.get("response", "")
-        parsed = self._parse_generator_response(raw_text)
+        attempts = max(0, parse_retries) + 1
+        parsed: dict[str, Any] | None = None
+        raw_text = ""
+        attempt_logs: list[dict[str, Any]] = []
+
+        for attempt in range(1, attempts + 1):
+            try:
+                response = self.generator.generate(generator_prompt)
+            except Exception as exc:  # pragma: no cover - network/LLM failures
+                logger.warning(
+                    "Generator request failed for %s (attempt %d/%d): %s",
+                    source_path,
+                    attempt,
+                    attempts,
+                    exc,
+                )
+                attempt_logs.append(
+                    {
+                        "attempt": attempt,
+                        "error": "request_failed",
+                        "exception": repr(exc),
+                    }
+                )
+                raw_text = ""
+                parsed = None
+                continue
+
+            raw_text = response.get("response", "")
+            parsed = self._parse_generator_response(raw_text)
+            if parsed is None:
+                logger.warning(
+                    "Unparsable generator payload for %s (attempt %d/%d)",
+                    source_path,
+                    attempt,
+                    attempts,
+                )
+                attempt_logs.append(
+                    {"attempt": attempt, "response": raw_text, "error": "unparsable"}
+                )
+                continue
+
+            if not self._has_tasks(parsed):
+                logger.warning(
+                    "Generator returned empty payload for %s (attempt %d/%d)",
+                    source_path,
+                    attempt,
+                    attempts,
+                )
+                attempt_logs.append(
+                    {"attempt": attempt, "response": raw_text, "error": "empty_payload"}
+                )
+                parsed = None
+                continue
+
+            if attempt > 1:
+                logger.info(
+                    "Recovered generator payload for %s after %d attempt(s)",
+                    source_path,
+                    attempt,
+                )
+            break
+
         if parsed is None:
-            logger.warning("Generator returned unparsable payload for %s", source_path)
             return [], {
                 "document": source_path,
                 "prompt": generator_prompt,
@@ -182,6 +268,7 @@ class OfflineDatasetGenerator:
                 ),
                 "response": raw_text,
                 "error": "unparsable_response",
+                "attempts": attempt_logs,
             }
 
         examples: list[OfflineExample] = []
@@ -271,6 +358,36 @@ class OfflineDatasetGenerator:
 
         return examples, raw_payload
 
+    @staticmethod
+    def _has_tasks(payload: Mapping[str, Any]) -> bool:
+        qa_items = payload.get("qa", [])
+        summary_items = payload.get("summaries", [])
+        citation_items = payload.get("citations", [])
+        return any(qa_items) or any(summary_items) or any(citation_items)
+
+    @staticmethod
+    def _load_processed_documents(tasks_path: Path) -> set[str]:
+        processed: set[str] = set()
+        if not tasks_path.exists():
+            return processed
+        with tasks_path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                document = payload.get("document")
+                if isinstance(document, str) and document:
+                    status = payload.get("status")
+                    if status and status != "success":
+                        continue
+                    if payload.get("error"):
+                        continue
+                    processed.add(document)
+        return processed
+
     def _build_example(
         self,
         *,
@@ -285,8 +402,8 @@ class OfflineDatasetGenerator:
         selected_rows: Sequence[MappingRow],
         extra_metadata: Mapping[str, Any] | None,
     ) -> OfflineExample | None:
-        instruction_clean = instruction.strip()
-        expected_clean = expected_response.strip()
+        instruction_clean = self._coerce_text(instruction).strip()
+        expected_clean = self._coerce_text(expected_response).strip()
         if not instruction_clean or not expected_clean:
             return None
 
@@ -294,6 +411,18 @@ class OfflineDatasetGenerator:
             instruction_clean,
             require_citations=require_citations,
         )
+
+        enforcement_meta: dict[str, Any] | None = None
+        if require_citations:
+            enforced = self._ensure_citation_compliance(
+                question=instruction_clean,
+                answer=expected_clean,
+                contexts=prepared["contexts"],
+                source_path=source_path,
+            )
+            if enforced is None:
+                return None
+            expected_clean, enforcement_meta = enforced
 
         metadata = {
             "source_path": source_path,
@@ -308,6 +437,8 @@ class OfflineDatasetGenerator:
         }
         if extra_metadata:
             metadata["generator_metadata"] = dict(extra_metadata)
+        if enforcement_meta:
+            metadata["citation_enforcement"] = enforcement_meta
 
         return OfflineExample(
             task_id=str(uuid.uuid4()),
@@ -432,6 +563,129 @@ class OfflineDatasetGenerator:
                 lines = lines[:-1]
             stripped = "\n".join(lines).strip()
         return stripped
+
+    def _ensure_citation_compliance(
+        self,
+        *,
+        question: str,
+        answer: str,
+        contexts: Sequence[str],
+        source_path: str,
+    ) -> tuple[str, dict[str, Any]] | None:
+        enforcement: dict[str, Any] = {"status": "pass", "attempts": 0}
+        cleaned_answer = answer.strip()
+        if not cleaned_answer:
+            return None
+
+        if not contexts:
+            enforcement["verification"] = {"referenced": []}
+            return cleaned_answer, enforcement
+
+        verification = self.pipeline.verify_citations(cleaned_answer, list(contexts))
+        enforcement["verification"] = verification
+        if verification.get("referenced"):
+            return cleaned_answer, enforcement
+
+        attempts = max(0, self.config.dataset_generation.citation_rewrite_attempts)
+        candidate = cleaned_answer
+        for attempt in range(1, attempts + 1):
+            rewrite_prompt = self._build_citation_rewrite_prompt(
+                question=question,
+                contexts=contexts,
+                answer=candidate,
+            )
+            try:
+                response = self.generator.generate(rewrite_prompt)
+            except Exception as exc:  # pragma: no cover - network/LLM failures
+                logger.warning(
+                    "Citation rewrite failed for %s (attempt %d/%d): %s",
+                    source_path,
+                    attempt,
+                    attempts,
+                    exc,
+                )
+                enforcement.setdefault("errors", []).append(
+                    {
+                        "attempt": attempt,
+                        "error": "rewrite_failed",
+                        "exception": repr(exc),
+                    }
+                )
+                continue
+            candidate = (response.get("response", "") or "").strip()
+            enforcement["attempts"] = attempt
+            if not candidate:
+                continue
+            verification = self.pipeline.verify_citations(candidate, list(contexts))
+            if verification.get("referenced"):
+                enforcement.update(
+                    {
+                        "status": "rewrite_success",
+                        "verification": verification,
+                    }
+                )
+                return candidate, enforcement
+
+        fallback = self._fallback_citation_injection(candidate, len(contexts))
+        if fallback is None:
+            enforcement.update({"status": "failed"})
+            logger.warning("Dropping task for %s due to missing citations", source_path)
+            return None
+
+        verification = self.pipeline.verify_citations(fallback, list(contexts))
+        enforcement.update(
+            {
+                "status": "fallback",
+                "verification": verification,
+            }
+        )
+        return fallback, enforcement
+
+    @staticmethod
+    def _fallback_citation_injection(answer: str, context_count: int) -> str | None:
+        text = answer.strip()
+        if not text:
+            return None
+        if context_count <= 0:
+            return text
+        if re.search(r"\[\s*\d+\s*\]", text):
+            return text
+        marker = "[1]"
+        return (text + " " + marker).strip()
+
+    @staticmethod
+    def _build_citation_rewrite_prompt(
+        *,
+        question: str,
+        contexts: Sequence[str],
+        answer: str,
+    ) -> str:
+        context_block = "\n".join(contexts)
+        return (
+            "You are revising an answer for a retrieval-augmented research assistant. "
+            "Ensure the answer includes inline citations using square brackets with numbers, such as [1], "
+            "that refer to the numbered contexts. Cite only relevant contexts and do not fabricate. "
+            "Rewrite the answer if needed to include citations and keep it concise.\n\n"
+            f"Question: {question}\n\n"
+            "Numbered contexts:\n"
+            f"{context_block}\n\n"
+            "Draft answer:\n"
+            f"{answer}\n\n"
+            "Rewritten answer with citations:"
+        )
+
+    @staticmethod
+    def _coerce_text(value: Any) -> str:
+        if isinstance(value, str):
+            return value
+        if isinstance(value, bytes):
+            try:
+                return value.decode("utf-8", errors="ignore")
+            except Exception:  # pragma: no cover - unexpected encoding
+                return value.decode(errors="ignore")
+        if isinstance(value, Sequence):
+            return " ".join(str(part) for part in value if part)
+        return str(value)
 
     def _parse_generator_response(self, text: str) -> dict[str, Any] | None:
         candidate = self._strip_fences(text)

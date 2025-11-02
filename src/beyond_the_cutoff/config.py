@@ -202,6 +202,8 @@ class DatasetGenerationConfig(BaseModel):
     max_chars_per_chunk: int = Field(default=1600, ge=256)
     max_documents: int | None = Field(default=None, ge=1)
     seed: int = Field(default=42)
+    parse_retries: int = Field(default=2, ge=0)
+    citation_rewrite_attempts: int = Field(default=1, ge=0)
 
     @field_validator("output_dataset_path", "raw_tasks_path", mode="before")
     @classmethod

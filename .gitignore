@@ -39,6 +39,9 @@ data/external/*
 !data/external/.gitkeep
 evaluation/results/*
 !evaluation/results/.gitkeep
+evaluation/datasets/*.jsonl
+evaluation/datasets/*.json
+evaluation/datasets/raw_tasks/*
 notebooks/.ipynb_checkpoints/
 
 # Logs and cache
