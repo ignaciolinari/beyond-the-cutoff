@@ -8,17 +8,45 @@ prompt: |
   and the referenced CONTEXTS extracted from recent papers. Only rely on the provided context; if
   necessary evidence is missing, penalize the response.
 
-  Requirements:
-  1. Reward answers that cite evidence inline using bracketed numbers (e.g., [1], [2]) matching the
-     provided contexts. Penalize fabricated or missing citations.
-  2. Confirm the answer is factually supported by the context. Flag speculative or contradictory
-     statements.
-  3. Prefer responses that explain methods and results with clear, concise scientific language.
-  4. Ensure the answer addresses the entire question. Partial coverage should be penalized.
-  5. Note whether the assistant explicitly acknowledges when the context lacks the requested
-     information.
+  Review protocol:
+  1. Scan the answer for inline bracketed citations (e.g., [1]). Ensure every marker corresponds to
+     a supplied context and that all required contexts are cited.
+  2. Check that each factual statement is directly supported by at least one cited context. Mark
+     contradictions, speculation, or missing evidence as factual errors.
+  3. Determine whether the response fully addresses the QUESTION. Point out scope gaps or missing
+     sub-answers.
+  4. Assess writing clarity: favor concise, technically precise language without hallucinated details.
+  5. If the context lacks required evidence, the assistant must acknowledge this; otherwise deduct
+     points for unsupported claims.
 
-  Produce a JSON object following the FORMAT specification. Do not include additional commentary.
+  Scoring instructions:
+  • Assign a 0–1 value for every score in the FORMAT schema. Use 0 for completely inadequate,
+    0.5 for partially adequate, 1 for fully adequate.
+  • Compute the weighted overall score = 0.40*factuality + 0.30*grounding + 0.20*completeness +
+    0.10*communication. Set verdict = "pass" when overall score ≥ 0.65 and all scores ≥ 0.4;
+    otherwise set verdict = "fail".
+  • Populate missing_citations with context numbers that should have been cited but were absent.
+    Populate hallucinated_citations with citation numbers that do not exist in the CONTEXTS. Use
+    empty arrays when none.
+
+  Output policy:
+  • Respond with valid JSON only—no markdown, no prose, no trailing commentary.
+  • Ensure every field described in FORMAT is present. Strings must be double-quoted.
+  • Do not invent new keys beyond those in FORMAT.
+
+  Example (illustrative values):
+  {
+   "scores": {
+    "factuality": 0.8,
+    "grounding": 0.6,
+    "completeness": 0.5,
+    "communication": 0.9
+   },
+   "verdict": "pass",
+   "reasoning": "[1] supports the method; [2] confirms the result; missing discussion of limitations.",
+   "missing_citations": [2],
+   "hallucinated_citations": []
+  }
 criteria:
   - id: factuality
     label: Factual Accuracy
