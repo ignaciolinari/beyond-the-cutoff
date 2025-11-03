@@ -55,6 +55,7 @@ dataset_generation:
   max_chars_per_chunk: 1600
   max_documents: 20
   citation_rewrite_attempts: 3
+  min_citation_coverage: 0.2
   seed: 42
 inference:
   provider: ollama

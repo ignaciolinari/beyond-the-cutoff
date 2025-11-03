@@ -48,7 +48,7 @@ class DummyGeneratorClient:
             "qa": [
                 {
                     "question": "What methodology does the paper use?",
-                    "answer": "The study applies a retrieval-augmented approach [1].",
+                    "answer": "The study applies retrieval augmented generation techniques to improve accuracy [1].",
                 }
             ],
             "summaries": [

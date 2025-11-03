@@ -1,6 +1,6 @@
 # Offline Dataset Configuration & QA Plan
 
-_Last updated: 2025-11-01_
+_Last updated: 2025-11-02_
 
 ## Goals
 - Produce reusable QA, summary, and citation-check examples tailored to post-cutoff scientific papers.
@@ -24,7 +24,7 @@ _Last updated: 2025-11-01_
 - Flag and review outputs when the generated answer contains fewer than 3 sentences for QA tasks.
 
 ## Validation Reports
-- Generate `evaluation/datasets/reports/offline_dataset_report_<date>.md` covering:
+- Generate `evaluation/datasets/reports/offline_dataset_report_<date>.md` covering (subset20 run 2025-11-02: 17/20 documents with >=1 task; docs 2510.26752/2510.26769/2510.26771 remain pending manual remediation):
   - Counts per task type.
   - Percentage of examples meeting citation coverage threshold (≥ 0.35 as computed via `RAGPipeline.verify_citations`).
   - Duplicate instruction detection (case-insensitive comparison across tasks).

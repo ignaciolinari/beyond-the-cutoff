@@ -204,6 +204,7 @@ class DatasetGenerationConfig(BaseModel):
     seed: int = Field(default=42)
     parse_retries: int = Field(default=2, ge=0)
     citation_rewrite_attempts: int = Field(default=1, ge=0)
+    min_citation_coverage: float = Field(default=0.2, ge=0.0, le=1.0)
 
     @field_validator("output_dataset_path", "raw_tasks_path", mode="before")
     @classmethod

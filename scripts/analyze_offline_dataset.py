@@ -14,7 +14,7 @@ import json
 import re
 import statistics
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +31,15 @@ def parse_args() -> argparse.Namespace:
         "--show-citation-details",
         action="store_true",
         help="Print detailed rows for citation tasks that failed verification",
+    )
+    parser.add_argument(
+        "--min-citation-coverage",
+        type=float,
+        default=0.0,
+        help=(
+            "Reference-level coverage threshold (0-1) to evaluate citation grounding; "
+            "set to match dataset_generation.min_citation_coverage"
+        ),
     )
     return parser.parse_args()
 
@@ -69,7 +78,11 @@ def format_distribution(counter: Counter[str]) -> str:
     return ", ".join(parts) if parts else "(empty)"
 
 
-def analyse_dataset(dataset_path: Path, show_citation_details: bool) -> None:
+def analyse_dataset(
+    dataset_path: Path,
+    show_citation_details: bool,
+    min_citation_coverage: float,
+) -> None:
     per_type_lengths: dict[str, dict[str, list[int]]] = {}
     tasks_per_doc: dict[str, Counter[str]] = {}
     duplicates: list[tuple[str, str, str]] = []
@@ -82,6 +95,9 @@ def analyse_dataset(dataset_path: Path, show_citation_details: bool) -> None:
         "coverage_scores": [],
         "missing_reference_cases": 0,
         "extra_reference_cases": 0,
+        "references_evaluated": 0,
+        "references_above_threshold": 0,
+        "records_below_threshold": 0,
         "failures": [],
     }
 
@@ -127,17 +143,52 @@ def analyse_dataset(dataset_path: Path, show_citation_details: bool) -> None:
                 referenced = verification.get("referenced", []) or []
                 missing = verification.get("missing", []) or []
                 extra = verification.get("extra", []) or []
-                coverage = verification.get("coverage", {}) or {}
+                coverage_raw = verification.get("coverage", {}) or {}
+                coverage: dict[int, float] = {}
+                if isinstance(coverage_raw, Mapping):
+                    coverage_mapping: Mapping[Any, Any] = coverage_raw
+                else:
+                    coverage_mapping = {}
+                for key_raw, value in coverage_mapping.items():
+                    try:
+                        idx = int(key_raw)
+                    except (TypeError, ValueError):
+                        continue
+                    try:
+                        coverage[idx] = float(value)
+                    except (TypeError, ValueError):
+                        coverage[idx] = 0.0
 
                 has_valid = bool(referenced)
                 has_extra = bool(extra)
+                # Success condition mirrors generator enforcement (no extras and at least one citation)
                 if has_valid and not has_extra:
                     citation_stats["verification_success"] += 1
                 if missing:
                     citation_stats["missing_reference_cases"] += 1
                 if has_extra:
                     citation_stats["extra_reference_cases"] += 1
-                if missing or has_extra:
+                reasons: list[str] = []
+                if missing:
+                    reasons.append("missing")
+                if has_extra:
+                    reasons.append("extra")
+                citation_stats["coverage_scores"].extend(float(v) for v in coverage.values())
+                min_cov = max(0.0, min(1.0, min_citation_coverage))
+                below_threshold: list[int] = []
+                if referenced:
+                    citation_stats["references_evaluated"] += len(referenced)
+                    for ref_idx in referenced:
+                        cov_score = float(coverage.get(ref_idx, 0.0))
+                        if cov_score >= min_cov:
+                            citation_stats["references_above_threshold"] += 1
+                        else:
+                            below_threshold.append(ref_idx)
+                    if below_threshold:
+                        citation_stats["records_below_threshold"] += 1
+                        if "coverage" not in reasons:
+                            reasons.append("coverage")
+                if reasons:
                     citation_stats["failures"].append(
                         {
                             "instruction": instruction,
@@ -145,9 +196,10 @@ def analyse_dataset(dataset_path: Path, show_citation_details: bool) -> None:
                             "missing": missing,
                             "extra": extra,
                             "coverage": coverage,
+                            "reasons": reasons,
+                            "below_threshold": below_threshold,
                         }
                     )
-                citation_stats["coverage_scores"].extend(float(v) for v in coverage.values())
 
     print("=== Offline dataset summary ===")
     total_tasks = sum(sum(counter.values()) for counter in tasks_per_doc.values())
@@ -199,6 +251,18 @@ def analyse_dataset(dataset_path: Path, show_citation_details: bool) -> None:
             if citation_stats["coverage_scores"]:
                 mean_cov = statistics.mean(citation_stats["coverage_scores"])
                 print(f"  Mean snippet coverage (metadata.coverage): {mean_cov:.2f}")
+            min_cov = max(0.0, min(1.0, min_citation_coverage))
+            if min_cov > 0 and citation_stats["references_evaluated"]:
+                good_refs = citation_stats["references_above_threshold"]
+                total_refs = citation_stats["references_evaluated"]
+                ratio = good_refs / total_refs
+                print(
+                    f"  References meeting coverage ≥ {min_cov:.2f}: {good_refs}/{total_refs} ({ratio:.1%})"
+                )
+                if citation_stats["records_below_threshold"]:
+                    print(
+                        f"  Records below coverage threshold: {citation_stats['records_below_threshold']}"
+                    )
             if citation_stats["missing_reference_cases"]:
                 print(
                     f"  Records with missing references: {citation_stats['missing_reference_cases']}"
@@ -215,12 +279,13 @@ def analyse_dataset(dataset_path: Path, show_citation_details: bool) -> None:
                         for key, value in sorted(failure["coverage"].items())
                     )
                     print(
-                        "    - {doc} | {inst} | missing={missing} | extra={extra} | coverage=[{coverage}]".format(
+                        "    - {doc} | {inst} | missing={missing} | extra={extra} | coverage=[{coverage}] | reasons={reasons}".format(
                             doc=failure["doc"],
                             inst=failure["instruction"][:60],
                             missing=",".join(map(str, failure["missing"])) or "-",
                             extra=",".join(map(str, failure.get("extra", []))) or "-",
                             coverage=coverage_summary or "n/a",
+                            reasons=",".join(failure.get("reasons", [])) or "-",
                         )
                     )
 
@@ -248,7 +313,7 @@ def main() -> None:
     dataset_path = Path(args.dataset)
     if not dataset_path.exists():
         raise SystemExit(f"Dataset file not found: {dataset_path}")
-    analyse_dataset(dataset_path, args.show_citation_details)
+    analyse_dataset(dataset_path, args.show_citation_details, args.min_citation_coverage)
 
     if args.raw_tasks:
         raw_tasks_path = Path(args.raw_tasks)

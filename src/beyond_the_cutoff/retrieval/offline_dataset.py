@@ -18,6 +18,13 @@ from .query import RAGPipeline
 logger = logging.getLogger(__name__)
 
 
+GENERATOR_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
+    "qa": ("question", "answer"),
+    "summaries": ("instruction", "response"),
+    "citations": ("instruction", "answer"),
+}
+
+
 @dataclass
 class MappingRow:
     """Representation of a single chunk entry from the FAISS mapping TSV."""
@@ -111,6 +118,7 @@ class OfflineDatasetGenerator:
         raw_tasks_path: Path | None = None,
         resume: bool = False,
         parse_retries: int | None = None,
+        documents: Sequence[str] | None = None,
     ) -> dict[str, int]:
         """Generate offline dataset artifacts and return counters."""
 
@@ -120,6 +128,18 @@ class OfflineDatasetGenerator:
         dataset_path.parent.mkdir(parents=True, exist_ok=True)
         tasks_path.parent.mkdir(parents=True, exist_ok=True)
 
+        document_whitelist: set[str] | None = None
+        if documents:
+            document_whitelist = set()
+            for entry in documents:
+                text = str(entry)
+                if text:
+                    document_whitelist.add(text)
+                try:
+                    document_whitelist.add(str(Path(text).resolve()))
+                except Exception:
+                    continue
+        matched_documents: set[str] = set()
         processed_documents: set[str] = set()
         dataset_mode = "w"
         tasks_mode = "w"
@@ -136,6 +156,14 @@ class OfflineDatasetGenerator:
         grouped = self._load_mapping(self.mapping_path)
         max_docs = dataset_cfg.max_documents
         counters = {"documents": 0, "qa": 0, "summaries": 0, "citations": 0, "examples": 0}
+        if document_whitelist is not None:
+            counters.update(
+                {
+                    "documents_requested": len(document_whitelist),
+                    "documents_found": 0,
+                    "documents_missing": 0,
+                }
+            )
 
         with (
             tasks_path.open(tasks_mode, encoding="utf-8") as raw_file,
@@ -145,11 +173,17 @@ class OfflineDatasetGenerator:
                 if max_docs is not None and counters["documents"] >= max_docs:
                     break
 
+                if document_whitelist is not None and source_path not in document_whitelist:
+                    continue
+
                 if resume and source_path in processed_documents:
                     logger.debug(
                         "Skipping %s; already present in raw tasks (resume mode)", source_path
                     )
                     continue
+
+                if document_whitelist is not None:
+                    matched_documents.add(source_path)
 
                 examples, raw_payload = self._generate_for_document(
                     doc_index=doc_index,
@@ -173,6 +207,16 @@ class OfflineDatasetGenerator:
                     counters[example.task_type] = counters.get(example.task_type, 0) + 1
 
                 counters["documents"] += 1
+
+        if document_whitelist is not None:
+            missing_documents = document_whitelist - matched_documents
+            if missing_documents:
+                logger.warning(
+                    "Requested documents not present in mapping: %s",
+                    sorted(missing_documents),
+                )
+            counters["documents_found"] = len(matched_documents)
+            counters["documents_missing"] = len(missing_documents)
 
         return counters
 
@@ -199,6 +243,8 @@ class OfflineDatasetGenerator:
         parsed: dict[str, Any] | None = None
         raw_text = ""
         attempt_logs: list[dict[str, Any]] = []
+        validation_notes: list[dict[str, Any]] = []
+        failure_reason = "unparsable_response"
 
         for attempt in range(1, attempts + 1):
             try:
@@ -220,6 +266,7 @@ class OfflineDatasetGenerator:
                 )
                 raw_text = ""
                 parsed = None
+                failure_reason = "request_failed"
                 continue
 
             raw_text = response.get("response", "")
@@ -234,8 +281,32 @@ class OfflineDatasetGenerator:
                 attempt_logs.append(
                     {"attempt": attempt, "response": raw_text, "error": "unparsable"}
                 )
+                failure_reason = "unparsable_response"
                 continue
 
+            parsed, validation_issues = self._validate_generator_payload(parsed)
+            fatal_issues = [issue for issue in validation_issues if issue["fatal"]]
+            if fatal_issues:
+                logger.warning(
+                    "Invalid generator payload for %s (attempt %d/%d): %s",
+                    source_path,
+                    attempt,
+                    attempts,
+                    fatal_issues,
+                )
+                attempt_logs.append(
+                    {
+                        "attempt": attempt,
+                        "response": raw_text,
+                        "error": "invalid_payload",
+                        "details": fatal_issues,
+                    }
+                )
+                parsed = None
+                failure_reason = "invalid_generator_payload"
+                continue
+
+            validation_notes = validation_issues
             if not self._has_tasks(parsed):
                 logger.warning(
                     "Generator returned empty payload for %s (attempt %d/%d)",
@@ -247,6 +318,7 @@ class OfflineDatasetGenerator:
                     {"attempt": attempt, "response": raw_text, "error": "empty_payload"}
                 )
                 parsed = None
+                failure_reason = "empty_payload"
                 continue
 
             if attempt > 1:
@@ -266,7 +338,7 @@ class OfflineDatasetGenerator:
                     selected_rows, dataset_cfg.max_chars_per_chunk
                 ),
                 "response": raw_text,
-                "error": "unparsable_response",
+                "error": failure_reason,
                 "attempts": attempt_logs,
             }
 
@@ -343,6 +415,10 @@ class OfflineDatasetGenerator:
             if example:
                 examples.append(example)
 
+        examples, output_issues = self._validate_output_examples(examples)
+        if output_issues:
+            validation_notes.extend(output_issues)
+
         raw_payload = {
             "document": source_path,
             "model": getattr(self.generator, "model", "unknown"),
@@ -354,6 +430,12 @@ class OfflineDatasetGenerator:
                 selected_rows, dataset_cfg.max_chars_per_chunk
             ),
         }
+        if validation_notes:
+            raw_payload["validation_warnings"] = validation_notes
+
+        if not examples:
+            raw_payload["error"] = "output_validation_failed"
+            return [], raw_payload
 
         return examples, raw_payload
 
@@ -477,6 +559,109 @@ class OfflineDatasetGenerator:
             metadata=metadata,
         )
 
+    @staticmethod
+    def _truncate(text: str, limit: int = 120) -> str:
+        snippet = text.strip()
+        if len(snippet) <= limit:
+            return snippet
+        return snippet[: max(0, limit - 3)].rstrip() + "..."
+
+    def _validate_output_examples(
+        self, examples: Sequence[OfflineExample]
+    ) -> tuple[list[OfflineExample], list[dict[str, Any]]]:
+        filtered: list[OfflineExample] = []
+        issues: list[dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
+
+        for example in examples:
+            instruction_text = example.instruction.strip()
+            response_text = example.expected_response.strip()
+            if not instruction_text or not response_text:
+                issues.append(
+                    {
+                        "field": example.task_type,
+                        "kind": "empty_text",
+                        "fatal": True,
+                        "instruction": self._truncate(example.instruction),
+                    }
+                )
+                continue
+
+            key = (example.task_type, instruction_text.lower())
+            if key in seen:
+                issues.append(
+                    {
+                        "field": example.task_type,
+                        "kind": "duplicate_instruction",
+                        "fatal": False,
+                        "instruction": self._truncate(example.instruction),
+                    }
+                )
+                continue
+
+            if example.metadata.get("require_citations"):
+                citation_issue = self._check_citation_coverage(example)
+                if citation_issue is not None:
+                    issues.append(citation_issue)
+                    if citation_issue.get("fatal", True):
+                        continue
+
+            filtered.append(example)
+            seen.add(key)
+
+        return filtered, issues
+
+    def _check_citation_coverage(self, example: OfflineExample) -> dict[str, Any] | None:
+        enforcement_meta = example.metadata.get("citation_enforcement")
+        verification: Mapping[str, Any] | None = None
+        if isinstance(enforcement_meta, Mapping):
+            verification = enforcement_meta.get("verification")
+            if not isinstance(verification, Mapping):
+                verification = None
+
+        if verification is None:
+            verification = self.pipeline.verify_citations(
+                example.expected_response, list(example.contexts)
+            )
+            updated_meta = dict(enforcement_meta) if isinstance(enforcement_meta, Mapping) else {}
+            updated_meta.setdefault("status", updated_meta.get("status", "post_validation"))
+            updated_meta["verification"] = verification
+            example.metadata["citation_enforcement"] = updated_meta
+
+        referenced = verification.get("referenced") or []
+        extra = verification.get("extra") or []
+        coverage = verification.get("coverage") or {}
+        min_coverage = max(0.0, min(1.0, self.config.dataset_generation.min_citation_coverage))
+
+        if not referenced:
+            return {
+                "field": example.task_type,
+                "kind": "missing_citations",
+                "fatal": True,
+                "instruction": self._truncate(example.instruction),
+            }
+
+        insufficient = [idx for idx in referenced if coverage.get(idx, 0.0) < min_coverage]
+        if insufficient:
+            return {
+                "field": example.task_type,
+                "kind": "low_citation_coverage",
+                "fatal": True,
+                "instruction": self._truncate(example.instruction),
+                "details": {"referenced": referenced, "insufficient": insufficient},
+            }
+
+        if extra:
+            return {
+                "field": example.task_type,
+                "kind": "invalid_citation_reference",
+                "fatal": True,
+                "instruction": self._truncate(example.instruction),
+                "details": {"extra": extra},
+            }
+
+        return None
+
     def _select_rows(
         self,
         rows: Sequence[MappingRow],
@@ -592,9 +777,20 @@ class OfflineDatasetGenerator:
             enforcement["verification"] = {"referenced": []}
             return cleaned_answer, enforcement
 
+        min_coverage = max(0.0, min(1.0, self.config.dataset_generation.min_citation_coverage))
+
+        def _is_compliant(payload: Mapping[str, Any]) -> bool:
+            referenced = payload.get("referenced") or []
+            if not referenced or payload.get("extra"):
+                return False
+            if min_coverage <= 0.0:
+                return True
+            coverage = payload.get("coverage") or {}
+            return all(coverage.get(idx, 0.0) >= min_coverage for idx in referenced)
+
         verification = self.pipeline.verify_citations(cleaned_answer, list(contexts))
         enforcement["verification"] = verification
-        if verification.get("referenced") and not verification.get("extra"):
+        if _is_compliant(verification):
             return cleaned_answer, enforcement
 
         attempts = max(0, self.config.dataset_generation.citation_rewrite_attempts)
@@ -628,7 +824,7 @@ class OfflineDatasetGenerator:
             if not candidate:
                 continue
             verification = self.pipeline.verify_citations(candidate, list(contexts))
-            if verification.get("referenced") and not verification.get("extra"):
+            if _is_compliant(verification):
                 enforcement.update(
                     {
                         "status": "rewrite_success",
@@ -653,6 +849,7 @@ class OfflineDatasetGenerator:
             "You are revising an answer for a retrieval-augmented research assistant. "
             "Ensure the answer includes inline citations using square brackets with numbers, such as [1], "
             "that refer to the numbered contexts. Cite only relevant contexts, do not fabricate, and draw on multiple different snippets when they contain supporting evidence. "
+            "Reuse key terminology from the contexts so the overlap with cited evidence is explicit. "
             "Rewrite the answer if needed to include distinct citations and keep it concise.\n\n"
             f"Question: {question}\n\n"
             "Numbered contexts:\n"
@@ -689,6 +886,67 @@ class OfflineDatasetGenerator:
         data.setdefault("summaries", [])
         data.setdefault("citations", [])
         return data
+
+    def _validate_generator_payload(
+        self, payload: Mapping[str, Any]
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        cleaned = dict(payload)
+        issues: list[dict[str, Any]] = []
+
+        for key, required_fields in GENERATOR_REQUIRED_FIELDS.items():
+            items = payload.get(key, [])
+            if not isinstance(items, list):
+                issues.append(
+                    {
+                        "field": key,
+                        "kind": "not_list",
+                        "fatal": key != "qa",
+                    }
+                )
+                cleaned[key] = []
+                continue
+
+            valid_items: list[dict[str, Any]] = []
+            for idx, item in enumerate(items):
+                if not isinstance(item, Mapping):
+                    issues.append(
+                        {
+                            "field": f"{key}[{idx}]",
+                            "kind": "not_mapping",
+                            "fatal": key != "qa",
+                        }
+                    )
+                    continue
+
+                normalized = dict(item)
+                missing: list[str] = []
+                for required_field in required_fields:
+                    value = item.get(required_field)
+                    if value is None:
+                        missing.append(required_field)
+                        continue
+                    text_value = self._coerce_text(value).strip()
+                    if not text_value:
+                        missing.append(required_field)
+                        continue
+                    normalized[required_field] = text_value
+
+                if missing:
+                    issues.append(
+                        {
+                            "field": f"{key}[{idx}]",
+                            "kind": "missing_required",
+                            "missing": missing,
+                            "fatal": key != "qa",
+                        }
+                    )
+                    continue
+
+                valid_items.append(normalized)
+
+            cleaned[key] = valid_items
+
+        return cleaned, issues
 
     def _load_mapping(self, mapping_path: Path) -> dict[str, list[MappingRow]]:
         import csv

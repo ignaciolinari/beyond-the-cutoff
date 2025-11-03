@@ -263,15 +263,16 @@ class RAGPipeline:
         missing = [i for i in range(1, total + 1) if i not in valid_marks]
         extra = [i for i in unique_marks if i not in valid_marks]
 
-        answer_words = set(answer_text.lower().split())
+        answer_terms = [w for w in answer_text.lower().split() if len(w) > 3]
+        answer_vocab = set(answer_terms)
         coverage: dict[int, float] = {}
         for idx in valid_marks:
-            context_words = [w for w in contexts[idx - 1].lower().split() if len(w) > 3]
-            if not context_words:
+            context_vocab = {w for w in contexts[idx - 1].lower().split() if len(w) > 3}
+            if not context_vocab or not answer_vocab:
                 coverage[idx] = 0.0
                 continue
-            overlap = sum(1 for w in context_words if w in answer_words)
-            coverage[idx] = overlap / max(len(context_words), 1)
+            overlap = len(answer_vocab & context_vocab)
+            coverage[idx] = overlap / max(len(answer_vocab), 1)
         return {
             "referenced": valid_marks,
             "missing": missing,

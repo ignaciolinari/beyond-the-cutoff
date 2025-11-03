@@ -48,6 +48,16 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Number of additional retries when generator output cannot be parsed",
     )
+    parser.add_argument(
+        "--document",
+        dest="documents",
+        action="append",
+        default=None,
+        help=(
+            "Restrict generation to specific source document paths. Can be repeated. "
+            "Paths must match the mapping TSV entries."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -96,6 +106,7 @@ def main() -> None:
         raw_tasks_path=raw_tasks_path,
         resume=args.resume,
         parse_retries=args.parse_retries,
+        documents=[str(Path(doc).resolve()) for doc in args.documents] if args.documents else None,
     )
 
     summary = (
@@ -103,6 +114,11 @@ def main() -> None:
         f"QA: {counters.get('qa', 0)} | Summaries: {counters.get('summaries', 0)} | "
         f"Citation checks: {counters.get('citations', 0)}"
     )
+    if "documents_requested" in counters:
+        summary += (
+            f" | Requested {counters['documents_requested']}"
+            f" (found {counters['documents_found']}, missing {counters['documents_missing']})"
+        )
     print(summary)
 
 

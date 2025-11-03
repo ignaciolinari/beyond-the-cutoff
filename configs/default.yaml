@@ -53,6 +53,9 @@ dataset_generation:
   max_chars_per_chunk: 1600
   max_documents: null
   seed: 42
+  parse_retries: 2
+  citation_rewrite_attempts: 1
+  min_citation_coverage: 0.2
 inference:
   provider: ollama
   model: qwen2:0.5b-instruct-q4_0

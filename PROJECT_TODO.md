@@ -1,6 +1,6 @@
 # Beyond the Cutoff – Lightweight Project Tracker
 
-_Last updated: 2025-11-01_
+_Last updated: 2025-11-02_
 
 ## Status Legend
 - [ ] Backlog
@@ -22,8 +22,8 @@ _Last updated: 2025-11-01_
 - [x] Ingest downloaded PDFs and rebuild the FAISS index via `python scripts/ingest_and_index.py --config configs/default.yaml`
 - [x] Publish generated manifests for raw and processed corpora (document schema + storage location)
 - [x] Automate manifest regeneration/version bump whenever ingestion reruns
-- [ ] Generate offline QA/summary/citation tasks with `python scripts/generate_offline_dataset.py --config configs/default.yaml`
-- [ ] Add validation pass for offline dataset outputs (duplicate prompts, empty answers, citation coverage)
+- [~] Generate offline QA/summary/citation tasks with `python scripts/generate_offline_dataset.py --config configs/default.yaml` (subset20 reruns restored coverage for new papers; remaining failures limited to 2510.26752/2510.26769/2510.26771)
+- [x] Add validation pass for offline dataset outputs (drops duplicate prompts, empty responses, and citation failures)
 - [~] Write data quality checks and unit tests covering edge cases (chunk ordering regression added; expand coverage)
 - [ ] Fine-tune `Qwen/Qwen2-0.5B-Instruct` (LoRA) in Colab/Kaggle using the offline JSONL outputs; export adapters and full checkpoints
 - [ ] Quantize the tuned checkpoint to GGUF (`llama.cpp convert` + `quantize`) and register it with Ollama; update `configs/default.yaml` with the new model tag
