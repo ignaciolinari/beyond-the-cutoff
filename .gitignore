@@ -43,6 +43,7 @@ evaluation/results/*
 evaluation/datasets/*.jsonl
 evaluation/datasets/*.json
 evaluation/datasets/raw_tasks/*
+evaluation/datasets/problematic_docs.md
 configs/evaluation/datasets/*.jsonl
 configs/evaluation/datasets/*.json
 notebooks/.ipynb_checkpoints/

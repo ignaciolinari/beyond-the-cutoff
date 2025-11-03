@@ -23,9 +23,12 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
+import time
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from statistics import mean
 from typing import Any
@@ -90,6 +93,18 @@ def parse_args() -> argparse.Namespace:
         "--details-output",
         default=None,
         help="Optional JSONL file to write per-example evaluation records",
+    )
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=2,
+        help="Maximum number of retry attempts when model calls fail (default: 2)",
+    )
+    parser.add_argument(
+        "--retry-delay",
+        type=float,
+        default=15.0,
+        help="Base delay in seconds between retry attempts (default: 15.0)",
     )
     return parser.parse_args()
 
@@ -218,6 +233,35 @@ def summarise_scores(score_rows: list[dict[str, Any]]) -> dict[str, Any]:
     return summary
 
 
+def _call_with_retries(
+    func: Callable[[], Any],
+    *,
+    stage: str,
+    max_retries: int,
+    retry_delay: float,
+) -> tuple[Any | None, str | None]:
+    attempts = max_retries + 1
+    last_error: str | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return func(), None
+        except KeyboardInterrupt:  # pragma: no cover - allow user aborts
+            raise
+        except Exception as exc:  # noqa: BLE001
+            last_error = f"{type(exc).__name__}: {exc}"
+            if attempt == attempts:
+                break
+            wait_seconds = max(retry_delay, 0.0) * attempt
+            print(
+                f"[warn] {stage} failed on attempt {attempt}/{attempts}: {last_error}. "
+                f"Retrying in {wait_seconds:.1f}s...",
+                file=sys.stderr,
+            )
+            if wait_seconds > 0:
+                time.sleep(wait_seconds)
+    return None, last_error
+
+
 def main() -> None:
     args = parse_args()
 
@@ -248,7 +292,7 @@ def main() -> None:
 
     score_rows: list[dict[str, Any]] = []
 
-    for example in iter_dataset(dataset_path, limit=args.limit):
+    for idx, example in enumerate(iter_dataset(dataset_path, limit=args.limit), start=1):
         task_id = example.get("task_id")
         instruction = example.get("instruction", "")
         rag = example.get("rag", {})
@@ -257,8 +301,21 @@ def main() -> None:
         if not prompt:
             raise KeyError(f"Example {task_id} missing prompt field")
 
-        model_response = model_client.generate(prompt)
-        assistant_answer = str(model_response.get("response", "")).strip()
+        prompt_text = str(prompt)
+
+        record_errors: dict[str, str] = {}
+
+        model_response, generation_error = _call_with_retries(
+            partial(model_client.generate, prompt_text),
+            stage=f"generation (task {task_id or idx})",
+            max_retries=max(args.max_retries, 0),
+            retry_delay=args.retry_delay,
+        )
+        assistant_answer = ""
+        if model_response is not None:
+            assistant_answer = str(model_response.get("response", "")).strip()
+        if generation_error:
+            record_errors["generation"] = generation_error
 
         contexts_numbered = _normalize_contexts(contexts_raw)
         citation_metrics = evaluate_citations(assistant_answer, contexts_numbered)
@@ -268,8 +325,25 @@ def main() -> None:
             contexts_numbered,
             assistant_answer,
         )
-        judge_response = judge_client.generate(judge_prompt_text)
-        judge_payload = parse_judge_output(str(judge_response.get("response", "")))
+        judge_response = None
+        judge_payload: dict[str, Any] = {}
+
+        if generation_error:
+            record_errors.setdefault(
+                "judge",
+                "Skipped due to generation failure",
+            )
+        else:
+            judge_response, judge_error = _call_with_retries(
+                partial(judge_client.generate, judge_prompt_text),
+                stage=f"judging (task {task_id or idx})",
+                max_retries=max(args.max_retries, 0),
+                retry_delay=args.retry_delay,
+            )
+            if judge_error:
+                record_errors["judge"] = judge_error
+            if judge_response is not None:
+                judge_payload = parse_judge_output(str(judge_response.get("response", "")))
 
         judge_scores = judge_payload.get("scores") if isinstance(judge_payload, dict) else {}
 
@@ -285,6 +359,9 @@ def main() -> None:
             }
         )
 
+        if record_errors:
+            score_rows[-1]["errors"] = record_errors
+
     summary = summarise_scores(score_rows)
     summary.update(
         {
@@ -293,6 +370,7 @@ def main() -> None:
             "examples_evaluated": len(score_rows),
             "judge_name": judge_prompt.name,
             "judge_model": judge_inference_cfg.model,
+            "examples_with_errors": sum(1 for row in score_rows if row.get("errors")),
         }
     )
 
