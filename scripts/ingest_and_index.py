@@ -15,6 +15,7 @@ from beyond_the_cutoff.data.catalog import build_metadata_catalog
 from beyond_the_cutoff.data.manifest import build_processed_manifest
 from beyond_the_cutoff.data.pdf_loader import PDFIngestor
 from beyond_the_cutoff.retrieval.index import DocumentIndexer
+from beyond_the_cutoff.utils.data_quality import validate_index_artifacts
 
 
 def parse_args() -> argparse.Namespace:
@@ -74,6 +75,22 @@ def main() -> None:
         chunking_strategy=cfg.retrieval.chunking_strategy,
     )
     print(f"Index written to {index_path}\nMapping written to {mapping_path}")
+
+    report = validate_index_artifacts(index_path, mapping_path)
+    if report.issues or report.duplicate_chunks or report.span_issues:
+        print("\nIndex validation detected potential issues:")
+        for issue in report.issues:
+            print(f"  - [{issue.kind}] {issue.detail}")
+        for dup in report.duplicate_chunks[:5]:
+            indices = ",".join(str(idx) for idx in dup.chunk_indices)
+            print(f"  - duplicate chunks in {dup.source_path} at indices [{indices}]")
+        for span in report.span_issues[:5]:
+            print(
+                f"  - span issue {span.kind} in {span.source_path} chunk {span.chunk_index} "
+                f"(start={span.token_start}, end={span.token_end})"
+            )
+        raise SystemExit("Index validation failed. Inspect the data-quality warnings above.")
+    print("Index validation passed.")
 
 
 if __name__ == "__main__":

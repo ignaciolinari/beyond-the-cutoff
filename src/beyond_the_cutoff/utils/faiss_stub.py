@@ -32,6 +32,10 @@ class IndexFlatIP:
     def __post_init__(self) -> None:
         self._vectors = np.empty((0, self.dimension), dtype=np.float32)
 
+    @property
+    def ntotal(self) -> int:
+        return int(self._vectors.shape[0])
+
     def add(self, vectors: npt.NDArray[np.float32]) -> None:
         if vectors.shape[1] != self.dimension:
             raise ValueError(
