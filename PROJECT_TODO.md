@@ -33,7 +33,7 @@ _Last updated: 2025-11-04_
 - [ ] Set baseline model shortlist and document hardware requirements
 - [x] Implement RAG pipeline (index build + query API)
 - [x] Add cross-encoder re-ranker after dense retrieval (e.g., bge-reranker-small)
-- [~] Implement section-aware chunking using headings/page boundaries
+- [x] Implement section-aware chunking using headings/page boundaries
 - [x] Include page/section metadata in retrieval mapping and surface inline citations in answers
 - [ ] Implement fine-tuning harness (LoRA/PEFT) with configuration options
 - [x] Create Colab/Kaggle notebook that trains from `offline_dataset.jsonl`, logs hyperparameters, and exports adapter weights to `outputs/adapters/`

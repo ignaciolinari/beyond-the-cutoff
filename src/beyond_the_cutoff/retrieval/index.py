@@ -77,55 +77,61 @@ class DocumentIndexer:
             # Prefer page-aware sidecar if present
             pages_sidecar = path.with_suffix(".pages.jsonl")
             if pages_sidecar.exists():
-                page_idx = 0
                 with pages_sidecar.open("r", encoding="utf-8") as f:
+                    page_records: list[dict[str, Any]] = []
                     for line in f:
                         try:
-                            rec = json.loads(line)
+                            record = json.loads(line)
                         except Exception:
                             continue
-                        page_idx = int(rec.get("page", page_idx + 1))
-                        page_text = str(rec.get("text", ""))
-                        if not page_text.strip():
-                            token_cursor_global += len(page_text.split())
+                        if not isinstance(record, dict):
                             continue
-                        section_title = rec.get("section_title")
-                        if strategy == "sentences":
-                            chunks = chunk_text_sentences(
-                                page_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap
-                            )
-                        else:
-                            chunks = chunk_text(
-                                page_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap
-                            )
+                        page_records.append(record)
 
-                        token_cursor_local = 0
-                        overlap_for_next = 0
-                        for ch in chunks:
-                            tokens = ch.split()
-                            token_len = len(tokens)
-                            token_start = token_cursor_global + token_cursor_local
-                            token_end = token_start + token_len
-                            texts.append(ch)
-                            meta_rows.append(
-                                {
-                                    "source_path": str(path),
-                                    "page": page_idx,
-                                    "chunk_index": chunk_counter,
-                                    "token_start": token_start,
-                                    "token_end": token_end,
-                                    "section_title": section_title,
-                                }
-                            )
-                            chunk_counter += 1
+                for group in self._group_pages_by_section(page_records):
+                    section_title = group["section_title"]
+                    section_text = group["text"]
+                    start_page = group["start_page"]
+                    if not section_text.strip():
+                        token_cursor_global += len(section_text.split())
+                        continue
 
-                            advance = token_len - overlap_for_next
-                            if advance < 0:
-                                advance = 0
-                            token_cursor_local += advance
-                            overlap_for_next = min(chunk_overlap, token_len)
+                    if strategy == "sentences":
+                        chunks = chunk_text_sentences(
+                            section_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap
+                        )
+                    else:
+                        chunks = chunk_text(
+                            section_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap
+                        )
 
-                        token_cursor_global += len(page_text.split())
+                    token_cursor_local = 0
+                    overlap_for_next = 0
+                    for ch in chunks:
+                        tokens = ch.split()
+                        token_len = len(tokens)
+                        token_start = token_cursor_global + token_cursor_local
+                        token_end = token_start + token_len
+                        texts.append(ch)
+                        meta_rows.append(
+                            {
+                                "source_path": str(path),
+                                "page": start_page,
+                                "chunk_index": chunk_counter,
+                                "token_start": token_start,
+                                "token_end": token_end,
+                                "section_title": section_title,
+                            }
+                        )
+                        chunk_counter += 1
+
+                        advance = token_len - overlap_for_next
+                        if advance < 0:
+                            advance = 0
+                        token_cursor_local += advance
+                        overlap_for_next = min(chunk_overlap, token_len)
+
+                    token_cursor_global += len(section_text.split())
                 continue
 
             # Fallback: whole-document text
@@ -224,3 +230,79 @@ class DocumentIndexer:
         meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
         return index_path, mapping_path
+
+    @staticmethod
+    def _group_pages_by_section(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Group page JSONL records into section-aware blocks."""
+
+        groups: list[dict[str, Any]] = []
+
+        def _start_section(title: str | None, page: int) -> dict[str, Any]:
+            return {
+                "section_title": title.strip()
+                if isinstance(title, str) and title.strip()
+                else None,
+                "start_page": page,
+                "end_page": page,
+                "texts": [],
+            }
+
+        def _flush(current: dict[str, Any] | None) -> None:
+            if not current:
+                return
+            combined = "\n\n".join(current.get("texts", [])).strip()
+            if combined:
+                groups.append(
+                    {
+                        "section_title": current.get("section_title"),
+                        "start_page": current.get("start_page"),
+                        "end_page": current.get("end_page"),
+                        "text": combined,
+                    }
+                )
+
+        current_section: dict[str, Any] | None = None
+        last_page_num = 0
+
+        for record in records:
+            raw_page = record.get("page")
+            if isinstance(raw_page, int):
+                page_num = raw_page
+            elif isinstance(raw_page, str) and raw_page.strip():
+                try:
+                    page_num = int(raw_page.strip())
+                except ValueError:
+                    page_num = last_page_num + 1 if last_page_num else 1
+            else:
+                page_num = last_page_num + 1 if last_page_num else 1
+            last_page_num = page_num
+
+            raw_title = record.get("section_title")
+            title = raw_title.strip() if isinstance(raw_title, str) else None
+            page_text = str(record.get("text", "") or "")
+
+            if current_section is None:
+                current_section = _start_section(title, page_num)
+            else:
+                current_title = current_section.get("section_title")
+                if title and title != current_title:
+                    _flush(current_section)
+                    current_section = _start_section(title, page_num)
+                elif current_title is None and title:
+                    _flush(current_section)
+                    current_section = _start_section(title, page_num)
+                else:
+                    current_section["end_page"] = page_num
+
+            if current_section is None:
+                current_section = _start_section(title, page_num)
+
+            if title and not current_section.get("section_title"):
+                current_section["section_title"] = title
+
+            if page_text:
+                current_section.setdefault("texts", []).append(page_text)
+            current_section["end_page"] = page_num
+
+        _flush(current_section)
+        return groups

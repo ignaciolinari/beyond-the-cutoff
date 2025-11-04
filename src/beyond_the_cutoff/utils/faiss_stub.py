@@ -42,7 +42,9 @@ class IndexFlatIP:
         else:
             self._vectors = np.vstack([self._vectors, vectors])
 
-    def search(self, queries: npt.NDArray[np.float32], k: int) -> tuple[np.ndarray, np.ndarray]:
+    def search(
+        self, queries: npt.NDArray[np.float32], k: int
+    ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.int64]]:
         if queries.shape[1] != self.dimension:
             raise ValueError(
                 f"Expected queries with dimension {self.dimension}, got {queries.shape[1]}"
@@ -56,7 +58,7 @@ class IndexFlatIP:
         topk_idx = np.argsort(scores, axis=1)[:, ::-1]
         topk_idx = topk_idx[:, :k]
         topk_scores = np.take_along_axis(scores, topk_idx, axis=1)
-        return topk_scores, topk_idx.astype(np.int64)
+        return topk_scores.astype(np.float32, copy=False), topk_idx.astype(np.int64)
 
 
 def write_index(index: IndexFlatIP, path: str | Path) -> None:
