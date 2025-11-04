@@ -1,0 +1,13 @@
+provider: ollama
+# Quantized 7B judge model published via Ollama.
+model: qwen2.5:7b-instruct-q4_K_M
+host: http://localhost
+port: 11434
+timeout: 600.0
+device: auto
+torch_dtype: auto
+max_new_tokens: 512
+temperature: 0.0
+top_p: 0.9
+repetition_penalty: 1.05
+stop_sequences: []

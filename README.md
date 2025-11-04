@@ -65,8 +65,9 @@ The CLI respects arXiv rate limits, writes metadata to JSONL/CSV, persists a man
 - macOS (Apple Silicon recommended)
 - Python ≥ 3.10
 - [Apple MLX](https://github.com/ml-explore/mlx) for accelerated inference
-- Sufficient free memory for 3B–4B parameter models (prefer 4-bit quantization); avoid swap usage on 8 GB devices
-- [Ollama](https://ollama.com/) for downloading/serving the default quantized Qwen models
+- Sufficient free memory for 4B-8B parameter models (prefer 4-bit quantization); avoid swap usage on 8 GB devices
+- [Ollama](https://ollama.com/) for downloading/serving the default quantized models
+- [huggingface_hub](https://github.com/huggingface/huggingface_hub) aligned with the installed `transformers` version.
 
 ### Quickstart
 
@@ -75,12 +76,15 @@ python scripts/bootstrap_env.py
 source .venv/bin/activate
 # Optional: seed a local Hugging Face cache for Colab/Kaggle syncs
 python scripts/prefetch_models.py --cache-dir .cache/huggingface Qwen/Qwen2-0.5B-Instruct
-# Pull the Ollama baselines (0.5B assistant, 1.5B generator, 3B judge)
+# Pull the Ollama baselines (0.5B assistant, 1.5B generator, 3B judge) for pipeline testing
 ollama pull qwen2:0.5b-instruct-q4_0
 ollama pull qwen2:1.5b-instruct-q4_0
 ollama pull qwen2.5:3b-instruct-q4_K_M
 # Build/refresh the LoRA assistant alias used by the default config
 ollama create qwen2-lora-science -f ollama/Modelfile
+# Additional models once the pipeline hardens
+ollama pull qwen2.5:7b-instruct-q4_K_M
+ollama pull phi4-mini:latest
 ```
 
 The bootstrap script installs both runtime and development dependencies in editable mode and wires up the `pre-commit` hook so formatting and linting run automatically. Re-run the script at any time to pick up dependency updates (pass `--no-dev` or `--no-pre-commit` if you want to opt out).

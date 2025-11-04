@@ -24,7 +24,7 @@ _Last updated: 2025-11-04_
 - [x] Automate manifest regeneration/version bump whenever ingestion reruns
 - [x] Generate offline QA/summary/citation tasks with `python scripts/generate_offline_dataset.py --config configs/default.yaml`
 - [x] Add validation pass for offline dataset outputs (drops duplicate prompts, empty responses, and citation failures)
-- [~] Write data quality checks and unit tests covering edge cases (chunk ordering regression added; expand coverage)
+- [x] Write data quality checks and unit tests covering edge cases (chunk ordering regression added; expanded coverage)
 - [x] Fine-tune `Qwen/Qwen2-0.5B-Instruct` (LoRA) in Colab/Kaggle using the offline JSONL outputs; export adapters and full checkpoints (artifacts in `outputs/lora_science_v1/`)
 - [x] Quantize the tuned checkpoint to GGUF (`llama.cpp convert` + `quantize`) and register it with Ollama; update `configs/default.yaml` with the new model tag (GGUF + Ollama tag live)
 - [x] Evaluate with the 3B judge using the refreshed datasets (or swap to a cloud judge/generator as needed) (metrics logged)
@@ -37,7 +37,7 @@ _Last updated: 2025-11-04_
 - [x] Implement fine-tuning harness (LoRA/PEFT) with configuration options
 - [x] Create Colab/Kaggle notebook that trains from `offline_dataset.jsonl`, logs hyperparameters, and exports adapter weights to `outputs/adapters/`
 - [x] Create scripts to sync fine-tuned checkpoints between local and cloud environments
-- [~] Track experiment metadata (model version, dataset version, hyperparameters)
+- [x] Track experiment metadata (model version, dataset version, hyperparameters)
 - [ ] Expand FT+RAG evaluations to larger assistant checkpoints (≥1.5B) once local resources allow
 
 ## Evaluation Suite

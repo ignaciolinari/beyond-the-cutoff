@@ -12,6 +12,7 @@ from beyond_the_cutoff.retrieval.index import DocumentIndexer
 from beyond_the_cutoff.utils.data_quality import (
     ChunkRecord,
     detect_duplicate_chunks,
+    load_mapping_rows,
     validate_citation_spans,
     validate_index_artifacts,
 )
@@ -206,3 +207,96 @@ def test_validate_index_artifacts_detects_mapping_mismatch(
 
     assert any(issue.kind == "mapping_size_mismatch" for issue in report.issues)
     assert report.mapping_count + 1 == report.vector_count
+
+
+def test_load_mapping_rows_handles_missing_and_fallback_fields(tmp_path: Path) -> None:
+    mapping_path = tmp_path / "mapping.tsv"
+    mapping_path.write_text(
+        "\n".join(
+            [
+                "source_path\tchunk_index\ttoken_start\ttoken_end\ttext\tid",
+                "docA\t\t0\t10\tFirst chunk with id fallback\t7",
+                "\t1\t10\t20\tRow missing source should be skipped\t8",
+                "docB\t3\t\t\t",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    records = load_mapping_rows(mapping_path)
+
+    assert len(records) == 2
+    first = records[0]
+    assert first.source_path == "docA"
+    assert first.chunk_index == 7  # falls back to id column
+    assert first.token_start == 0
+    assert first.token_end == 10
+    second = records[1]
+    assert second.source_path == "docB"
+    assert second.chunk_index == 3
+    assert second.token_start is None
+    assert second.token_end is None
+
+
+def test_validate_citation_spans_respects_allow_missing_flag() -> None:
+    records = [
+        ChunkRecord(
+            source_path="doc",
+            chunk_index=0,
+            token_start=None,
+            token_end=None,
+            text="Missing spans but allowed",
+        ),
+        ChunkRecord(
+            source_path="doc",
+            chunk_index=1,
+            token_start=5,
+            token_end=4,
+            text="Reversed span should still trigger",
+        ),
+    ]
+
+    issues = validate_citation_spans(records, allow_missing=True)
+
+    kinds = {issue.kind for issue in issues}
+    assert "missing_span" not in kinds
+    assert "non_positive_length" in kinds
+
+
+def test_validate_index_artifacts_reports_dimension_mismatch(
+    tmp_path: Path, patch_sentence_transformer: None
+) -> None:
+    processed_dir = tmp_path / "processed"
+    processed_dir.mkdir()
+    (processed_dir / "paper.txt").write_text(" ".join(f"t{i}" for i in range(80)), encoding="utf-8")
+
+    index_dir = tmp_path / "index"
+    indexer = DocumentIndexer(embedding_model="dummy")
+    index_path, mapping_path = indexer.build_index(
+        input_dir=processed_dir,
+        output_dir=index_dir,
+        chunk_size=16,
+        chunk_overlap=4,
+        chunking_strategy="words",
+    )
+
+    meta_path = index_path.parent / "index_meta.json"
+    meta_path.write_text('{"embedding_dimension": 99}', encoding="utf-8")
+
+    report = validate_index_artifacts(index_path, mapping_path)
+
+    assert any(issue.kind == "dimension_mismatch" for issue in report.issues)
+
+
+def test_validate_index_artifacts_handles_missing_index(tmp_path: Path) -> None:
+    index_path = tmp_path / "missing.index"
+    mapping_path = tmp_path / "mapping.tsv"
+    mapping_path.write_text(
+        "source_path\tchunk_index\ttoken_start\ttoken_end\ttext\n" "doc\t0\t0\t10\tSample text",
+        encoding="utf-8",
+    )
+
+    report = validate_index_artifacts(index_path, mapping_path)
+
+    assert any(issue.kind == "index_open_failed" for issue in report.issues)
+    assert report.mapping_count == 1

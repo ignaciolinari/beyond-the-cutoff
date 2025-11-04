@@ -20,7 +20,18 @@ app = typer.Typer(add_completion=False, pretty_exceptions_enable=False)
 # Simpler type annotation to avoid ParamSpec/TypeVar issues with some type checkers
 command = cast(Callable[[Callable[..., object]], Callable[..., object]], app.command())
 
-DEFAULT_CATEGORIES = ["cs.AI", "cs.CL", "cs.LG", "stat.ML"]
+# Default toward biology/cognition-focused slices that stay largely prose-heavy.
+DEFAULT_CATEGORIES = [
+    "cs.HC",  # Human-Computer Interaction
+    "cs.AI",  # AI papers with cognitive/behavioral angles
+    "cs.CY",  # Computers and Society (often cognitive/psych studies)
+    "cs.CL",  # Computational linguistics (language cognition)
+    "stat.AP",  # Applied statistics
+    "stat.ML",  # Statistical machine learning with psych overlaps
+    "stat.OT",  # Other statistics (includes psychometrics)
+    "econ.GN",  # General economics (behavioral/cognitive econ)
+    "econ.TH",  # Economic theory (cognitive decision models)
+]
 DEFAULT_START = datetime(2025, 7, 1, tzinfo=timezone.utc)
 DEFAULT_OUTPUT_DIR = Path("data/raw/arxiv_2025")
 

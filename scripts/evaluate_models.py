@@ -13,7 +13,7 @@ Usage example::
         --dataset evaluation/datasets/offline_dataset.jsonl \
         --model-label rag_baseline_v1 \
         --judge-config configs/judges/scientific_default.yaml \
-        --judge-inference configs/judges/ollama_qwen3b.yaml \
+        --judge-inference configs/judges/ollama_qwen7b.yaml \
         --output evaluation/results/rag_baseline_v1/metrics.json
 
 """
@@ -41,6 +41,7 @@ from beyond_the_cutoff.config import (
     load_config,
 )
 from beyond_the_cutoff.models import LLMClient, build_generation_client
+from beyond_the_cutoff.utils.experiment_logging import append_experiment_record
 
 
 @dataclass
@@ -93,6 +94,11 @@ def parse_args() -> argparse.Namespace:
         "--details-output",
         default=None,
         help="Optional JSONL file to write per-example evaluation records",
+    )
+    parser.add_argument(
+        "--metadata-output",
+        default=None,
+        help="Optional JSONL file capturing experiment metadata (defaults to evaluation/results/<label>/metadata.jsonl)",
     )
     parser.add_argument(
         "--max-retries",
@@ -265,7 +271,8 @@ def _call_with_retries(
 def main() -> None:
     args = parse_args()
 
-    project_cfg: ProjectConfig = load_config(args.config)
+    config_path = Path(args.config).resolve()
+    project_cfg: ProjectConfig = load_config(config_path)
     dataset_path = (
         Path(args.dataset) if args.dataset else project_cfg.evaluation.offline_dataset_path
     )
@@ -280,8 +287,11 @@ def main() -> None:
     )
     judge_prompt = load_judge_prompt(Path(args.judge_config).resolve())
 
-    if args.judge_inference:
-        judge_inference_cfg = load_inference_from_yaml(Path(args.judge_inference).resolve())
+    judge_prompt_path = Path(args.judge_config).resolve()
+
+    judge_inference_path = Path(args.judge_inference).resolve() if args.judge_inference else None
+    if judge_inference_path:
+        judge_inference_cfg = load_inference_from_yaml(judge_inference_path)
     else:
         judge_inference_cfg = model_cfg
 
@@ -376,19 +386,50 @@ def main() -> None:
 
     print(json.dumps(summary, indent=2))
 
+    metrics_path: Path | None = None
     if args.output:
         output_path = Path(args.output).resolve()
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(
             json.dumps({"summary": summary, "examples": score_rows}, indent=2), encoding="utf-8"
         )
+        metrics_path = output_path
 
+    details_path: Path | None = None
     if args.details_output:
         details_path = Path(args.details_output).resolve()
         details_path.parent.mkdir(parents=True, exist_ok=True)
         with details_path.open("w", encoding="utf-8") as handle:
             for row in score_rows:
                 handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+    else:
+        details_path = None
+
+    model_config_path = Path(args.model_config).resolve() if args.model_config else None
+
+    if args.metadata_output:
+        metadata_path = Path(args.metadata_output).resolve()
+    elif metrics_path is not None:
+        metadata_path = metrics_path.with_name("metadata.jsonl")
+    else:
+        metadata_path = Path("evaluation/results") / model_label / "metadata.jsonl"
+
+    append_experiment_record(
+        metadata_path,
+        project_config=project_cfg,
+        dataset_path=dataset_path,
+        model_config=model_cfg,
+        judge_config=judge_inference_cfg,
+        metrics=summary,
+        score_rows=score_rows,
+        model_label=model_label,
+        config_path=config_path,
+        model_config_path=model_config_path,
+        judge_prompt_path=judge_prompt_path,
+        judge_inference_path=judge_inference_path,
+        details_path=details_path,
+        metrics_path=metrics_path,
+    )
 
 
 if __name__ == "__main__":
