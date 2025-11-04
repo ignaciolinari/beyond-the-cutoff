@@ -6,10 +6,15 @@ from typing import TYPE_CHECKING
 
 from .base import LLMClient
 from .ollama import OllamaClient
-from .transformers_local import TransformersClient
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..config import InferenceConfig
+    from .transformers_local import TransformersClient as _TransformersClient
+else:  # pragma: no cover - runtime attribute resolved lazily
+    from typing import Any
+
+    _TransformersClient: type[LLMClient] | None = None
+    InferenceConfig = Any
 
 __all__ = [
     "LLMClient",
@@ -31,7 +36,9 @@ def build_generation_client(config: InferenceConfig) -> LLMClient:
             timeout=config.timeout,
         )
     if provider in {"transformers", "hf", "huggingface"}:
-        return TransformersClient(
+        from .transformers_local import TransformersClient as _TransformersClient  # local import
+
+        return _TransformersClient(
             model=config.model,
             device=config.device,
             torch_dtype=config.torch_dtype,
@@ -42,3 +49,7 @@ def build_generation_client(config: InferenceConfig) -> LLMClient:
             stop_sequences=config.stop_sequences,
         )
     raise ValueError(f"Unsupported inference provider: {config.provider!r}")
+
+
+# Re-export for consumers that expect the class at package scope (resolved lazily above).
+TransformersClient: type[LLMClient] | None = _TransformersClient

@@ -30,14 +30,13 @@ _Last updated: 2025-11-04_
 - [x] Evaluate with the 3B judge using the refreshed datasets (or swap to a cloud judge/generator as needed) (metrics logged)
 
 ## Model Adaptation
-- [ ] Set baseline model shortlist and document hardware requirements
 - [x] Implement RAG pipeline (index build + query API)
 - [x] Add cross-encoder re-ranker after dense retrieval (e.g., bge-reranker-small)
 - [x] Implement section-aware chunking using headings/page boundaries
 - [x] Include page/section metadata in retrieval mapping and surface inline citations in answers
-- [ ] Implement fine-tuning harness (LoRA/PEFT) with configuration options
+- [x] Implement fine-tuning harness (LoRA/PEFT) with configuration options
 - [x] Create Colab/Kaggle notebook that trains from `offline_dataset.jsonl`, logs hyperparameters, and exports adapter weights to `outputs/adapters/`
-- [ ] Create scripts to sync fine-tuned checkpoints between local and cloud environments
+- [x] Create scripts to sync fine-tuned checkpoints between local and cloud environments
 - [~] Track experiment metadata (model version, dataset version, hyperparameters)
 - [ ] Expand FT+RAG evaluations to larger assistant checkpoints (≥1.5B) once local resources allow
 
