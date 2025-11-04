@@ -47,6 +47,8 @@ evaluation/datasets/problematic_docs.md
 configs/evaluation/datasets/*.jsonl
 configs/evaluation/datasets/*.json
 notebooks/.ipynb_checkpoints/
+outputs/
+ollama/
 
 # Logs and cache
 logs/

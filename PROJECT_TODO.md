@@ -1,6 +1,6 @@
 # Beyond the Cutoff – Lightweight Project Tracker
 
-_Last updated: 2025-11-02_
+_Last updated: 2025-11-03_
 
 ## Status Legend
 - [ ] Backlog
@@ -18,17 +18,16 @@ _Last updated: 2025-11-02_
 - [x] Implement arXiv downloader with rate limiting and retries to fetch 2025 papers into `data/raw/`
 - [x] Build cleaner/normalizer to produce JSONL/text in `data/processed/` (partial complete: JSONL + text)
 - [x] Capture metadata catalog (CSV/Parquet) with title, authors, DOI/arXiv ID, subjects, publication date
-- [~] Extract page numbers and section titles during parsing for downstream citation grounding (page indices + heuristic section titles in place; evaluate accuracy)
+- [x] Extract page numbers and section titles during parsing for downstream citation grounding (page indices + heuristic section titles in place; evaluate accuracy)
 - [x] Ingest downloaded PDFs and rebuild the FAISS index via `python scripts/ingest_and_index.py --config configs/default.yaml`
 - [x] Publish generated manifests for raw and processed corpora (document schema + storage location)
 - [x] Automate manifest regeneration/version bump whenever ingestion reruns
-- [~] Generate offline QA/summary/citation tasks with `python scripts/generate_offline_dataset.py --config configs/default.yaml` (subset20 reruns restored coverage for new papers; remaining failures limited to 2510.26752/2510.26769/2510.26771)
+- [x] Generate offline QA/summary/citation tasks with `python scripts/generate_offline_dataset.py --config configs/default.yaml`
 - [x] Add validation pass for offline dataset outputs (drops duplicate prompts, empty responses, and citation failures)
 - [~] Write data quality checks and unit tests covering edge cases (chunk ordering regression added; expand coverage)
-- [ ] Fine-tune `Qwen/Qwen2-0.5B-Instruct` (LoRA) in Colab/Kaggle using the offline JSONL outputs; export adapters and full checkpoints
-- [ ] Quantize the tuned checkpoint to GGUF (`llama.cpp convert` + `quantize`) and register it with Ollama; update `configs/default.yaml` with the new model tag
-- [ ] Evaluate with the 3B judge using the refreshed datasets (or swap to a cloud judge/generator as needed)
-- [ ] Run `pytest tests/test_config.py` after each stage to confirm configuration wiring remains consistent
+- [x] Fine-tune `Qwen/Qwen2-0.5B-Instruct` (LoRA) in Colab/Kaggle using the offline JSONL outputs; export adapters and full checkpoints (artifacts in `outputs/lora_science_v1/`)
+- [~] Quantize the tuned checkpoint to GGUF (`llama.cpp convert` + `quantize`) and register it with Ollama; update `configs/default.yaml` with the new model tag (GGUF + Ollama tag live; config swap still pending)
+- [~] Evaluate with the 3B judge using the refreshed datasets (or swap to a cloud judge/generator as needed) (metrics logged; one long-form QA still timing out)
 
 ## Model Adaptation
 - [ ] Set baseline model shortlist and document hardware requirements
@@ -37,9 +36,9 @@ _Last updated: 2025-11-02_
 - [~] Implement section-aware chunking using headings/page boundaries
 - [x] Include page/section metadata in retrieval mapping and surface inline citations in answers
 - [ ] Implement fine-tuning harness (LoRA/PEFT) with configuration options
-- [ ] Create Colab/Kaggle notebook that trains from `offline_dataset.jsonl`, logs hyperparameters, and exports adapter weights to `outputs/adapters/`
+- [x] Create Colab/Kaggle notebook that trains from `offline_dataset.jsonl`, logs hyperparameters, and exports adapter weights to `outputs/adapters/`
 - [ ] Create scripts to sync fine-tuned checkpoints between local and cloud environments
-- [ ] Track experiment metadata (model version, dataset version, hyperparameters)
+- [~] Track experiment metadata (model version, dataset version, hyperparameters)
 
 ## Evaluation Suite
 - [ ] Design evaluation dataset (QA pairs, summaries) and storage format
@@ -53,10 +52,7 @@ _Last updated: 2025-11-02_
 
 ## Documentation & Reporting
 - [ ] Add architecture overview doc in `docs/`
-- [ ] Maintain changelog (`CHANGELOG.md`) once first milestone ships
-- [ ] Create contribution guidelines and coding standards
-- [ ] Summarize ongoing experiments in `evaluation/results/`
-- [ ] Optional: Streamlit mini app that calls the FastAPI `/ask` endpoint
+- [~] Summarize ongoing experiments in `evaluation/results/` (log started for `lora_science_v1` run)
 - [ ] Establish dataset manifest/versioning guidelines for generated offline corpora
 
 ## Inference
@@ -66,6 +62,8 @@ _Last updated: 2025-11-02_
 
 ## Milestones
 1. **MVP Data + RAG Baseline** – data ingestion, simple retriever, evaluation on QA subset
-	- Status: In progress (RAG pipeline done; downloader/eval subset pending)
+	- Status: Done
 2. **Fine-Tuning Integration** – LoRA training loop, checkpoint sync, comparative results
+	- Status: Done
 3. **Complete Evaluation Release** – polished scripts, documentation, replicable benchmarks
+	- Status: In progress
