@@ -79,13 +79,15 @@ python scripts/prefetch_models.py --cache-dir .cache/huggingface Qwen/Qwen2-0.5B
 ollama pull qwen2:0.5b-instruct-q4_0
 ollama pull qwen2:1.5b-instruct-q4_0
 ollama pull qwen2.5:3b-instruct-q4_K_M
+# Build/refresh the LoRA assistant alias used by the default config
+ollama create qwen2-lora-science -f ollama/Modelfile
 ```
 
 The bootstrap script installs both runtime and development dependencies in editable mode and wires up the `pre-commit` hook so formatting and linting run automatically. Re-run the script at any time to pick up dependency updates (pass `--no-dev` or `--no-pre-commit` if you want to opt out).
 
 ### Local Inference (Ollama by default)
 
-With Ollama running locally, the default configuration calls the `qwen2:0.5b-instruct-q4_0` tag for retrieval-augmented answering:
+With Ollama running locally, the default configuration calls the `qwen2-lora-science:latest` tag for retrieval-augmented answering:
 
 ```python
 from beyond_the_cutoff import load_config
@@ -97,14 +99,14 @@ response = client.generate("Summarise the latest findings on generative retrieva
 print(response["response"])
 ```
 
-The default configuration connects to the Ollama daemon at `http://localhost:11434` and queries `qwen2:0.5b-instruct-q4_0`. Override `configs/default.yaml` (or pass a custom config) to toggle providers, sampling parameters, or model tags—for example, swap in your fine-tuned checkpoint once it has been quantized and registered with Ollama.
+The default configuration connects to the Ollama daemon at `http://localhost:11434` and queries `qwen2-lora-science:latest`. Override `configs/default.yaml` (or pass a custom config such as the original baseline) to toggle providers, sampling parameters, or model tags.
 
 ## Pipeline Workflow
 
 - **Ingestion/indexing**: run `python scripts/ingest_and_index.py --config configs/default.yaml` to turn the downloaded PDFs into text chunks and rebuild the FAISS index under `data/external/index`. Each run refreshes `data/processed/manifest.json` and writes metadata catalog exports under `data/processed/metadata_catalog*` for downstream analysis/versioning.
 - **Offline tasks**: once the index exists, call `python scripts/generate_offline_dataset.py --config configs/default.yaml` so the `qwen2:1.5b-instruct-q4_0` generator can produce QA/summaries/citation tasks backed by those chunks.
 - **Fine-tuning**: take the resulting JSONL plus your assistant prompts into Colab/Kaggle, fine-tune `Qwen/Qwen2-0.5B-Instruct` with LoRA, export the adapter/full weights, and keep the safetensors checkpoints.
-- **Deployment**: convert that tuned checkpoint to GGUF (e.g., `llama.cpp convert` + `quantize`) and load it into Ollama; update `configs/default.yaml` with the new tag when ready, and pull the 1.5B/3B Qwen tags locally via `ollama pull`.
+- **Deployment**: convert that tuned checkpoint to GGUF (e.g., `llama.cpp convert` + `quantize`) and recreate the Ollama alias via `ollama create qwen2-lora-science -f ollama/Modelfile`; pull the 1.5B/3B Qwen tags locally via `ollama pull` for generation/judging.
 - **Evaluation**: reuse `python scripts/ingest_and_index.py` results plus the evaluation datasets with the 3B judge (`qwen2.5:3b-instruct-q4_K_M`) or a cloud grader by flipping the provider/model in the config.
 - **Verification**: after each stage, run `pytest tests/test_config.py` (and the broader suite once the pipeline is populated) to ensure the configuration and adapters remain wired correctly.
 
@@ -156,7 +158,7 @@ Configuration knobs:
 Notes:
 - Uses `BAAI/bge-small-en-v1.5` for embeddings by default; adjust for quality/speed.
 - If a reranker is configured, top-k is reranked before prompting (with warnings logged when the reranker fails).
-- Answers are generated via the configured backend (default: Ollama with `qwen2:0.5b-instruct-q4_0`).
+- Answers are generated via the configured backend (default: Ollama with `qwen2-lora-science:latest`).
 - API responses include a `citations` array with `{id, source_path, page, token_start, token_end, score, excerpt}`.
 - Responses also expose `citation_verification` metadata summarising which inline markers were found and their lexical overlap with retrieved context.
 

@@ -1,6 +1,6 @@
 # Beyond the Cutoff – Lightweight Project Tracker
 
-_Last updated: 2025-11-03_
+_Last updated: 2025-11-04_
 
 ## Status Legend
 - [ ] Backlog
@@ -26,8 +26,8 @@ _Last updated: 2025-11-03_
 - [x] Add validation pass for offline dataset outputs (drops duplicate prompts, empty responses, and citation failures)
 - [~] Write data quality checks and unit tests covering edge cases (chunk ordering regression added; expand coverage)
 - [x] Fine-tune `Qwen/Qwen2-0.5B-Instruct` (LoRA) in Colab/Kaggle using the offline JSONL outputs; export adapters and full checkpoints (artifacts in `outputs/lora_science_v1/`)
-- [~] Quantize the tuned checkpoint to GGUF (`llama.cpp convert` + `quantize`) and register it with Ollama; update `configs/default.yaml` with the new model tag (GGUF + Ollama tag live; config swap still pending)
-- [~] Evaluate with the 3B judge using the refreshed datasets (or swap to a cloud judge/generator as needed) (metrics logged; one long-form QA still timing out)
+- [x] Quantize the tuned checkpoint to GGUF (`llama.cpp convert` + `quantize`) and register it with Ollama; update `configs/default.yaml` with the new model tag (GGUF + Ollama tag live)
+- [x] Evaluate with the 3B judge using the refreshed datasets (or swap to a cloud judge/generator as needed) (metrics logged)
 
 ## Model Adaptation
 - [ ] Set baseline model shortlist and document hardware requirements
@@ -39,6 +39,7 @@ _Last updated: 2025-11-03_
 - [x] Create Colab/Kaggle notebook that trains from `offline_dataset.jsonl`, logs hyperparameters, and exports adapter weights to `outputs/adapters/`
 - [ ] Create scripts to sync fine-tuned checkpoints between local and cloud environments
 - [~] Track experiment metadata (model version, dataset version, hyperparameters)
+- [ ] Expand FT+RAG evaluations to larger assistant checkpoints (≥1.5B) once local resources allow
 
 ## Evaluation Suite
 - [ ] Design evaluation dataset (QA pairs, summaries) and storage format
@@ -49,6 +50,7 @@ _Last updated: 2025-11-03_
 - [ ] Integrate human evaluation protocol
 - [~] Provide CLI/report generator for comparative analysis
 - [ ] Add regression tests ensuring evaluation metrics run end-to-end
+- [ ] Scale offline dataset/evaluations to >100 tasks covering new papers (current slice = 16)
 
 ## Documentation & Reporting
 - [ ] Add architecture overview doc in `docs/`
@@ -59,6 +61,7 @@ _Last updated: 2025-11-03_
 - [x] Provide Ollama client wrapper and default config wiring
 - [ ] Add streaming support and higher-level RAG integration tests
 - [x] Expose minimal FastAPI `/ask` endpoint backed by RAG pipeline
+- [ ] Harden Ollama automation (model alias creation + timeout mitigation) for unattended runs
 
 ## Milestones
 1. **MVP Data + RAG Baseline** – data ingestion, simple retriever, evaluation on QA subset

@@ -139,10 +139,10 @@ class InferenceConfig(BaseModel):
     """Settings for local inference backends (defaults to Ollama)."""
 
     provider: str = Field(default="ollama")
-    model: str = Field(default="qwen2:0.5b-instruct-q4_0")
+    model: str = Field(default="qwen2-lora-science:latest")
     host: str = Field(default="http://localhost")
     port: int | None = Field(default=11434)
-    timeout: float = Field(default=60.0, gt=0.0)
+    timeout: float = Field(default=480.0, gt=0.0)
     device: str = Field(default="auto")
     torch_dtype: str | None = Field(default="auto")
     max_new_tokens: int = Field(default=512, ge=1)

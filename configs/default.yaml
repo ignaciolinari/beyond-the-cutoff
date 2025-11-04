@@ -58,15 +58,17 @@ dataset_generation:
   min_citation_coverage: 0.2
 inference:
   provider: ollama
-  model: qwen2:0.5b-instruct-q4_0
+  model: qwen2-lora-science:latest
   host: http://localhost
   port: 11434
-  timeout: 120.0
+  timeout: 480.0
   device: auto
   torch_dtype: auto
   max_new_tokens: 512
   temperature: 0.0
   top_p: 0.9
   repetition_penalty: 1.05
-  stop_sequences: []
-  # Swap this tag to your fine-tuned adapter (or a larger checkpoint) once available.
+  stop_sequences:
+    - "<|im_start|>"
+    - "<|im_end|>"
+  # Baseline tag was qwen2:0.5b-instruct-q4_0; switch back via --model-config when needed.
