@@ -1,0 +1,18 @@
+defaults:
+  dataset: evaluation/datasets/offline_dataset.jsonl
+  judge_config: configs/judges/scientific_default.yaml
+  judge_inference: configs/judges/ollama_qwen7b.yaml
+  output_dir: evaluation/results
+  metrics_filename: metrics.json
+  details_filename: details.jsonl
+  metadata_filename: metadata.jsonl
+  limit: null
+  max_retries: 2
+  retry_delay: 15.0
+  skip_if_exists: true
+runs:
+  - label: rag_baseline_v1
+    model_config: configs/rag_baseline_ollama.yaml
+  - label: lora_science_v1
+    model_config: configs/lora_science_v1_ollama.yaml
+    judge_inference: configs/judges/ollama_qwen3b.yaml

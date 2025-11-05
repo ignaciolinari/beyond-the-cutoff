@@ -1,24 +1,19 @@
 """Beyond the Cutoff research assistant toolkit."""
 
-from importlib import import_module
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .config import ProjectConfig, load_config
 from .models import LLMClient, OllamaClient, TransformersClient, build_generation_client
 
+if TYPE_CHECKING:  # pragma: no cover - typing helpers only
+    from .retrieval.index import DocumentIndexer as _DocumentIndexer
+    from .retrieval.query import RAGPipeline as _RAGPipeline
 
-def _optional_attr(module_path: str, attr_name: str) -> Any:
-    """Safely import *attr_name* from *module_path*, returning None on failure."""
-
-    try:  # pragma: no cover - optional dependency loading
-        module = import_module(module_path)
-    except Exception:
-        return None
-    return getattr(module, attr_name, None)
-
-
-RAGPipeline = _optional_attr("beyond_the_cutoff.retrieval.query", "RAGPipeline")
-DocumentIndexer = _optional_attr("beyond_the_cutoff.retrieval.index", "DocumentIndexer")
+    RAGPipeline = _RAGPipeline
+    DocumentIndexer = _DocumentIndexer
+else:  # pragma: no cover - sentinel values replaced via __getattr__
+    RAGPipeline = None  # type: ignore[assignment]
+    DocumentIndexer = None  # type: ignore[assignment]
 
 __all__ = [
     "ProjectConfig",
@@ -33,3 +28,22 @@ __all__ = [
 ]
 
 __version__ = "0.1.0"
+
+
+def __getattr__(name: str) -> Any:
+    """Lazily import optional heavy dependencies."""
+
+    if name == "RAGPipeline":  # pragma: no cover - import side effects exercised elsewhere
+        from .retrieval.query import RAGPipeline as _RAGPipeline
+
+        return _RAGPipeline
+    if name == "DocumentIndexer":  # pragma: no cover - import side effects exercised elsewhere
+        from .retrieval.index import DocumentIndexer as _DocumentIndexer
+
+        return _DocumentIndexer
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:  # pragma: no cover - reflection helper
+    return sorted(set(globals()) | {"RAGPipeline", "DocumentIndexer"})

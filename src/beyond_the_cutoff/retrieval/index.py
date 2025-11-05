@@ -9,16 +9,24 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from importlib import import_module
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-try:  # pragma: no cover - optional dependency
-    faiss = import_module("faiss")
-except ModuleNotFoundError:  # pragma: no cover - optional dependency
-    from ..utils import faiss_stub as faiss
+from ..utils import faiss_stub
+
+if os.environ.get("BTC_USE_FAISS_STUB") == "1":  # pragma: no cover - test/CI path
+    faiss = faiss_stub
+else:  # pragma: no cover - optional dependency
+    try:
+        faiss = import_module("faiss")
+    except ModuleNotFoundError:  # pragma: no cover - optional dependency
+        faiss = faiss_stub
+    except Exception:
+        faiss = faiss_stub
 import numpy as np
 import numpy.typing as npt
 

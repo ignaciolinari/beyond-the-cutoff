@@ -263,7 +263,7 @@ def _load_raw_config(path: Path) -> dict[str, Any]:
             )
         return {str(key): value for key, value in container.items()}
 
-    import yaml  # type: ignore[import-untyped]
+    import yaml
 
     with path.open("r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle)

@@ -8,6 +8,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from importlib import import_module
 from pathlib import Path
@@ -15,11 +16,17 @@ from typing import Any, cast
 
 from ..config import ProjectConfig
 from ..models import LLMClient, build_generation_client
+from ..utils import faiss_stub
 
-try:  # pragma: no cover - optional dependency
-    faiss = import_module("faiss")
-except ModuleNotFoundError:  # pragma: no cover - optional dependency
-    from ..utils import faiss_stub as faiss
+if os.environ.get("BTC_USE_FAISS_STUB") == "1":  # pragma: no cover - test/CI path
+    faiss = faiss_stub
+else:  # pragma: no cover - optional dependency
+    try:
+        faiss = import_module("faiss")
+    except ModuleNotFoundError:  # pragma: no cover - optional dependency
+        faiss = faiss_stub
+    except Exception:
+        faiss = faiss_stub
 import numpy as np
 import numpy.typing as npt
 

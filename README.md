@@ -197,6 +197,13 @@ Tune behaviour via `configs/default.yaml` → `dataset_generation` (counts per d
 - For automated scoring, rely on a stronger judge model (cloud API or high-quality local checkpoint) to grade factuality, citation adherence, and summaries; log judge prompts/responses for reproducibility.
 - Complement automatic grading with targeted human spot checks, prioritising disagreements or low-confidence judge outputs.
 - Track results in `evaluation/results/` so trends over time (different checkpoints or datasets) remain auditable.
+- Automate comparative sweeps with `python scripts/compare_models.py --plan configs/evaluation/compare_default.yaml` to evaluate multiple assistants and emit a consolidated JSON report.
+
+### Automated Metrics Harness
+
+- Run generation and retrieval metrics together via `python scripts/evaluation_harness.py --predictions <predictions.jsonl>`. The command defaults to the offline dataset from your loaded config and prints an aggregated JSON summary.
+- Provide `--output` and `--details-output` paths to persist the overall metrics JSON and per-example JSONL rows. Override retrieval assets with `--index`/`--mapping`, and adjust Hit@K calculation with `--retrieval-topk`.
+- The Makefile exposes `make score`, which wraps the harness under `BTC_USE_FAISS_STUB=1` so CI environments can execute without native FAISS. Tweak the `SCORE_*` variables at the top of the Makefile to point at different datasets or prediction files.
 
 ### Project Structure
 

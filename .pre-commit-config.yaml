@@ -20,4 +20,5 @@ repos:
           - httpx
           - pydantic>=2.8
           - omegaconf
+          - types-PyYAML
         args: ["--strict"]

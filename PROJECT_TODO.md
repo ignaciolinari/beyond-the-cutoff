@@ -38,18 +38,18 @@ _Last updated: 2025-11-04_
 - [x] Create Colab/Kaggle notebook that trains from `offline_dataset.jsonl`, logs hyperparameters, and exports adapter weights to `outputs/adapters/`
 - [x] Create scripts to sync fine-tuned checkpoints between local and cloud environments
 - [x] Track experiment metadata (model version, dataset version, hyperparameters)
-- [ ] Expand FT+RAG evaluations to larger assistant checkpoints (≥1.5B) once local resources allow
 
 ## Evaluation Suite
-- [ ] Design evaluation dataset (QA pairs, summaries) and storage format
-- [ ] Implement automatic scoring metrics (factuality, citation accuracy, BLEU/BERTScore)
-- [~] Build comparative evaluation harness for baseline RAG vs fine-tuned vs hybrid setups
-- [~] Integrate large-model judge (cloud or local) for automated evaluations and capture prompt/response logs
-- [ ] Introduce a small evaluation harness (faithfulness, citation accuracy, retrieval hit@k/MRR)
+- [x] Design evaluation dataset (QA pairs, summaries) and storage format
+- [x] Implement automatic scoring metrics (factuality, citation accuracy, BLEU/BERTScore) via `scripts/score_predictions.py`
+- [x] Build comparative evaluation harness for baseline RAG vs fine-tuned vs hybrid setups (`scripts/compare_models.py` + plan)
+- [~] Integrate large-model judge (cloud or local) for automated evaluations and capture prompt/response logs (started with 3B judge scaled up to 7B... might scale up to cloud later)
+- [x] Introduce a small evaluation harness (faithfulness, citation accuracy, retrieval hit@k/MRR)
+- [x] Document the consolidated evaluation harness workflow (README + Makefile usage)
+- [x] Provide CLI/report generator for comparative analysis (`compare_models.py` aggregates JSON report)
+- [x] Add regression tests ensuring evaluation metrics run end-to-end (CLI harness smoke test)
+- [x] Scale offline dataset/evaluations to >100 tasks covering new papers
 - [ ] Integrate human evaluation protocol
-- [~] Provide CLI/report generator for comparative analysis
-- [ ] Add regression tests ensuring evaluation metrics run end-to-end
-- [ ] Scale offline dataset/evaluations to >100 tasks covering new papers (current slice = 16)
 
 ## Documentation & Reporting
 - [ ] Add architecture overview doc in `docs/`

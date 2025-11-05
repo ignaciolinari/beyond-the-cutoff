@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -11,15 +12,22 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any, Protocol, cast
 
+from . import faiss_stub as _faiss_stub
+
 
 class _FaissModule(Protocol):
     def read_index(self, path: str | Path) -> Any: ...
 
 
-try:  # pragma: no cover - optional dependency
-    _faiss_module = import_module("faiss")
-except ModuleNotFoundError:  # pragma: no cover - optional dependency
-    from . import faiss_stub as _faiss_module
+if os.environ.get("BTC_USE_FAISS_STUB") == "1":  # pragma: no cover - test/CI path
+    _faiss_module = _faiss_stub
+else:  # pragma: no cover - optional dependency
+    try:
+        _faiss_module = import_module("faiss")
+    except ModuleNotFoundError:
+        _faiss_module = _faiss_stub
+    except Exception:
+        _faiss_module = _faiss_stub
 
 faiss: _FaissModule = cast(_FaissModule, _faiss_module)
 
