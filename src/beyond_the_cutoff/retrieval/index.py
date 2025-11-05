@@ -30,6 +30,11 @@ else:  # pragma: no cover - optional dependency
 import numpy as np
 import numpy.typing as npt
 
+try:  # pragma: no cover - torch is optional until encoding time
+    import torch
+except ImportError:  # pragma: no cover - runtime guard
+    torch = None
+
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from sentence_transformers import SentenceTransformer as SentenceTransformerType
 else:
@@ -48,6 +53,8 @@ class DocumentIndexer:
     """Build and persist a FAISS index over text chunks."""
 
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    batch_size: int = 2
+    device: str | None = None
 
     def _load_model(self) -> SentenceTransformerType:
         if SentenceTransformer is None:  # pragma: no cover - optional dependency guard
@@ -81,7 +88,7 @@ class DocumentIndexer:
 
         for path in sorted(input_dir.rglob(pattern)):
             chunk_counter = 0
-            token_cursor_global = 0
+            absolute_cursor = 0
             # Prefer page-aware sidecar if present
             pages_sidecar = path.with_suffix(".pages.jsonl")
             if pages_sidecar.exists():
@@ -101,7 +108,6 @@ class DocumentIndexer:
                     section_text = group["text"]
                     start_page = group["start_page"]
                     if not section_text.strip():
-                        token_cursor_global += len(section_text.split())
                         continue
 
                     if strategy == "sentences":
@@ -113,12 +119,14 @@ class DocumentIndexer:
                             section_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap
                         )
 
-                    token_cursor_local = 0
-                    overlap_for_next = 0
+                    overlap_with_previous = 0
                     for ch in chunks:
                         tokens = ch.split()
                         token_len = len(tokens)
-                        token_start = token_cursor_global + token_cursor_local
+                        if token_len == 0:
+                            continue
+
+                        token_start = absolute_cursor
                         token_end = token_start + token_len
                         texts.append(ch)
                         meta_rows.append(
@@ -133,13 +141,16 @@ class DocumentIndexer:
                         )
                         chunk_counter += 1
 
-                        advance = token_len - overlap_for_next
-                        if advance < 0:
-                            advance = 0
-                        token_cursor_local += advance
-                        overlap_for_next = min(chunk_overlap, token_len)
-
-                    token_cursor_global += len(section_text.split())
+                        unique_tokens = (
+                            token_len
+                            if overlap_with_previous == 0
+                            else token_len - overlap_with_previous
+                        )
+                        if unique_tokens <= 0:
+                            unique_tokens = 1
+                        absolute_cursor += unique_tokens
+                        overlap_with_previous = min(chunk_overlap, token_len)
+                    overlap_with_previous = 0
                 continue
 
             # Fallback: whole-document text
@@ -150,11 +161,14 @@ class DocumentIndexer:
                 )
             else:
                 chunks = chunk_text(content, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-            overlap_for_next = 0
+            overlap_with_previous = 0
             for ch in chunks:
                 tokens = ch.split()
                 token_len = len(tokens)
-                token_start = token_cursor_global
+                if token_len == 0:
+                    continue
+
+                token_start = absolute_cursor
                 token_end = token_start + token_len
                 texts.append(ch)
                 meta_rows.append(
@@ -168,17 +182,35 @@ class DocumentIndexer:
                     }
                 )
                 chunk_counter += 1
-                advance = token_len - overlap_for_next
-                if advance < 0:
-                    advance = 0
-                token_cursor_global += advance
-                overlap_for_next = min(chunk_overlap, token_len)
+
+                unique_tokens = (
+                    token_len if overlap_with_previous == 0 else token_len - overlap_with_previous
+                )
+                if unique_tokens <= 0:
+                    unique_tokens = 1
+                absolute_cursor += unique_tokens
+                overlap_with_previous = min(chunk_overlap, token_len)
 
         if not texts:
             raise ValueError(f"No text files matching {pattern!r} found under {input_dir}")
 
         model = self._load_model()
-        embeddings = model.encode(texts, convert_to_numpy=True, show_progress_bar=True)
+        if torch is not None:
+            try:
+                max_threads = int(os.environ.get("BTC_TORCH_THREADS", "1"))
+            except ValueError:
+                max_threads = 1
+            torch.set_num_threads(max(1, max_threads))
+
+        encode_kwargs: dict[str, Any] = {
+            "batch_size": self.batch_size,
+            "convert_to_numpy": True,
+            "show_progress_bar": True,
+        }
+        if self.device:
+            encode_kwargs["device"] = self.device
+
+        embeddings = model.encode(texts, **encode_kwargs)
         embeddings_array = np.asarray(embeddings, dtype="float32")
         embeddings_nd = cast(npt.NDArray[np.float32], embeddings_array)
 

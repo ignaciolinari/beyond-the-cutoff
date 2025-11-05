@@ -11,6 +11,7 @@ PROCESSED_DIR="data/processed/cog_psych_2025_run01"
 EXTERNAL_DIR="data/external/cog_psych_2025_run01"
 DATASET_PATH="evaluation/datasets/cog_psych_offline_dataset.jsonl"
 RAW_TASKS_PATH="evaluation/datasets/cog_psych_offline_tasks.jsonl"
+TOTAL_PAPERS="${COG_PSYCH_TOTAL:-100}"
 
 CONTACT_EMAIL="${1:-${ARXIV_CONTACT_EMAIL:-}}"
 if [[ -z "${CONTACT_EMAIL}" ]]; then
@@ -19,7 +20,21 @@ if [[ -z "${CONTACT_EMAIL}" ]]; then
   exit 1
 fi
 
+rm -rf "${PROCESSED_DIR}" "${EXTERNAL_DIR}" "${DATASET_PATH}" "${RAW_TASKS_PATH}"
 mkdir -p "${RAW_DIR}" "${PROCESSED_DIR}" "${EXTERNAL_DIR}" "$(dirname "${RAW_TASKS_PATH}")"
+
+export PYTORCH_SDP_DISABLE_FLASH_ATTN="${PYTORCH_SDP_DISABLE_FLASH_ATTN:-1}"
+export PYTORCH_SDP_DISABLE_MEM_EFFICIENT="${PYTORCH_SDP_DISABLE_MEM_EFFICIENT:-1}"
+export PYTORCH_SDP_ATTENTION="${PYTORCH_SDP_ATTENTION:-math}"
+export TOKENIZERS_PARALLELISM="false"
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
+export MKL_NUM_THREADS="${MKL_NUM_THREADS:-1}"
+export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}"
+export NUMEXPR_NUM_THREADS="${NUMEXPR_NUM_THREADS:-1}"
+export BTC_TORCH_THREADS="${BTC_TORCH_THREADS:-1}"
+export PYTORCH_ENABLE_MPS_FALLBACK="${PYTORCH_ENABLE_MPS_FALLBACK:-1}"
+export PYTORCH_MPS_HIGH_WATERMARK_RATIO="${PYTORCH_MPS_HIGH_WATERMARK_RATIO:-0.0}"
+export PYTORCH_ENABLE_MPS_FALLBACK="${PYTORCH_ENABLE_MPS_FALLBACK:-1}"
 
 # Ensure judge/generator model is available locally.
 if command -v ollama >/dev/null 2>&1; then
@@ -47,12 +62,23 @@ for repo in ("BAAI/bge-m3", "BAAI/bge-reranker-v2-m3"):
 PY
 
 # 1) Fetch the latest cognition/psychology corpus slice.
-python scripts/fetch_arxiv_corpus.py \
-  --contact-email "${CONTACT_EMAIL}" \
-  --output-dir "${RAW_DIR}" \
-  --total 140 \
-  --oversample 1.8 \
-  --max-results 400
+if [[ "${COG_PSYCH_FORCE_FETCH:-0}" == "1" || ! -d "${RAW_DIR}/papers" || ! -f "${RAW_DIR}/metadata.jsonl" ]]; then
+  python scripts/fetch_arxiv_corpus.py \
+    --contact-email "${CONTACT_EMAIL}" \
+    --output-dir "${RAW_DIR}" \
+    --total "${TOTAL_PAPERS}" \
+    --oversample 1.8 \
+    --max-results 400
+else
+  echo "Skipping arXiv fetch; using existing corpus at ${RAW_DIR}. Set COG_PSYCH_FORCE_FETCH=1 to refresh." >&2
+fi
+
+if [[ -f "${RAW_DIR}/metadata.jsonl" ]]; then
+  cp "${RAW_DIR}/metadata.jsonl" "${RAW_DIR}/papers/" 2>/dev/null || true
+fi
+if [[ -f "${RAW_DIR}/metadata.csv" ]]; then
+  cp "${RAW_DIR}/metadata.csv" "${RAW_DIR}/papers/" 2>/dev/null || true
+fi
 
 # 2) Ingest PDFs, rebuild metadata + FAISS index with upgraded retrieval models.
 python scripts/ingest_and_index.py --config "${CONFIG_PATH}"

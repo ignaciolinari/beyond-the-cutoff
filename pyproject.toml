@@ -108,7 +108,9 @@ module = [
   "pandas",
   "pandas.*",
   "evaluate",
-  "evaluate.*"
+  "evaluate.*",
+  "torch",
+  "torch.*"
 ]
 ignore_missing_imports = true
 

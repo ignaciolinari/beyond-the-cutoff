@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -58,6 +59,11 @@ def parse_args() -> argparse.Namespace:
             "Paths must match the mapping TSV entries."
         ),
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Log per-document progress and other informational messages",
+    )
     return parser.parse_args()
 
 
@@ -82,6 +88,9 @@ def main() -> None:
     cfg = load_config(args.config)
 
     index_path, mapping_path = resolve_paths(cfg, args)
+
+    log_level = logging.INFO if args.verbose else logging.WARNING
+    logging.basicConfig(level=log_level, format="%(asctime)s [%(levelname)s] %(message)s")
 
     if not index_path.exists():
         sys.exit(f"Index file not found: {index_path}")
@@ -114,6 +123,8 @@ def main() -> None:
         f"QA: {counters.get('qa', 0)} | Summaries: {counters.get('summaries', 0)} | "
         f"Citation checks: {counters.get('citations', 0)}"
     )
+    if counters.get("documents_filtered"):
+        summary += f" | Skipped {counters['documents_filtered']} (filters)"
     if "documents_requested" in counters:
         summary += (
             f" | Requested {counters['documents_requested']}"

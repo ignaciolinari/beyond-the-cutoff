@@ -8,6 +8,8 @@ paths:
 retrieval:
   vector_store: faiss
   embedding_model: BAAI/bge-m3
+  embedding_batch_size: 5
+  embedding_device: mps
   chunk_size: 800
   chunk_overlap: 120
   top_k: 4

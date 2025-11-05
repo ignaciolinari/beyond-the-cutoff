@@ -66,7 +66,11 @@ def main() -> None:
     )
 
     # 3) Build FAISS index
-    indexer = DocumentIndexer(embedding_model=cfg.retrieval.embedding_model)
+    indexer = DocumentIndexer(
+        embedding_model=cfg.retrieval.embedding_model,
+        batch_size=getattr(cfg.retrieval, "embedding_batch_size", 4),
+        device=getattr(cfg.retrieval, "embedding_device", "cpu"),
+    )
     index_path, mapping_path = indexer.build_index(
         input_dir=processed_dir,
         output_dir=index_out,

@@ -52,6 +52,8 @@ dataset_generation:
   max_chunks_per_document: 6
   max_chars_per_chunk: 1600
   max_documents: null
+  max_document_tokens: 25000
+  max_document_pages: 50
   seed: 42
   parse_retries: 2
   citation_rewrite_attempts: 1

@@ -46,6 +46,13 @@ class MappingRow:
 
 
 @dataclass
+class DocumentStats:
+    text_path: Path
+    page_count: int | None = None
+    token_count: int | None = None
+
+
+@dataclass
 class OfflineExample:
     """Output record describing a prepared offline training/eval example."""
 
@@ -102,6 +109,8 @@ class OfflineDatasetGenerator:
             config.dataset_generation.generator
         )
         self._rng = random.Random(config.dataset_generation.seed)
+        self._processed_root = config.paths.processed_data.resolve()
+        self._document_stats_index = self._load_document_stats(self._processed_root)
 
     @property
     def pipeline(self) -> RAGPipeline:
@@ -110,6 +119,218 @@ class OfflineDatasetGenerator:
     @property
     def generator(self) -> LLMClient:
         return self._generator
+
+    def _load_document_stats(self, processed_root: Path) -> dict[str, DocumentStats]:
+        stats: dict[str, DocumentStats] = {}
+        manifest_path = processed_root / "manifest.json"
+        if not manifest_path.exists():
+            return stats
+        try:
+            manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception as exc:  # pragma: no cover - manifest read failures rare
+            logger.warning(
+                "Failed to load processed manifest from %s: %s",
+                manifest_path,
+                exc,
+            )
+            return stats
+
+        documents = manifest_payload.get("documents")
+        if not isinstance(documents, list):
+            return stats
+
+        for entry in documents:
+            if not isinstance(entry, dict):
+                continue
+            text_rel = entry.get("text_path")
+            if not isinstance(text_rel, str) or not text_rel:
+                continue
+            absolute_path = (processed_root / text_rel).resolve()
+            stats_entry = DocumentStats(
+                text_path=absolute_path,
+                page_count=self._coerce_int(entry.get("page_count")),
+                token_count=self._coerce_int(entry.get("token_count")),
+            )
+            self._register_document_stats(stats, absolute_path, text_rel, stats_entry)
+
+        return stats
+
+    def _register_document_stats(
+        self,
+        index: dict[str, DocumentStats],
+        absolute_path: Path,
+        relative_path: str,
+        stats_entry: DocumentStats,
+    ) -> None:
+        keys: set[str] = set()
+        keys.add(str(absolute_path))
+        try:
+            resolved = absolute_path.resolve()
+        except Exception:  # pragma: no cover - resolution failure unusual
+            resolved = absolute_path
+        keys.add(str(resolved))
+
+        rel_obj = Path(relative_path)
+        keys.add(relative_path)
+        keys.add(rel_obj.as_posix())
+        try:
+            keys.add(rel_obj.with_suffix("").as_posix())
+        except ValueError:
+            pass
+
+        for key in keys:
+            index[key] = stats_entry
+
+    def _get_document_stats(self, source_path: str) -> DocumentStats:
+        cached = self._document_stats_index.get(source_path)
+        if cached is not None:
+            return cached
+
+        path = Path(source_path)
+        candidates: set[str] = {source_path}
+        resolved: Path | None = None
+        try:
+            resolved = path.resolve()
+            candidates.add(str(resolved))
+            try:
+                rel = resolved.relative_to(self._processed_root)
+                rel_posix = rel.as_posix()
+                candidates.add(rel_posix)
+                try:
+                    candidates.add(rel.with_suffix("").as_posix())
+                except ValueError:
+                    pass
+            except ValueError:
+                pass
+        except Exception:
+            resolved = None
+
+        for key in list(candidates):
+            matched = self._document_stats_index.get(key)
+            if matched is not None:
+                for alias in candidates:
+                    self._document_stats_index.setdefault(alias, matched)
+                return matched
+
+        stats_entry = DocumentStats(text_path=resolved or path)
+        for alias in candidates:
+            self._document_stats_index[alias] = stats_entry
+        return stats_entry
+
+    def _compute_page_count(
+        self, stats_entry: DocumentStats, rows: Sequence[MappingRow]
+    ) -> int | None:
+        if stats_entry.page_count is not None:
+            return stats_entry.page_count
+
+        sidecar = self._page_sidecar_path(stats_entry.text_path)
+        if sidecar.exists():
+            try:
+                with sidecar.open("r", encoding="utf-8") as handle:
+                    count = sum(1 for line in handle if line.strip())
+            except Exception as exc:  # pragma: no cover - rare I/O issue
+                logger.debug("Failed to read page sidecar %s: %s", sidecar, exc)
+            else:
+                stats_entry.page_count = count
+                return stats_entry.page_count
+
+        pages = [row.page for row in rows if row.page is not None]
+        if pages:
+            stats_entry.page_count = max(pages)
+        return stats_entry.page_count
+
+    def _compute_token_count(
+        self, stats_entry: DocumentStats, rows: Sequence[MappingRow]
+    ) -> int | None:
+        if stats_entry.token_count is not None:
+            return stats_entry.token_count
+
+        text_path = stats_entry.text_path
+        if text_path.exists():
+            total = 0
+            try:
+                with text_path.open("r", encoding="utf-8") as handle:
+                    for line in handle:
+                        if line:
+                            total += len(line.split())
+            except Exception as exc:  # pragma: no cover - rare I/O issue
+                logger.debug("Failed to read %s for token counting: %s", text_path, exc)
+            else:
+                stats_entry.token_count = total
+                return stats_entry.token_count
+
+        estimate = self._estimate_tokens_from_rows(rows)
+        stats_entry.token_count = estimate
+        return stats_entry.token_count
+
+    @staticmethod
+    def _estimate_tokens_from_rows(rows: Sequence[MappingRow]) -> int | None:
+        token_ceiling = 0
+        for row in rows:
+            if row.token_end is not None:
+                token_ceiling = max(token_ceiling, row.token_end)
+        if token_ceiling > 0:
+            return token_ceiling
+
+        total = 0
+        for row in rows:
+            if row.text:
+                total += len(row.text.split())
+        return total or None
+
+    def _should_skip_document(
+        self, source_path: str, rows: Sequence[MappingRow]
+    ) -> dict[str, Any] | None:
+        stats_entry = self._get_document_stats(source_path)
+        cfg = self.config.dataset_generation
+
+        page_limit = cfg.max_document_pages
+        if page_limit is not None:
+            page_count = self._compute_page_count(stats_entry, rows)
+            if page_count is not None and page_count > page_limit:
+                return {"kind": "page_limit", "page_count": page_count, "limit": page_limit}
+
+        token_limit = cfg.max_document_tokens
+        if token_limit is not None:
+            token_count = self._compute_token_count(stats_entry, rows)
+            if token_count is not None and token_count > token_limit:
+                return {
+                    "kind": "token_limit",
+                    "token_count": token_count,
+                    "limit": token_limit,
+                }
+
+        return None
+
+    @staticmethod
+    def _page_sidecar_path(text_path: Path) -> Path:
+        try:
+            return text_path.with_suffix(".pages.jsonl")
+        except ValueError:  # pragma: no cover - unexpected suffixless path
+            return text_path.parent / f"{text_path.name}.pages.jsonl"
+
+    @staticmethod
+    def _coerce_int(value: Any) -> int | None:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return None
+            try:
+                return int(float(stripped))
+            except ValueError:
+                return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
 
     def generate(
         self,
@@ -154,8 +375,22 @@ class OfflineDatasetGenerator:
         )
 
         grouped = self._load_mapping(self.mapping_path)
+        if document_whitelist is None:
+            target_items = list(grouped.items())
+        else:
+            target_items = [(path, grouped[path]) for path in grouped if path in document_whitelist]
+
+        total_targets = len(target_items)
         max_docs = dataset_cfg.max_documents
-        counters = {"documents": 0, "qa": 0, "summaries": 0, "citations": 0, "examples": 0}
+        progress_total = total_targets if max_docs is None else min(total_targets, max_docs)
+        counters = {
+            "documents": 0,
+            "qa": 0,
+            "summaries": 0,
+            "citations": 0,
+            "examples": 0,
+            "documents_filtered": 0,
+        }
         if document_whitelist is not None:
             counters.update(
                 {
@@ -169,21 +404,59 @@ class OfflineDatasetGenerator:
             tasks_path.open(tasks_mode, encoding="utf-8") as raw_file,
             dataset_path.open(dataset_mode, encoding="utf-8") as dataset_file,
         ):
-            for doc_index, (source_path, rows) in enumerate(grouped.items()):
+            if progress_total:
+                logger.info(
+                    "Planning to process %d document(s)%s",
+                    progress_total,
+                    " (limited by max_documents)"
+                    if max_docs is not None and progress_total < total_targets
+                    else "",
+                )
+
+            for doc_index, (source_path, rows) in enumerate(target_items):
                 if max_docs is not None and counters["documents"] >= max_docs:
                     break
 
-                if document_whitelist is not None and source_path not in document_whitelist:
-                    continue
-
-                if resume and source_path in processed_documents:
-                    logger.debug(
-                        "Skipping %s; already present in raw tasks (resume mode)", source_path
-                    )
-                    continue
+                progress_position = doc_index + 1
+                if progress_total:
+                    progress_label = f"{progress_position}/{progress_total}"
+                else:
+                    progress_label = str(progress_position)
 
                 if document_whitelist is not None:
                     matched_documents.add(source_path)
+
+                if resume and source_path in processed_documents:
+                    logger.info("Document %s: %s (resume)", progress_label, source_path)
+                    continue
+
+                logger.info("Document %s: %s", progress_label, source_path)
+
+                filter_info = self._should_skip_document(source_path, rows)
+                if filter_info is not None:
+                    counters["documents_filtered"] += 1
+                    reason_key = f"documents_filtered_{filter_info['kind']}"
+                    counters[reason_key] = counters.get(reason_key, 0) + 1
+                    logger.info(
+                        "Document %s: %s -> skipped (%s, limit=%s, observed=%s)",
+                        progress_label,
+                        source_path,
+                        filter_info["kind"],
+                        filter_info.get("limit"),
+                        filter_info.get("token_count")
+                        if filter_info["kind"] == "token_limit"
+                        else filter_info.get("page_count"),
+                    )
+                    raw_record = {
+                        "document": source_path,
+                        "status": "skipped",
+                        "reason": filter_info["kind"],
+                    }
+                    details = {k: v for k, v in filter_info.items() if k != "kind"}
+                    if details:
+                        raw_record["details"] = details
+                    raw_file.write(json.dumps(raw_record, ensure_ascii=False) + "\n")
+                    continue
 
                 examples, raw_payload = self._generate_for_document(
                     doc_index=doc_index,
@@ -462,9 +735,9 @@ class OfflineDatasetGenerator:
                 document = payload.get("document")
                 if isinstance(document, str) and document:
                     status = payload.get("status")
-                    if status and status != "success":
-                        continue
                     if payload.get("error"):
+                        continue
+                    if status and status not in {"success", "skipped"}:
                         continue
                     processed.add(document)
         return processed

@@ -59,6 +59,7 @@ def test_build_index_section_metadata(tmp_path: Path) -> None:
             texts: Sequence[str],
             convert_to_numpy: bool = True,
             show_progress_bar: bool = True,
+            **_: Any,
         ) -> NDArray[np.float32]:
             vectors = np.zeros((len(texts), self.dimension), dtype=np.float32)
             for idx in range(len(texts)):

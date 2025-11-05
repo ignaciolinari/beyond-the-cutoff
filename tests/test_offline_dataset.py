@@ -160,6 +160,117 @@ def test_offline_dataset_generation(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert generator_client.calls, "Generator client should have been called"
 
 
+def test_filters_documents_by_token_and_page_limits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "beyond_the_cutoff.retrieval.index.SentenceTransformer",
+        DummySentenceTransformer,
+    )
+    monkeypatch.setattr(
+        "beyond_the_cutoff.retrieval.query.SentenceTransformer",
+        DummySentenceTransformer,
+    )
+    monkeypatch.setattr("beyond_the_cutoff.retrieval.query.CrossEncoder", DummyCrossEncoder)
+
+    processed_dir = tmp_path / "processed"
+    processed_dir.mkdir()
+
+    (processed_dir / "keep.txt").write_text(
+        "This experiment validates retrieval augmented generation.", encoding="utf-8"
+    )
+
+    (processed_dir / "long_tokens.txt").write_text(
+        " ".join(["token"] * 40),
+        encoding="utf-8",
+    )
+
+    long_pages_path = processed_dir / "long_pages.txt"
+    long_pages_path.write_text("Short text for page-heavy paper", encoding="utf-8")
+    with long_pages_path.with_suffix(".pages.jsonl").open("w", encoding="utf-8") as handle:
+        for page in range(1, 8):
+            payload = {"page": page, "text": "content"}
+            handle.write(json.dumps(payload) + "\n")
+
+    index_dir = tmp_path / "index"
+    indexer = DocumentIndexer(embedding_model="dummy")
+    index_path, mapping_path = indexer.build_index(
+        input_dir=processed_dir,
+        output_dir=index_dir,
+        chunk_size=20,
+        chunk_overlap=5,
+        chunking_strategy="words",
+    )
+
+    base_cfg = ProjectConfig()
+    retrieval_cfg = base_cfg.retrieval.model_copy(
+        update={"embedding_model": "dummy", "top_k": 2, "max_context_chars": 400}
+    )
+    dataset_cfg = base_cfg.dataset_generation.model_copy(
+        update={
+            "questions_per_document": 1,
+            "summary_prompts_per_document": 1,
+            "citation_prompts_per_document": 1,
+            "max_document_tokens": 30,
+            "max_document_pages": 5,
+        }
+    )
+    paths_cfg = base_cfg.paths.model_copy(
+        update={
+            "processed_data": processed_dir,
+            "external_data": tmp_path / "external",
+        }
+    )
+    cfg = base_cfg.model_copy(
+        update={"paths": paths_cfg, "retrieval": retrieval_cfg, "dataset_generation": dataset_cfg}
+    )
+
+    generator_client = DummyGeneratorClient()
+    offline = OfflineDatasetGenerator(
+        cfg,
+        index_path=index_path,
+        mapping_path=mapping_path,
+        generator_client=generator_client,
+    )
+
+    output_dataset = tmp_path / "filtered.jsonl"
+    raw_tasks = tmp_path / "filtered_raw.jsonl"
+    counters = offline.generate(
+        output_dataset_path=output_dataset,
+        raw_tasks_path=raw_tasks,
+    )
+
+    assert counters["documents"] == 1
+    assert counters["documents_filtered"] == 2
+    assert counters["documents_filtered_token_limit"] == 1
+    assert counters["documents_filtered_page_limit"] == 1
+
+    raw_payloads = [
+        json.loads(line) for line in raw_tasks.read_text(encoding="utf-8").strip().splitlines()
+    ]
+    assert len(raw_payloads) == 3
+    skip_reasons = {
+        payload.get("reason") for payload in raw_payloads if payload.get("status") == "skipped"
+    }
+    assert skip_reasons == {"token_limit", "page_limit"}
+
+    token_skip = next(payload for payload in raw_payloads if payload.get("reason") == "token_limit")
+    assert token_skip["details"]["limit"] == 30
+    assert token_skip["details"]["token_count"] > 30
+
+    page_skip = next(payload for payload in raw_payloads if payload.get("reason") == "page_limit")
+    assert page_skip["details"]["limit"] == 5
+    assert page_skip["details"]["page_count"] > 5
+
+    dataset_lines = [
+        json.loads(line) for line in output_dataset.read_text(encoding="utf-8").strip().splitlines()
+    ]
+    assert dataset_lines, "Expected dataset entries for filtered run"
+    # Only the keep.txt document should yield tasks
+    assert all(record["metadata"]["source_path"].endswith("keep.txt") for record in dataset_lines)
+    assert generator_client.calls, "Generator client should have been called"
+
+
 def test_chunk_index_monotonic_with_sidecars(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -57,6 +57,8 @@ class RetrievalConfig(BaseModel):
 
     vector_store: str = Field(default="faiss")
     embedding_model: str = Field(default="sentence-transformers/all-MiniLM-L6-v2")
+    embedding_batch_size: int = Field(default=8, ge=1)
+    embedding_device: str = Field(default="auto")
     chunk_size: int = Field(default=512)
     chunk_overlap: int = Field(default=64, ge=0)
     top_k: int = Field(default=4, ge=1)
@@ -201,6 +203,8 @@ class DatasetGenerationConfig(BaseModel):
     max_chunks_per_document: int = Field(default=6, ge=1)
     max_chars_per_chunk: int = Field(default=1600, ge=256)
     max_documents: int | None = Field(default=None, ge=1)
+    max_document_tokens: int | None = Field(default=25000)
+    max_document_pages: int | None = Field(default=50)
     seed: int = Field(default=42)
     parse_retries: int = Field(default=2, ge=0)
     citation_rewrite_attempts: int = Field(default=1, ge=0)
@@ -226,6 +230,31 @@ class DatasetGenerationConfig(BaseModel):
     @staticmethod
     def _resolve_path(path: Path, base_dir: Path) -> Path:
         return path if path.is_absolute() else (base_dir / path).resolve()
+
+    @field_validator("max_document_tokens", "max_document_pages", mode="before")
+    @classmethod
+    def _coerce_positive_optional(cls, value: Any) -> int | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return None
+            try:
+                candidate = int(float(stripped))
+            except ValueError as exc:  # pragma: no cover - validation guard
+                raise ValueError("must be an integer or null") from exc
+        elif isinstance(value, bool):  # pragma: no cover - defensive guard
+            raise ValueError("must be an integer or null")
+        else:
+            try:
+                candidate = int(value)
+            except (TypeError, ValueError) as exc:  # pragma: no cover - validation guard
+                raise ValueError("must be an integer or null") from exc
+
+        if candidate <= 0:
+            raise ValueError("must be greater than zero or null")
+        return candidate
 
 
 class ProjectConfig(BaseModel):
