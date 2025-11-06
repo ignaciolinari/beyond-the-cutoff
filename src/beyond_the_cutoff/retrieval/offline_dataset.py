@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import re
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -16,6 +17,8 @@ from ..models import LLMClient, build_generation_client
 from .query import RAGPipeline
 
 logger = logging.getLogger(__name__)
+
+_INVALID_ESCAPE_PATTERN = re.compile(r"\\(?![\"\\/bfnrtu])")
 
 
 GENERATOR_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
@@ -1149,9 +1152,26 @@ class OfflineDatasetGenerator:
         candidate = self._strip_fences(text)
         try:
             data = json.loads(candidate)
-        except json.JSONDecodeError:
-            logger.debug("Failed to decode generator JSON: %s", candidate)
-            return None
+        except json.JSONDecodeError as exc:
+            if "Invalid \\escape" in exc.msg:
+                cleaned = _INVALID_ESCAPE_PATTERN.sub("", candidate)
+                if cleaned != candidate:
+                    try:
+                        data = json.loads(cleaned)
+                    except json.JSONDecodeError:
+                        logger.debug(
+                            "Failed to decode generator JSON after escape fix: %s",
+                            candidate,
+                        )
+                        return None
+                    else:
+                        logger.debug("Recovered generator JSON after sanitizing invalid escapes")
+                else:
+                    logger.debug("Failed to decode generator JSON: %s", candidate)
+                    return None
+            else:
+                logger.debug("Failed to decode generator JSON: %s", candidate)
+                return None
         if not isinstance(data, dict):
             return None
         # Normalise expected keys
