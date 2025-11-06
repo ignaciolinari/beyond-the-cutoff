@@ -84,13 +84,31 @@ def extract_manifest_counts(path: Path) -> dict[str, Any]:
     return info
 
 
+def _candidate_eval_bases(run: str) -> list[str]:
+    sanitized = run.replace("/", "_")
+    pieces = [part for part in sanitized.split("_") if part]
+
+    base_variants: list[str] = []
+
+    def _append(value: str | None) -> None:
+        if not value:
+            return
+        if value not in base_variants:
+            base_variants.append(value)
+
+    _append(sanitized)
+    _append(run.split("_run")[0])
+    _append(sanitized.replace("_run", "_"))
+
+    # Add progressively shorter prefixes (e.g., cog_psych_2025 -> cog_psych).
+    for length in range(len(pieces), 0, -1):
+        _append("_".join(pieces[:length]))
+
+    return base_variants
+
+
 def candidate_eval_names(run: str, suffix: str) -> list[str]:
-    slug_variants = [
-        run,
-        run.split("_run")[0],
-        run.replace("/", "_"),
-        run.replace("_run", "_"),
-    ]
+    slug_variants = _candidate_eval_bases(run)
     unique: list[str] = []
     for variant in slug_variants:
         candidate = f"{variant}{suffix}"
@@ -133,19 +151,14 @@ def load_json_timestamp(path: Path, field: str) -> str | None:
 def find_eval_file(run: str, suffix: str) -> Path | None:
     # Try a few slug variants since naming differs per run.
     slug = run
-    candidates = {
-        slug,
-        run.split("_run")[0],
-        run.replace("_run", "_"),
-        run.replace("/", "_"),
-    }
-    for candidate in candidates:
+    for candidate in _candidate_eval_bases(slug):
         candidate_path = EVAL_DATASETS / f"{candidate}{suffix}"
         if candidate_path.exists():
             return candidate_path
     # Fallback: look for any file that starts with slug and ends with suffix.
+    prefixes = _candidate_eval_bases(slug)
     for candidate_path in sorted(EVAL_DATASETS.glob(f"*{suffix}")):
-        if candidate_path.name.startswith(slug.split("_run")[0]):
+        if any(candidate_path.name.startswith(prefix) for prefix in prefixes):
             return candidate_path
     return None
 
