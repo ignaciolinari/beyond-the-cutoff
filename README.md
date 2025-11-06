@@ -185,6 +185,16 @@ The script orchestrates three steps:
 
 Tune behaviour via `configs/default.yaml` → `dataset_generation` (counts per document, chunk limits, RNG seed, generator backend). Override paths or document caps with CLI flags like `--index-dir`, `--max-docs`, or `--output` when experimenting.
 
+### Offline Task Viewer
+
+Launch a Streamlit app to inspect the generated tasks next to their source documents. It reads both the curated dataset and the raw generator output so status/errors are visible while spot-checking.
+
+```bash
+streamlit run apps/offline_task_viewer.py
+```
+
+The sidebar exposes text boxes for the curated dataset and raw tasks JSONL paths (defaults to the evaluation artefacts under `evaluation/datasets/`). Use the document search to jump to a paper, filter by task type, and expand tasks to review prompts, responses, retrieved contexts, and metadata. The document column previews the corresponding paper text (first *n* characters, adjustable).
+
 ## Fine-Tuning Workflow
 
 - Launch training from Colab/Kaggle notebooks that load `evaluation/datasets/offline_dataset.jsonl`, apply LoRA/PEFT using the `fine_tuning` config block, and export adapter weights (e.g., `adapter.safetensors`).
