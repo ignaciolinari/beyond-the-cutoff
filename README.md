@@ -84,7 +84,6 @@ ollama pull qwen2.5:3b-instruct-q4_K_M
 ollama create qwen2-lora-science -f ollama/Modelfile
 # Additional models once the pipeline hardens
 ollama pull qwen2.5:7b-instruct-q4_K_M
-ollama pull phi4-mini:latest
 ```
 
 The bootstrap script installs both runtime and development dependencies in editable mode and wires up the `pre-commit` hook so formatting and linting run automatically. Re-run the script at any time to pick up dependency updates (pass `--no-dev` or `--no-pre-commit` if you want to opt out).

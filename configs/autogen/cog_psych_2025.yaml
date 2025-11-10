@@ -17,8 +17,8 @@ retrieval:
   chunking_strategy: sentences
   reranker_model: BAAI/bge-reranker-v2-m3
 fine_tuning:
-  # Hugging Face checkpoint used for LoRA training; quantize before deploying (Q4_k_M quantization).
-  base_model: microsoft/Phi-4-mini-instruct
+  # Hugging Face checkpoint used for LoRA training; quantize before deploying (Q4_K_M quantization).
+  base_model: Qwen/Qwen2.5-3B-Instruct
   adapter_output_dir: ../../outputs/adapters
   lora_rank: 16
   learning_rate: 0.0001
@@ -61,9 +61,9 @@ dataset_generation:
   min_citation_coverage: 0.2
 inference:
   provider: ollama
-  # Local inference runs the quantized Phi-4-mini build published via Ollama.
-  model: phi4-mini:latest
-  # Same as microsoft/Phi-4-mini-instruct but with Q4_k_M quantization.
+  # Local inference runs the quantized Qwen2.5 3B build published via Ollama.
+  model: qwen2.5:3b-instruct-q4_K_M
+  # Same as Qwen/Qwen2.5-3B-Instruct but with Q4_K_M quantization.
   host: http://localhost
   port: 11434
   timeout: 480.0

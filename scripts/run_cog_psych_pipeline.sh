@@ -39,7 +39,7 @@ export PYTORCH_ENABLE_MPS_FALLBACK="${PYTORCH_ENABLE_MPS_FALLBACK:-1}"
 # Ensure judge/generator model is available locally.
 if command -v ollama >/dev/null 2>&1; then
   ollama pull qwen2.5:7b-instruct-q4_K_M
-  ollama pull phi4-mini:latest
+  ollama pull qwen2.5:3b-instruct-q4_K_M
 else
   echo "Warning: ollama CLI not found; skipping model pull (ensure models are available)." >&2
 fi
