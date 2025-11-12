@@ -771,7 +771,8 @@ class OfflineDatasetGenerator:
                 "Use the numbered excerpts as explicit evidence. When more than one excerpt is relevant, cite each distinct snippet at least once using its [#] marker. "
                 "Write complete sentences grounded in the excerpt content, and avoid recycling the same citation for unrelated statements or fabricating references."
             )
-            top_k_override = 1
+            configured_top_k = getattr(self.config.retrieval, "top_k", 4)
+            top_k_override = max(2, int(configured_top_k)) if configured_top_k else 2
 
         prepared = self.pipeline.prepare_prompt(
             instruction_clean,

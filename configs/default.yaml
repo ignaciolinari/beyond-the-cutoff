@@ -16,7 +16,7 @@ retrieval:
   reranker_model: BAAI/bge-reranker-v2-m3
 fine_tuning:
   base_model: Qwen/Qwen2.5-0.5B-Instruct
-  adapter_output_dir: outputs/adapters
+  adapter_output_dir: ../outputs/adapters
   lora_rank: 16
   learning_rate: 0.0001
   batch_size: 4
@@ -28,10 +28,10 @@ evaluation:
     - citation_accuracy
     - bleu
     - bertscore
-  qa_dataset_path: evaluation/datasets/qa_pairs.jsonl
-  summary_dataset_path: evaluation/datasets/summaries.jsonl
-  offline_tasks_path: evaluation/datasets/offline_tasks.jsonl
-  offline_dataset_path: evaluation/datasets/offline_dataset.jsonl
+  qa_dataset_path: ../evaluation/datasets/qa_pairs.jsonl
+  summary_dataset_path: ../evaluation/datasets/summaries.jsonl
+  offline_tasks_path: ../evaluation/datasets/offline_tasks.jsonl
+  offline_dataset_path: ../evaluation/datasets/offline_dataset.jsonl
 dataset_generation:
   generator:
     provider: ollama
@@ -58,6 +58,8 @@ dataset_generation:
   parse_retries: 2
   citation_rewrite_attempts: 1
   min_citation_coverage: 0.2
+  output_dataset_path: ../evaluation/datasets/offline_dataset.jsonl
+  raw_tasks_path: ../evaluation/datasets/offline_tasks.jsonl
 inference:
   provider: ollama
   model: qwen2.5:0.5b-instruct-q4_K_M

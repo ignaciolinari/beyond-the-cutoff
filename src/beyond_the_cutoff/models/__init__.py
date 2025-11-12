@@ -34,6 +34,11 @@ def build_generation_client(config: InferenceConfig) -> LLMClient:
             host=config.host,
             port=config.port,
             timeout=config.timeout,
+            temperature=config.temperature,
+            top_p=config.top_p,
+            repeat_penalty=config.repetition_penalty,
+            num_predict=config.max_new_tokens,
+            stop_sequences=tuple(config.stop_sequences),
         )
     if provider in {"transformers", "hf", "huggingface"}:
         from .transformers_local import TransformersClient as _TransformersClient  # local import
