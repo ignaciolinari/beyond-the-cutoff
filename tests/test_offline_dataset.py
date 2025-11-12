@@ -44,6 +44,10 @@ class DummyGeneratorClient:
         self, prompt: str, *, stream: bool = False, options: Any | None = None
     ) -> dict[str, Any]:
         self.calls.append(prompt)
+        if "Rewritten answer with citations" in prompt:
+            return {
+                "response": "The answer reiterates the retrieval augmented generation findings and cites the numbered context explicitly [1]."
+            }
         payload = {
             "qa": [
                 {
@@ -61,6 +65,12 @@ class DummyGeneratorClient:
                 {
                     "instruction": "Which section discusses evaluation results?",
                     "answer": "The evaluation results are detailed in the third paragraph [1].",
+                }
+            ],
+            "contextualizations": [
+                {
+                    "instruction": "Explain how the authors position their work relative to other retrieval approaches.",
+                    "response": "The authors describe their retrieval augmented generation experiment and compare evaluation accuracy improvements with similar baselines [1].",
                 }
             ],
         }
@@ -102,6 +112,11 @@ def test_offline_dataset_generation(tmp_path: Path, monkeypatch: pytest.MonkeyPa
             "questions_per_document": 1,
             "summary_prompts_per_document": 1,
             "citation_prompts_per_document": 1,
+            "contextual_prompts_per_document": 1,
+            "min_questions_per_document": 1,
+            "min_summary_prompts_per_document": 1,
+            "min_citation_prompts_per_document": 1,
+            "min_contextual_prompts_per_document": 1,
             "max_documents": 1,
         }
     )
@@ -128,11 +143,12 @@ def test_offline_dataset_generation(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert counters["qa"] == 1
     assert counters["summaries"] == 1
     assert counters["citations"] == 1
+    assert counters["contextual"] == 1
 
     dataset_lines = [
         json.loads(line) for line in output_dataset.read_text(encoding="utf-8").strip().splitlines()
     ]
-    assert len(dataset_lines) == 3
+    assert len(dataset_lines) == 4
 
     qa_entry = next(item for item in dataset_lines if item["task_type"] == "qa")
     assert qa_entry["instruction"] == "What methodology does the paper use?"
@@ -149,6 +165,11 @@ def test_offline_dataset_generation(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     citation_meta = citation_entry["rag"]["citations"][0]
     assert citation_meta.get("section_title") is None
     assert "rendered_context" in citation_meta
+
+    contextual_entry = next(item for item in dataset_lines if item["task_type"] == "contextual")
+    assert contextual_entry["metadata"]["require_citations"]
+    assert contextual_entry["metadata"].get("context_map")
+    assert contextual_entry["rag"]["citations"], "Expected citations for contextual task"
 
     raw_payloads = [
         json.loads(line) for line in raw_tasks.read_text(encoding="utf-8").strip().splitlines()
@@ -211,6 +232,11 @@ def test_filters_documents_by_token_and_page_limits(
             "questions_per_document": 1,
             "summary_prompts_per_document": 1,
             "citation_prompts_per_document": 1,
+            "contextual_prompts_per_document": 0,
+            "min_questions_per_document": 1,
+            "min_summary_prompts_per_document": 1,
+            "min_citation_prompts_per_document": 1,
+            "min_contextual_prompts_per_document": 0,
             "max_document_tokens": 30,
             "max_document_pages": 5,
         }

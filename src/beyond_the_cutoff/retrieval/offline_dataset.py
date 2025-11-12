@@ -25,6 +25,7 @@ GENERATOR_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
     "qa": ("question", "answer"),
     "summaries": ("instruction", "response"),
     "citations": ("instruction", "answer"),
+    "contextualizations": ("instruction", "response"),
 }
 
 
@@ -53,6 +54,59 @@ class DocumentStats:
     text_path: Path
     page_count: int | None = None
     token_count: int | None = None
+
+
+@dataclass
+class DocumentMetadata:
+    """Lightweight container for structured document metadata."""
+
+    canonical_id: str | None = None
+    document_id: str | None = None
+    text_path: str | None = None
+    text_path_absolute: str | None = None
+    pages_path: str | None = None
+    title: str | None = None
+    summary: str | None = None
+    authors: list[str] = field(default_factory=list)
+    author_details: list[dict[str, Any]] = field(default_factory=list)
+    institutions: list[str] = field(default_factory=list)
+    arxiv_id: str | None = None
+    doi: str | None = None
+    journal_ref: str | None = None
+    categories: list[str] = field(default_factory=list)
+    primary_category: str | None = None
+    published: str | None = None
+    updated: str | None = None
+    page_count: int | None = None
+    token_count: int | None = None
+    links: dict[str, str] = field(default_factory=dict)
+    source_split: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = {
+            "canonical_id": self.canonical_id,
+            "document_id": self.document_id,
+            "text_path": self.text_path,
+            "text_path_absolute": self.text_path_absolute,
+            "pages_path": self.pages_path,
+            "title": self.title,
+            "summary": self.summary,
+            "authors": list(self.authors),
+            "author_details": list(self.author_details),
+            "institutions": list(self.institutions),
+            "arxiv_id": self.arxiv_id,
+            "doi": self.doi,
+            "journal_ref": self.journal_ref,
+            "categories": list(self.categories),
+            "primary_category": self.primary_category,
+            "published": self.published,
+            "updated": self.updated,
+            "page_count": self.page_count,
+            "token_count": self.token_count,
+            "links": dict(self.links),
+            "source_split": self.source_split,
+        }
+        return {key: value for key, value in payload.items() if value not in (None, [], {})}
 
 
 @dataclass
@@ -114,6 +168,7 @@ class OfflineDatasetGenerator:
         self._rng = random.Random(config.dataset_generation.seed)
         self._processed_root = config.paths.processed_data.resolve()
         self._document_stats_index = self._load_document_stats(self._processed_root)
+        self._document_metadata_index = self._load_document_metadata(config)
 
     @property
     def pipeline(self) -> RAGPipeline:
@@ -183,6 +238,296 @@ class OfflineDatasetGenerator:
 
         for key in keys:
             index[key] = stats_entry
+
+    def _load_document_metadata(self, config: ProjectConfig) -> dict[str, DocumentMetadata]:
+        processed_root = config.paths.processed_data.resolve()
+        raw_root = config.paths.raw_data.resolve()
+        manifest_path = processed_root / "manifest.json"
+        if not manifest_path.exists():
+            return {}
+
+        try:
+            manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception as exc:  # pragma: no cover - manifest read failures rare
+            logger.warning(
+                "Failed to load processed manifest for metadata from %s: %s", manifest_path, exc
+            )
+            return {}
+
+        documents = manifest_payload.get("documents")
+        if not isinstance(documents, list):
+            return {}
+
+        raw_metadata_index = self._collect_raw_metadata(raw_root)
+
+        metadata_index: dict[str, DocumentMetadata] = {}
+        for entry in documents:
+            if not isinstance(entry, dict):
+                continue
+            text_rel = entry.get("text_path")
+            if not isinstance(text_rel, str) or not text_rel:
+                continue
+            absolute_path = (processed_root / text_rel).resolve()
+            canonical_id = self._canonical_id_from_manifest(entry)
+            raw_metadata, source_split = raw_metadata_index.get(canonical_id, ({}, None))
+            profile = self._build_document_profile(
+                manifest_entry=entry,
+                canonical_id=canonical_id,
+                absolute_text_path=absolute_path,
+                raw_metadata=raw_metadata,
+                source_split=source_split,
+            )
+            self._register_document_metadata(metadata_index, absolute_path, text_rel, profile)
+
+        return metadata_index
+
+    def _collect_raw_metadata(
+        self, raw_root: Path
+    ) -> dict[str | None, tuple[dict[str, Any], str | None]]:
+        index: dict[str | None, tuple[dict[str, Any], str | None]] = {}
+        if not raw_root.exists():
+            return index
+
+        for split_dir in sorted(path for path in raw_root.iterdir() if path.is_dir()):
+            metadata_path = split_dir / "metadata.jsonl"
+            if not metadata_path.exists():
+                continue
+            with metadata_path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    record = line.strip()
+                    if not record:
+                        continue
+                    try:
+                        payload = json.loads(record)
+                    except json.JSONDecodeError:
+                        continue
+                    canonical_id = self._canonical_id_from_raw(payload)
+                    if canonical_id is None or canonical_id in index:
+                        continue
+                    index[canonical_id] = (payload, split_dir.name)
+        return index
+
+    def _register_document_metadata(
+        self,
+        index: dict[str, DocumentMetadata],
+        absolute_path: Path,
+        relative_path: str,
+        profile: DocumentMetadata,
+    ) -> None:
+        keys: set[str] = set()
+        keys.add(str(absolute_path))
+        try:
+            resolved = absolute_path.resolve()
+        except Exception:  # pragma: no cover - resolution failure unusual
+            resolved = absolute_path
+        keys.add(str(resolved))
+
+        rel_obj = Path(relative_path)
+        keys.add(relative_path)
+        keys.add(rel_obj.as_posix())
+        try:
+            keys.add(rel_obj.with_suffix("").as_posix())
+        except ValueError:
+            pass
+
+        for key in keys:
+            index[key] = profile
+
+    def _get_document_metadata(self, source_path: str) -> dict[str, Any] | None:
+        cached = self._document_metadata_index.get(source_path)
+        if cached is not None:
+            return cached.to_dict()
+
+        path = Path(source_path)
+        candidates: set[str] = {source_path}
+        try:
+            resolved = path.resolve()
+            candidates.add(str(resolved))
+            try:
+                rel = resolved.relative_to(self._processed_root)
+                candidates.add(rel.as_posix())
+                try:
+                    candidates.add(rel.with_suffix("").as_posix())
+                except ValueError:
+                    pass
+            except ValueError:
+                pass
+        except Exception:
+            resolved = None
+
+        for key in list(candidates):
+            matched = self._document_metadata_index.get(key)
+            if matched is not None:
+                for alias in candidates:
+                    self._document_metadata_index.setdefault(alias, matched)
+                return matched.to_dict()
+
+        return None
+
+    def _build_document_profile(
+        self,
+        *,
+        manifest_entry: Mapping[str, Any],
+        canonical_id: str | None,
+        absolute_text_path: Path,
+        raw_metadata: Mapping[str, Any],
+        source_split: str | None,
+    ) -> DocumentMetadata:
+        text_rel = manifest_entry.get("text_path")
+        pages_rel = manifest_entry.get("pages_path")
+        profile = DocumentMetadata(
+            canonical_id=canonical_id,
+            document_id=self._safe_str(manifest_entry.get("document_id")),
+            text_path=self._safe_str(text_rel),
+            text_path_absolute=str(absolute_text_path),
+            pages_path=self._safe_str(pages_rel),
+            title=self._safe_str(raw_metadata.get("title")),
+            summary=self._safe_str(raw_metadata.get("summary") or manifest_entry.get("summary")),
+            authors=self._string_list(raw_metadata.get("authors")),
+            author_details=self._author_details(raw_metadata),
+            institutions=self._extract_institutions(raw_metadata),
+            arxiv_id=self._safe_str(raw_metadata.get("arxiv_id")),
+            doi=self._safe_str(raw_metadata.get("doi")),
+            journal_ref=self._safe_str(raw_metadata.get("journal_ref")),
+            categories=self._string_list(raw_metadata.get("categories")),
+            primary_category=self._safe_str(raw_metadata.get("primary_category")),
+            published=self._safe_str(raw_metadata.get("published")),
+            updated=self._safe_str(raw_metadata.get("updated")),
+            page_count=self._coerce_int(manifest_entry.get("page_count")),
+            token_count=self._coerce_int(manifest_entry.get("token_count")),
+            links=self._build_links(raw_metadata),
+            source_split=source_split,
+        )
+
+        if not profile.summary and profile.title and profile.title != profile.summary:
+            abstract = self._safe_str(manifest_entry.get("abstract"))
+            if abstract:
+                profile.summary = abstract
+
+        stats_entry = self._document_stats_index.get(str(absolute_text_path))
+        if stats_entry is not None:
+            if profile.page_count is None:
+                profile.page_count = stats_entry.page_count
+            if profile.token_count is None:
+                profile.token_count = stats_entry.token_count
+
+        return profile
+
+    @staticmethod
+    def _build_links(raw_metadata: Mapping[str, Any]) -> dict[str, str]:
+        links: dict[str, str] = {}
+        if not isinstance(raw_metadata, Mapping):
+            return links
+        pdf_url = raw_metadata.get("pdf_url")
+        if isinstance(pdf_url, str) and pdf_url.strip():
+            links["pdf"] = pdf_url.strip()
+        abstract_url = raw_metadata.get("link")
+        if isinstance(abstract_url, str) and abstract_url.strip():
+            links["abstract"] = abstract_url.strip()
+        return links
+
+    @staticmethod
+    def _safe_str(value: Any) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
+    @staticmethod
+    def _string_list(value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            text = value.strip()
+            return [text] if text else []
+        if isinstance(value, list | tuple | set):
+            results: list[str] = []
+            for item in value:
+                text = str(item).strip()
+                if text:
+                    results.append(text)
+            return results
+        return []
+
+    @staticmethod
+    def _author_details(raw_metadata: Mapping[str, Any]) -> list[dict[str, Any]]:
+        details: list[dict[str, Any]] = []
+        if not isinstance(raw_metadata, Mapping):
+            return details
+        parsed = raw_metadata.get("authors_parsed")
+        if isinstance(parsed, list):
+            for entry in parsed:
+                if not isinstance(entry, list | tuple) or not entry:
+                    continue
+                last = str(entry[0]).strip() if len(entry) > 0 and entry[0] is not None else ""
+                first = str(entry[1]).strip() if len(entry) > 1 and entry[1] is not None else ""
+                affiliation = (
+                    str(entry[2]).strip() if len(entry) > 2 and entry[2] is not None else ""
+                )
+                name_parts = [part for part in (first, last) if part]
+                if not name_parts and last:
+                    name_parts = [last]
+                if not name_parts:
+                    continue
+                person = {"name": " ".join(name_parts)}
+                if affiliation:
+                    person["affiliation"] = affiliation
+                details.append(person)
+        return details
+
+    @staticmethod
+    def _extract_institutions(raw_metadata: Mapping[str, Any]) -> list[str]:
+        if not isinstance(raw_metadata, Mapping):
+            return []
+        institutions: set[str] = set()
+        parsed = raw_metadata.get("authors_parsed")
+        if isinstance(parsed, list):
+            for entry in parsed:
+                if not isinstance(entry, list | tuple) or len(entry) < 3:
+                    continue
+                affiliation = str(entry[2]).strip() if entry[2] is not None else ""
+                if affiliation:
+                    institutions.add(affiliation)
+        raw_aff = raw_metadata.get("affiliations")
+        if isinstance(raw_aff, Mapping):
+            for value in raw_aff.values():
+                text = str(value).strip()
+                if text:
+                    institutions.add(text)
+        elif isinstance(raw_aff, list | tuple):
+            for value in raw_aff:
+                text = str(value).strip()
+                if text:
+                    institutions.add(text)
+        elif isinstance(raw_aff, str):
+            text = raw_aff.strip()
+            if text:
+                institutions.add(text)
+        return sorted(institutions)
+
+    @staticmethod
+    def _canonical_id_from_raw(payload: Mapping[str, Any]) -> str | None:
+        if not isinstance(payload, Mapping):
+            return None
+        value = payload.get("canonical_id")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        arxiv_id = payload.get("arxiv_id")
+        if isinstance(arxiv_id, str) and arxiv_id.strip():
+            return arxiv_id.strip().split("v", 1)[0]
+        return None
+
+    @staticmethod
+    def _canonical_id_from_manifest(entry: Mapping[str, Any]) -> str | None:
+        if not isinstance(entry, Mapping):
+            return None
+        document_id = entry.get("document_id")
+        if isinstance(document_id, str) and document_id:
+            return Path(document_id).name
+        text_path = entry.get("text_path")
+        if isinstance(text_path, str) and text_path:
+            return Path(text_path).stem
+        return None
 
     def _get_document_stats(self, source_path: str) -> DocumentStats:
         cached = self._document_stats_index.get(source_path)
@@ -391,6 +736,7 @@ class OfflineDatasetGenerator:
             "qa": 0,
             "summaries": 0,
             "citations": 0,
+            "contextual": 0,
             "examples": 0,
             "documents_filtered": 0,
         }
@@ -597,6 +943,27 @@ class OfflineDatasetGenerator:
                 failure_reason = "empty_payload"
                 continue
 
+            minimum_deficits = self._missing_minimum_counts(parsed, dataset_cfg)
+            if minimum_deficits:
+                logger.warning(
+                    "Generator payload missing required counts for %s (attempt %d/%d): %s",
+                    source_path,
+                    attempt,
+                    attempts,
+                    minimum_deficits,
+                )
+                attempt_logs.append(
+                    {
+                        "attempt": attempt,
+                        "response": raw_text,
+                        "error": "insufficient_items",
+                        "details": minimum_deficits,
+                    }
+                )
+                parsed = None
+                failure_reason = "insufficient_items"
+                continue
+
             if attempt > 1:
                 logger.info(
                     "Recovered generator payload for %s after %d attempt(s)",
@@ -624,6 +991,7 @@ class OfflineDatasetGenerator:
         qa_limit = dataset_cfg.questions_per_document
         summary_limit = dataset_cfg.summary_prompts_per_document
         citation_limit = dataset_cfg.citation_prompts_per_document
+        context_limit = dataset_cfg.contextual_prompts_per_document
 
         for idx, item in enumerate(self._take(parsed.get("qa", []), qa_limit)):
             if not isinstance(item, Mapping):
@@ -691,6 +1059,28 @@ class OfflineDatasetGenerator:
             if example:
                 examples.append(example)
 
+        for idx, item in enumerate(self._take(parsed.get("contextualizations", []), context_limit)):
+            if not isinstance(item, Mapping):
+                continue
+            instruction = item.get("instruction") or item.get("prompt") or item.get("question")
+            response_text = item.get("response") or item.get("answer")
+            if not instruction or not response_text:
+                continue
+            example = self._build_example(
+                task_type="contextual",
+                instruction=instruction,
+                expected_response=response_text,
+                require_citations=True,
+                doc_index=doc_index,
+                task_index=idx,
+                run_id=run_id,
+                source_path=source_path,
+                selected_rows=selected_rows,
+                extra_metadata=item,
+            )
+            if example:
+                examples.append(example)
+
         examples, output_issues = self._validate_output_examples(examples)
         if output_issues:
             validation_notes.extend(output_issues)
@@ -720,7 +1110,8 @@ class OfflineDatasetGenerator:
         qa_items = payload.get("qa", [])
         summary_items = payload.get("summaries", [])
         citation_items = payload.get("citations", [])
-        return any(qa_items) or any(summary_items) or any(citation_items)
+        contextual_items = payload.get("contextualizations", [])
+        return any(qa_items) or any(summary_items) or any(citation_items) or any(contextual_items)
 
     @staticmethod
     def _load_processed_documents(tasks_path: Path) -> set[str]:
@@ -744,6 +1135,32 @@ class OfflineDatasetGenerator:
                         continue
                     processed.add(document)
         return processed
+
+    @staticmethod
+    def _missing_minimum_counts(payload: Mapping[str, Any], cfg: Any) -> dict[str, dict[str, int]]:
+        deficits: dict[str, dict[str, int]] = {}
+
+        def _count_items(key: str) -> int:
+            items = payload.get(key, [])
+            if isinstance(items, Sequence):
+                return len(items)
+            return 0
+
+        requirements = {
+            "qa": getattr(cfg, "min_questions_per_document", 0),
+            "summaries": getattr(cfg, "min_summary_prompts_per_document", 0),
+            "citations": getattr(cfg, "min_citation_prompts_per_document", 0),
+            "contextualizations": getattr(cfg, "min_contextual_prompts_per_document", 0),
+        }
+
+        for key, required in requirements.items():
+            if required <= 0:
+                continue
+            observed = _count_items(key)
+            if observed < required:
+                deficits[key] = {"required": int(required), "observed": observed}
+
+        return deficits
 
     def _build_example(
         self,
@@ -808,6 +1225,19 @@ class OfflineDatasetGenerator:
             metadata["generator_metadata"] = dict(extra_metadata)
         if enforcement_meta:
             metadata["citation_enforcement"] = enforcement_meta
+
+        if prepared.get("retrieved"):
+            metadata["context_map"] = self._build_context_map(prepared["retrieved"])
+        raw_contexts = prepared.get("raw_contexts")
+        if isinstance(raw_contexts, list) and raw_contexts:
+            metadata["raw_contexts"] = list(raw_contexts)
+        extra_block = prepared.get("extra_instructions")
+        if isinstance(extra_block, str) and extra_block.strip():
+            metadata["retrieval_extra_instructions"] = extra_block.strip()
+
+        profile = self._get_document_metadata(source_path)
+        if profile:
+            metadata["paper_profile"] = profile
 
         return OfflineExample(
             task_id=str(uuid.uuid4()),
@@ -965,6 +1395,26 @@ class OfflineDatasetGenerator:
                 break
         return result
 
+    @staticmethod
+    def _build_context_map(retrieved_records: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+        context_map: list[dict[str, Any]] = []
+        for idx, rec in enumerate(retrieved_records, start=1):
+            entry = {
+                "index": rec.get("ordinal", idx),
+                "chunk_id": rec.get("id"),
+                "source_path": rec.get("source_path"),
+                "page": rec.get("page"),
+                "section_title": rec.get("section_title"),
+                "token_start": rec.get("token_start"),
+                "token_end": rec.get("token_end"),
+                "rendered_context": rec.get("rendered_context"),
+                "score": rec.get("score"),
+                "similarity_score": rec.get("similarity_score"),
+                "reranker_score": rec.get("reranker_score"),
+            }
+            context_map.append(entry)
+        return context_map
+
     def _serialize_chunks(self, rows: Sequence[MappingRow], max_chars: int) -> list[dict[str, Any]]:
         return [
             {
@@ -986,22 +1436,81 @@ class OfflineDatasetGenerator:
         rows: Sequence[MappingRow],
         cfg: Any,
     ) -> str:
+        def _range_phrase(noun: str, minimum: int, maximum: int) -> str:
+            if maximum <= 0:
+                return f"0 {noun}"
+            if minimum <= 0:
+                return f"up to {maximum} {noun}"
+            if minimum == maximum:
+                return f"{maximum} {noun}"
+            return f"{minimum} to {maximum} {noun}"
+
         preamble = (
             "You are assisting in building a dataset for a retrieval-augmented research assistant. "
             "Given the numbered excerpts from a scientific paper, create diverse tasks."
         )
+        qa_phrase = _range_phrase(
+            "question-answer pairs", cfg.min_questions_per_document, cfg.questions_per_document
+        )
+        summary_phrase = _range_phrase(
+            "summary instructions",
+            cfg.min_summary_prompts_per_document,
+            cfg.summary_prompts_per_document,
+        )
+        context_phrase = _range_phrase(
+            "contextualization prompts that capture broader themes or connections",
+            cfg.min_contextual_prompts_per_document,
+            cfg.contextual_prompts_per_document,
+        )
+        citation_phrase = _range_phrase(
+            "citation-check tasks",
+            cfg.min_citation_prompts_per_document,
+            cfg.citation_prompts_per_document,
+        )
         instructions = (
-            f"Produce up to {cfg.questions_per_document} question-answer pairs, "
-            f"{cfg.summary_prompts_per_document} summary instructions, and "
-            f"{cfg.citation_prompts_per_document} citation-check tasks. "
-            "Answers must be grounded in the text. For citation tasks, ensure responses contain inline [#] markers that reference the numbered excerpts. Return ONLY valid JSON with keys 'qa', 'summaries', 'citations'."
+            f"Produce {qa_phrase}, {summary_phrase}, {context_phrase}, and {citation_phrase}. "
+            "Vary difficulty and focus so the set covers methods, results, limitations, and implications. "
+            "All answers must be grounded in the text. Citation and contextualization responses must include inline [#] markers that reference the numbered excerpts, using multiple distinct markers when more than one excerpt is relevant. "
+            "Return ONLY valid JSON with keys 'qa', 'summaries', 'contextualizations', and 'citations'."
         )
         schema = (
-            "- Each item in 'qa' must include 'question' and 'answer'.\n"
-            "- Each item in 'summaries' must include 'instruction' and 'response'.\n"
+            "- Each item in 'qa' must include 'question' and 'answer'. Answers should cite supporting excerpts with inline [#] markers.\n"
+            "- Each item in 'summaries' must include 'instruction' and 'response', covering contributions, methods, and notable limitations.\n"
+            "- Each item in 'contextualizations' must include 'instruction' and 'response'. Use these to relate the paper to broader themes, contrasting approaches, or key author/institution highlights. Responses must include inline citations for every supported claim.\n"
             "- Each item in 'citations' must include non-empty 'instruction' and 'answer'. Citation answers must cite relevant excerpts using inline markers such as [1], [2] and should draw on multiple distinct snippets when evidence exists.\n"
             "- Avoid null values. If a field is unknown, omit the item instead of returning null.\n"
             "- Use concise academic tone. Avoid speculative statements."
+        )
+
+        few_shot_examples = (
+            "Example output (use it as a style guide, but do not reuse the wording):\n"
+            "{\n"
+            '  "qa": [\n'
+            "    {\n"
+            '      "question": "What retrieval backbone do the authors deploy?",\n'
+            '      "answer": "They fine-tune a bi-encoder and then rerank with a cross-encoder calibrated on the validation split [1][2]."\n'
+            "    }\n"
+            "  ],\n"
+            '  "summaries": [\n'
+            "    {\n"
+            '      "instruction": "Write a concise summary covering objectives, methods, and findings.",\n'
+            '      "response": "The paper proposes a lightweight retrieval pipeline, couples it with local generation, and reports significant accuracy gains on scientific benchmarks [1][3]."\n'
+            "    }\n"
+            "  ],\n"
+            '  "contextualizations": [\n'
+            "    {\n"
+            '      "instruction": "Relate the authors\' approach to prior institution-scale retrieval systems.",\n'
+            '      "response": "The authors contrast their decentralized deployment with earlier centralized retrieval services, highlighting alignment with institutional compliance requirements [2][3]."\n'
+            "    }\n"
+            "  ],\n"
+            '  "citations": [\n'
+            "    {\n"
+            '      "instruction": "Identify the paragraph describing evaluation metrics.",\n'
+            '      "answer": "The evaluation metrics and reporting strategy appear in the section titled ‘Results and Analysis’ [3]."\n'
+            "    }\n"
+            "  ]\n"
+            "}\n"
+            "In your own output, ensure every [#] marker refers to an existing excerpt number from this document, and only add markers when the claim is explicitly supported. Never include citation markers inside questions or instructions."
         )
         context_lines = []
         for idx, row in enumerate(rows, start=1):
@@ -1018,6 +1527,7 @@ class OfflineDatasetGenerator:
 
         return (
             f"{preamble}\n{instructions}\n{schema}\n\n"
+            f"{few_shot_examples}\n\n"
             f"Document: {source_path}\n"
             f"Context Excerpts:\n{context_block}\n\n"
             "Return the JSON now."
@@ -1179,6 +1689,7 @@ class OfflineDatasetGenerator:
         data.setdefault("qa", [])
         data.setdefault("summaries", [])
         data.setdefault("citations", [])
+        data.setdefault("contextualizations", [])
         return data
 
     def _validate_generator_payload(

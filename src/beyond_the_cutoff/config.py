@@ -10,7 +10,7 @@ try:  # pragma: no cover - optional dependency
     OmegaConf = import_module("omegaconf").OmegaConf
 except ModuleNotFoundError:  # pragma: no cover - optional dependency
     OmegaConf = None
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "configs" / "default.yaml"
@@ -200,6 +200,11 @@ class DatasetGenerationConfig(BaseModel):
     questions_per_document: int = Field(default=4, ge=0)
     summary_prompts_per_document: int = Field(default=1, ge=0)
     citation_prompts_per_document: int = Field(default=1, ge=0)
+    contextual_prompts_per_document: int = Field(default=1, ge=0)
+    min_questions_per_document: int = Field(default=3, ge=0)
+    min_summary_prompts_per_document: int = Field(default=1, ge=0)
+    min_citation_prompts_per_document: int = Field(default=1, ge=0)
+    min_contextual_prompts_per_document: int = Field(default=1, ge=0)
     max_chunks_per_document: int = Field(default=4, ge=1)
     max_chars_per_chunk: int = Field(default=1200, ge=256)
     max_documents: int | None = Field(default=None, ge=1)
@@ -255,6 +260,24 @@ class DatasetGenerationConfig(BaseModel):
         if candidate <= 0:
             raise ValueError("must be greater than zero or null")
         return candidate
+
+    @model_validator(mode="after")
+    def _validate_minimums(self) -> DatasetGenerationConfig:
+        if self.min_questions_per_document > self.questions_per_document:
+            raise ValueError("min_questions_per_document cannot exceed questions_per_document")
+        if self.min_summary_prompts_per_document > self.summary_prompts_per_document:
+            raise ValueError(
+                "min_summary_prompts_per_document cannot exceed summary_prompts_per_document"
+            )
+        if self.min_citation_prompts_per_document > self.citation_prompts_per_document:
+            raise ValueError(
+                "min_citation_prompts_per_document cannot exceed citation_prompts_per_document"
+            )
+        if self.min_contextual_prompts_per_document > self.contextual_prompts_per_document:
+            raise ValueError(
+                "min_contextual_prompts_per_document cannot exceed contextual_prompts_per_document"
+            )
+        return self
 
 
 class ProjectConfig(BaseModel):

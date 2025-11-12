@@ -121,6 +121,7 @@ def main() -> None:
     summary = (
         f"Processed {counters.get('documents', 0)} documents | "
         f"QA: {counters.get('qa', 0)} | Summaries: {counters.get('summaries', 0)} | "
+        f"Contextual: {counters.get('contextual', 0)} | "
         f"Citation checks: {counters.get('citations', 0)}"
     )
     if counters.get("documents_filtered"):

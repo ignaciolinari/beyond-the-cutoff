@@ -46,10 +46,15 @@ dataset_generation:
     top_p: 0.95
     repetition_penalty: 1.05
     stop_sequences: []
-  questions_per_document: 4
-  summary_prompts_per_document: 1
-  citation_prompts_per_document: 1
-  max_chunks_per_document: 6
+  questions_per_document: 8
+  summary_prompts_per_document: 2
+  citation_prompts_per_document: 2
+  contextual_prompts_per_document: 2
+  min_questions_per_document: 6
+  min_summary_prompts_per_document: 2
+  min_citation_prompts_per_document: 1
+  min_contextual_prompts_per_document: 1
+  max_chunks_per_document: 8
   max_chars_per_chunk: 1600
   max_documents: null
   max_document_tokens: 25000
