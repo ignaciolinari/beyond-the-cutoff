@@ -1,5 +1,5 @@
 provider: ollama
-model: qwen2-lora-science:latest
+model: qwen2.5:0.5b-instruct-q4_K_M
 host: http://localhost
 port: 11434
 timeout: 480.0

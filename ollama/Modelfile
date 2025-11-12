@@ -1,0 +1,25 @@
+# Modelfile template for serving the 0.5B lora_science adapter via Ollama
+#
+# Convert your merged Hugging Face checkpoint to GGUF (e.g., llama.cpp `convert`
+# and `quantize`) and point FROM at the resulting file. Keep this file as the
+# active adapter during the 0.5B experiment sequence, then duplicate it when you
+# prepare the 3B LoRA run.
+
+FROM /Users/gscm/Documents/GitHub/beyond-the-cutoff/outputs/lora_science_0p5/merged_full_model/Qwen2.5-0.5B-lora_science_0p5.Q4_K_M.gguf
+
+PARAMETER temperature 0
+PARAMETER top_p 0.9
+PARAMETER repeat_penalty 1.05
+PARAMETER num_ctx 4096
+PARAMETER stop "<|im_start|>"
+PARAMETER stop "<|im_end|>"
+
+TEMPLATE """
+{{- if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{- end }}{{- range .Messages }}<|im_start|>{{ .Role }}
+{{ .Content }}<|im_end|>
+{{- end }}<|im_start|>assistant
+"""
+
+SYSTEM "You are a scientific research assistant. When the prompt includes retrieved context snippets or explicit citation markers, cite them inline like [1], [2], [3], etc. If no supporting context is supplied, answer in your own words without fabricated citations."

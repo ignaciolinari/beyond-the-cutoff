@@ -35,12 +35,12 @@ def _serialise_inference_config(config: InferenceConfig) -> dict[str, Any]:
 
 def _serialise_project_config(config: ProjectConfig) -> dict[str, Any]:
     return {
-        "project": config.project.model_dump(),
-        "paths": config.paths.model_dump(),
-        "retrieval": config.retrieval.model_dump(),
-        "fine_tuning": config.fine_tuning.model_dump(),
-        "evaluation": config.evaluation.model_dump(),
-        "dataset_generation": config.dataset_generation.model_dump(),
+        "project": config.project.model_dump(mode="json"),
+        "paths": config.paths.model_dump(mode="json"),
+        "retrieval": config.retrieval.model_dump(mode="json"),
+        "fine_tuning": config.fine_tuning.model_dump(mode="json"),
+        "evaluation": config.evaluation.model_dump(mode="json"),
+        "dataset_generation": config.dataset_generation.model_dump(mode="json"),
         "inference": _serialise_inference_config(config.inference),
     }
 

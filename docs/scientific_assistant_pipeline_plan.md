@@ -1,6 +1,6 @@
 # Scientific Assistant Pipeline Plan
 
-_Last updated: 2025-11-01_
+_Last updated: 2025-11-11_
 
 ## 1. Scope Alignment & Ownership
 - **Objective**: Adapt the "RAG vs Fine-tuning" pipeline to a research-assistant focused on post-cutoff scientific literature.
@@ -49,11 +49,11 @@ _Last updated: 2025-11-01_
 
 ## 4. Model Adaptation Portfolio
 ### 4.1 Experiment Matrix
-- Define baseline configurations:
-  1. RAG-only (current pipeline).
-  2. Fine-tune-only (`Qwen/Qwen2-0.5B-Instruct` with LoRA adapters).
-  3. Hybrid (fine-tuned + RAG retrieval).
-  4. Optional larger baselines (Phi-3, Mistral, or cloud API) for comparison.
+- Define baseline configurations for each model size, running the 0.5B trilogy to completion before repeating with 3B:
+  1. RAG-only (`qwen2.5:0.5b-instruct` first, then `qwen2.5:3b-instruct-q4_K_M`).
+  2. Fine-tune-only (LoRA on `Qwen/Qwen2.5-0.5B-Instruct`, then `Qwen/Qwen2.5-3B-Instruct`).
+  3. Hybrid (fine-tuned checkpoints merged back into matching-size RAG pipeline).
+  4. Optional larger baselines (`qwen2.5:7b-instruct-q4_K_M`, Mixtral, or cloud API) for comparison once both series finish.
 
 ### 4.2 Data Splits & Governance
 - Specify train/validation/test splits drawn from offline dataset (e.g., 70/15/15 by paper or task ID).
@@ -76,7 +76,7 @@ _Last updated: 2025-11-01_
   - Judge models (see 5.2) for qualitative scoring.
 
 ### 5.2 Judge Strategy
-- Choose default local judge (e.g., `qwen2.5:3b-instruct-q4_K_M`) and optional cloud judge (GPT-4o) for calibration.
+- Choose default local judge (e.g., `qwen2.5:7b-instruct-q4_K_M`) and optional cloud judge (GPT-4o) for calibration.
 - Draft evaluation prompts emphasizing scientific grounding and citation verification.
 - Store judge configuration specs under `configs/judges/`.
 

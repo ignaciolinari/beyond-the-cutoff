@@ -1,6 +1,6 @@
 # Evaluation & Reporting Plan
 
-_Last updated: 2025-11-01_
+_Last updated: 2025-11-11_
 
 ## Metric Capture
 - Implement CLI `python scripts/evaluate_models.py` to:
@@ -17,7 +17,7 @@ _Last updated: 2025-11-01_
 - Store logs and artifacts under `evaluation/results/nightly/<YYYYMMDD>/`.
 
 ## Judge Selection & Calibration
-- Default local judge: `qwen2.5:3b-instruct-q4_K_M` via Ollama (no API cost).
+- Default local judge: `qwen2.5:7b-instruct-q4_K_M` via Ollama (no API cost).
 - Calibration judge: GPT-4o (API) sampled on 25% of evaluation set.
 - Calibration protocol:
   1. Run both judges on identical subset.

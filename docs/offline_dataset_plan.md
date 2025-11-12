@@ -1,6 +1,6 @@
 # Offline Dataset Configuration & QA Plan
 
-_Last updated: 2025-11-02_
+_Last updated: 2025-11-11_
 
 ## Goals
 - Produce reusable QA, summary, and citation-check examples tailored to post-cutoff scientific papers.
@@ -8,7 +8,7 @@ _Last updated: 2025-11-02_
 - Filter out noisy or formula-heavy chunks that degrade downstream fine-tuning quality.
 
 ## Configuration Baseline
-- Generator model: `qwen2:1.5b-instruct-q4_0` (override via CLI flag when experimenting).
+- Generator model: `qwen2.5:7b-instruct-q4_K_M` (override via CLI flag when experimenting).
 - Default options to record per run: temperature, top_p, max_new_tokens, RNG seed.
 - Output paths: inherit from `dataset_generation` config (`evaluation/datasets/offline_dataset.jsonl`, `evaluation/datasets/offline_tasks.jsonl`).
 

@@ -1,6 +1,6 @@
 # Scientific Assistant Readiness Guide
 
-_Last updated: 2025-11-01_
+_Last updated: 2025-11-11_
 
 ## Key User Scenarios
 1. **Literature QA**: Answer targeted questions about post-cutoff findings with citations.
@@ -33,7 +33,7 @@ _Last updated: 2025-11-01_
 ## Demo Readiness Checklist
 - [ ] Latest corpus ingested and QA report published.
 - [ ] Offline dataset refreshed and validated.
-- [ ] Fine-tuned model registered with Ollama (`qwen2-science-lora`).
+- [ ] Fine-tuned model registered with Ollama (start with `qwen2.5:0.5b-instruct{,-q4_K_M}` for the first trilogy, then promote the matching 3B tag or custom LoRA build).
 - [ ] Evaluation report shows promoted model surpassing thresholds.
 - [ ] API endpoints tested via `scripts/ask.py` and curl samples.
 - [ ] README quickstart updated with new workflow instructions.

@@ -15,4 +15,4 @@ runs:
     model_config: configs/rag_baseline_ollama.yaml
   - label: lora_science_v1
     model_config: configs/lora_science_v1_ollama.yaml
-    judge_inference: configs/judges/ollama_qwen3b.yaml
+    judge_inference: configs/judges/ollama_qwen7b.yaml

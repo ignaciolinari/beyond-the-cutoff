@@ -7,11 +7,11 @@ Each YAML file in this directory defines a named retrieval configuration used by
 id: qa_default
 description: Literature QA preset for post-cutoff papers
 settings:
-  embedding_model: sentence-transformers/all-MiniLM-L6-v2
+  embedding_model: BAAI/bge-m3
   chunk_size: 512
   chunk_overlap: 64
   top_k: 6
-  reranker_model: cross-encoder/ms-marco-MiniLM-L-6-v2
+  reranker_model: BAAI/bge-reranker-v2-m3
   max_context_chars: 6000
 ```
 

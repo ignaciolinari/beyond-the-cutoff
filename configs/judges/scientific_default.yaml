@@ -9,7 +9,7 @@ prompt: |
   necessary evidence is missing, penalize the response.
 
   Review protocol:
-  1. Scan the answer for inline bracketed citations (e.g., [1]). Ensure every marker corresponds to
+  1. Scan the answer for inline bracketed citations (e.g., [1], [2], etc.). Ensure every marker corresponds to
      a supplied context and that all required contexts are cited.
   2. Check that each factual statement is directly supported by at least one cited context. Mark
      contradictions, speculation, or missing evidence as factual errors.

@@ -39,7 +39,7 @@ _OPTION_KEYS = {"max_new_tokens", "temperature", "top_p", "repetition_penalty"}
 class TransformersClient:
     """Thin wrapper around ``AutoModelForCausalLM.generate`` suitable for local tests."""
 
-    model: str = "Qwen/Qwen2-0.5B-Instruct"
+    model: str = "Qwen/Qwen2.5-0.5B-Instruct"
     device: str = "auto"
     torch_dtype: str | None = "auto"
     max_new_tokens: int = 512
@@ -48,9 +48,9 @@ class TransformersClient:
     repetition_penalty: float = 1.05
     stop_sequences: Iterable[str] = field(default_factory=list)
 
-    _tokenizer: AutoTokenizer = field(init=False, repr=False)
-    _model: AutoModelForCausalLM = field(init=False, repr=False)
-    _device: torch.device = field(init=False, repr=False)
+    _tokenizer: Any = field(init=False, repr=False)
+    _model: Any = field(init=False, repr=False)
+    _device: Any = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         if torch is None:
@@ -155,7 +155,7 @@ class TransformersClient:
         return [str(value)]
 
     @staticmethod
-    def _resolve_device(device: str) -> torch.device:
+    def _resolve_device(device: str) -> Any:
         if torch is None:  # pragma: no cover - defensive guard
             raise RuntimeError(
                 "PyTorch is required to resolve devices for the Transformers backend."
@@ -170,7 +170,7 @@ class TransformersClient:
         return torch.device(normalized)
 
     @staticmethod
-    def _resolve_dtype(dtype: str | None) -> torch.dtype | None:
+    def _resolve_dtype(dtype: str | None) -> Any:
         if torch is None:  # pragma: no cover - defensive guard
             raise RuntimeError(
                 "PyTorch is required to resolve dtypes for the Transformers backend."

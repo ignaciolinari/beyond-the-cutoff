@@ -10,8 +10,8 @@ def test_load_default_config() -> None:
     assert Path(cfg.paths.raw_data).is_absolute()
     assert cfg.retrieval.chunk_size > 0
     assert cfg.retrieval.top_k >= 1
-    assert cfg.fine_tuning.base_model.endswith("Qwen2-0.5B-Instruct")
+    assert cfg.fine_tuning.base_model.endswith("Qwen2.5-0.5B-Instruct")
     assert cfg.dataset_generation.generator.provider == "ollama"
-    assert cfg.dataset_generation.generator.model == "qwen2:1.5b-instruct-q4_0"
+    assert cfg.dataset_generation.generator.model == "qwen2.5:7b-instruct-q4_K_M"
     assert cfg.inference.provider == "ollama"
-    assert cfg.inference.model == "qwen2-lora-science:latest"
+    assert cfg.inference.model == "qwen2.5:0.5b-instruct-q4_K_M"

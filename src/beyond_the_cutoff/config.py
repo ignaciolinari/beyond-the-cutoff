@@ -56,7 +56,7 @@ class RetrievalConfig(BaseModel):
     """Settings for the retrieval pipeline."""
 
     vector_store: str = Field(default="faiss")
-    embedding_model: str = Field(default="sentence-transformers/all-MiniLM-L6-v2")
+    embedding_model: str = Field(default="BAAI/bge-m3")
     embedding_batch_size: int = Field(default=8, ge=1)
     embedding_device: str = Field(default="auto")
     chunk_size: int = Field(default=512)
@@ -69,13 +69,13 @@ class RetrievalConfig(BaseModel):
     # "sentences" (packs full sentences up to chunk_size tokens)
     chunking_strategy: str = Field(default="words")
     # Optional cross-encoder reranker model name (empty disables reranking)
-    reranker_model: str = Field(default="")
+    reranker_model: str = Field(default="BAAI/bge-reranker-v2-m3")
 
 
 class FineTuningConfig(BaseModel):
     """Fine-tuning hyperparameters."""
 
-    base_model: str = Field(default="Qwen/Qwen2-0.5B-Instruct")
+    base_model: str = Field(default="Qwen/Qwen2.5-0.5B-Instruct")
     adapter_output_dir: Path = Field(default=Path("outputs/adapters"))
     lora_rank: int = Field(default=16, ge=1)
     learning_rate: float = Field(default=1e-4, gt=0)
@@ -141,7 +141,7 @@ class InferenceConfig(BaseModel):
     """Settings for local inference backends (defaults to Ollama)."""
 
     provider: str = Field(default="ollama")
-    model: str = Field(default="qwen2-lora-science:latest")
+    model: str = Field(default="qwen2.5:0.5b-instruct-q4_K_M")
     host: str = Field(default="http://localhost")
     port: int | None = Field(default=11434)
     timeout: float = Field(default=480.0, gt=0.0)
@@ -173,11 +173,11 @@ class InferenceConfig(BaseModel):
 
 
 def _default_generator_config() -> InferenceConfig:
-    """Return the default generator backend (1.5B Ollama tag)."""
+    """Return the default generator backend (7B Ollama tag)."""
 
     return InferenceConfig(
         provider="ollama",
-        model="qwen2:1.5b-instruct-q4_0",
+        model="qwen2.5:7b-instruct-q4_K_M",
         host="http://localhost",
         port=11434,
         timeout=120.0,

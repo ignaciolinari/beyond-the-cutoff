@@ -49,7 +49,7 @@ The CLI respects arXiv rate limits, writes metadata to JSONL/CSV, persists a man
 
 - Fine-tuning: lightweight instruction tuning via LoRA / PEFT. Training runs on cloud notebooks (e.g., Kaggle, Colab) using GPUs.
 - RAG: local retrieval pipeline with FAISS or Chroma backends.
-- Candidate models: prioritize lightweight checkpoints (≤4B parameters) such as Phi-3 mini / Phi-3.5 mini, Qwen 2.5 3B, or similar Apple-optimized MLX builds. Larger 7B–8B models (e.g., Llama 3 Instruct, Mistral) should only be used when available in 4-bit quantized form and with ample memory headroom.
+- Candidate models: prioritize the Qwen2.5 family (`Qwen/Qwen2.5-0.5B-Instruct` for LoRA experiments, `Qwen/Qwen2.5-3B-Instruct` for higher-quality assistants) and their matching Ollama builds. Reserve the 7B quantized tag (`qwen2.5:7b-instruct-q4_K_M`) for generation and judging when additional headroom is needed.
 - Fine-tuned checkpoints synchronized back to the local environment for evaluation.
 
 ### 3. Evaluation Framework
@@ -75,14 +75,12 @@ The CLI respects arXiv rate limits, writes metadata to JSONL/CSV, persists a man
 python scripts/bootstrap_env.py
 source .venv/bin/activate
 # Optional: seed a local Hugging Face cache for Colab/Kaggle syncs
-python scripts/prefetch_models.py --cache-dir .cache/huggingface Qwen/Qwen2-0.5B-Instruct
-# Pull the Ollama baselines (0.5B assistant, 1.5B generator, 3B judge) for pipeline testing
-ollama pull qwen2:0.5b-instruct-q4_0
-ollama pull qwen2:1.5b-instruct-q4_0
+python scripts/prefetch_models.py --cache-dir .cache/huggingface \
+  Qwen/Qwen2.5-0.5B-Instruct \
+  Qwen/Qwen2.5-3B-Instruct
+# Pull the Ollama baselines (0.5B assistant, 3B assistant, 7B generator/judge)
+ollama pull qwen2.5:0.5b-instruct
 ollama pull qwen2.5:3b-instruct-q4_K_M
-# Build/refresh the LoRA assistant alias used by the default config
-ollama create qwen2-lora-science -f ollama/Modelfile
-# Additional models once the pipeline hardens
 ollama pull qwen2.5:7b-instruct-q4_K_M
 ```
 
@@ -90,7 +88,7 @@ The bootstrap script installs both runtime and development dependencies in edita
 
 ### Local Inference (Ollama by default)
 
-With Ollama running locally, the default configuration calls the `qwen2-lora-science:latest` tag for retrieval-augmented answering:
+With Ollama running locally, the default configuration calls the `qwen2.5:0.5b-instruct` tag for retrieval-augmented answering during the first experiment sequence:
 
 ```python
 from beyond_the_cutoff import load_config
@@ -102,15 +100,15 @@ response = client.generate("Summarise the latest findings on generative retrieva
 print(response["response"])
 ```
 
-The default configuration connects to the Ollama daemon at `http://localhost:11434` and queries `qwen2-lora-science:latest`. Override `configs/default.yaml` (or pass a custom config such as the original baseline) to toggle providers, sampling parameters, or model tags.
+The default configuration connects to the Ollama daemon at `http://localhost:11434` and queries `qwen2.5:0.5b-instruct`. Override `configs/default.yaml` (or pass a custom config such as the original baseline) to toggle providers, sampling parameters, or model tags. Swap the `inference.model` to `qwen2.5:3b-instruct-q4_K_M` once the 0.5B RAG/FT/Hybrid experiments finish so you can rerun the trilogy at 3B capacity.
 
 ## Pipeline Workflow
 
 - **Ingestion/indexing**: run `python scripts/ingest_and_index.py --config configs/default.yaml` to turn the downloaded PDFs into text chunks and rebuild the FAISS index under `data/external/index`. Each run refreshes `data/processed/manifest.json` and writes metadata catalog exports under `data/processed/metadata_catalog*` for downstream analysis/versioning.
-- **Offline tasks**: once the index exists, call `python scripts/generate_offline_dataset.py --config configs/default.yaml` so the `qwen2:1.5b-instruct-q4_0` generator can produce QA/summaries/citation tasks backed by those chunks.
-- **Fine-tuning**: take the resulting JSONL plus your assistant prompts into Colab/Kaggle, fine-tune `Qwen/Qwen2-0.5B-Instruct` with LoRA, export the adapter/full weights, and keep the safetensors checkpoints.
-- **Deployment**: convert that tuned checkpoint to GGUF (e.g., `llama.cpp convert` + `quantize`) and recreate the Ollama alias via `ollama create qwen2-lora-science -f ollama/Modelfile`; pull the 1.5B/3B Qwen tags locally via `ollama pull` for generation/judging.
-- **Evaluation**: reuse `python scripts/ingest_and_index.py` results plus the evaluation datasets with the 3B judge (`qwen2.5:3b-instruct-q4_K_M`) or a cloud grader by flipping the provider/model in the config.
+- **Offline tasks**: once the index exists, call `python scripts/generate_offline_dataset.py --config configs/default.yaml` so the `qwen2.5:7b-instruct-q4_K_M` generator can produce QA/summaries/citation tasks backed by those chunks.
+- **Fine-tuning**: take the resulting JSONL plus your assistant prompts into Colab/Kaggle, fine-tune `Qwen/Qwen2.5-0.5B-Instruct` with LoRA (optional), export the adapter/full weights, and keep the safetensors checkpoints.
+- **Deployment**: convert tuned checkpoints to GGUF (e.g., `llama.cpp convert` + `quantize`) and, if desired, register custom Ollama aliases; the default pipeline now calls the stock Qwen2.5 tags directly.
+- **Evaluation**: reuse `python scripts/ingest_and_index.py` results plus the evaluation datasets with the 7B judge (`qwen2.5:7b-instruct-q4_K_M`) or a cloud grader by flipping the provider/model in the config.
 - **Verification**: after each stage, run `pytest tests/test_config.py` (and the broader suite once the pipeline is populated) to ensure the configuration and adapters remain wired correctly.
 
 ## Paper Assistant (RAG) Quickstart
@@ -155,13 +153,13 @@ Configuration knobs:
 - `retrieval.top_k`: how many chunks to retrieve
 - `retrieval.max_context_chars`: max context passed into the prompt
 - `retrieval.chunking_strategy`: `words` (fast) or `sentences` (section-friendlier)
-- `retrieval.embedding_model`: defaults to `BAAI/bge-small-en-v1.5`
-- `retrieval.reranker_model`: optional cross-encoder for reranking (e.g., `cross-encoder/ms-marco-MiniLM-L-6-v2`)
+- `retrieval.embedding_model`: defaults to `BAAI/bge-m3`
+- `retrieval.reranker_model`: optional cross-encoder for reranking (default `BAAI/bge-reranker-v2-m3`)
 
 Notes:
-- Uses `BAAI/bge-small-en-v1.5` for embeddings by default; adjust for quality/speed.
+- Uses `BAAI/bge-m3` for embeddings by default; adjust for quality/speed.
 - If a reranker is configured, top-k is reranked before prompting (with warnings logged when the reranker fails).
-- Answers are generated via the configured backend (default: Ollama with `qwen2-lora-science:latest`).
+- Answers are generated via the configured backend (default: Ollama with `qwen2.5:0.5b-instruct`; upgrade to the 3B tag when starting the second experiment series).
 - API responses include a `citations` array with `{id, source_path, page, token_start, token_end, score, excerpt}`.
 - Responses also expose `citation_verification` metadata summarising which inline markers were found and their lexical overlap with retrieved context.
 
@@ -244,14 +242,14 @@ The sidebar exposes text boxes for the curated dataset and raw tasks JSONL paths
 
 ### Configuration
 
-- Primary settings live in `configs/default.yaml` and are validated by `beyond_the_cutoff.load_config()` (default fine-tuning base: `Qwen/Qwen2-0.5B-Instruct`).
+- Primary settings live in `configs/default.yaml` and are validated by `beyond_the_cutoff.load_config()` (default fine-tuning base: `Qwen/Qwen2.5-0.5B-Instruct`).
 - Paths in the config resolve relative to the repository root so you can keep environment-specific overrides minimal.
 - The evaluation block exposes `offline_tasks_path` and `offline_dataset_path` to keep generated task banks and prompt/answer corpora alongside QA and summary sets.
 - Provide alternate configuration files per experiment and pass their paths to `load_config` when needed.
 
 ### Model Handling
 
-- Start with compact checkpoints such as `Qwen/Qwen2-0.5B-Instruct` for LoRA (default assistant), then rely on Ollama tags like `qwen2:1.5b-instruct-q4_0` for task generation and `qwen2.5:3b-instruct-q4_K_M` (or a cloud API) for judging.
+- Start with compact checkpoints such as `Qwen/Qwen2.5-0.5B-Instruct` for LoRA (default assistant), then rely on Ollama tags like `qwen2.5:7b-instruct-q4_K_M` for task generation and judging, and promote to `qwen2.5:3b-instruct-q4_K_M` when repeating the experiments at the larger model size.
 - Sync fine-tuned checkpoints from Colab/Kaggle back into the local `models/` directory; keep quantized copies (GGUF) tailored to the local machine.
 - Register custom quantized builds with Ollama via `ollama create` or `Modelfile` definitions so they can drop in for inference.
 

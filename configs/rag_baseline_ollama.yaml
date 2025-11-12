@@ -1,5 +1,5 @@
 provider: ollama
-model: qwen2:0.5b-instruct-q4_0
+model: qwen2.5:0.5b-instruct
 host: http://localhost
 port: 11434
 timeout: 480.0
