@@ -54,6 +54,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Show planned runs and exit without executing",
     )
+    parser.add_argument(
+        "--no-validate-examples",
+        action="store_true",
+        help="Skip validation that all experiments use the same examples",
+    )
     return parser.parse_args()
 
 
@@ -79,6 +84,7 @@ def main() -> None:
         max_retries_override=args.max_retries,
         retry_delay_override=args.retry_delay,
         force=args.force,
+        validate_same_examples=not args.no_validate_examples,
     )
 
     report = build_comparison_report(results)

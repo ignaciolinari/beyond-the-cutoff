@@ -1,0 +1,30 @@
+defaults:
+  dataset: ../../evaluation/datasets/offline_dataset.jsonl
+  judge_config: ../judges/scientific_default.yaml
+  judge_inference: ../judges/ollama_qwen7b.yaml
+  output_dir: ../../evaluation/results
+  metrics_filename: metrics.json
+  details_filename: details.jsonl
+  metadata_filename: metadata.jsonl
+  limit: null
+  max_retries: 2
+  retry_delay: 15.0
+  skip_if_exists: true
+  prompt_mode: rag  # Default, can be overridden per run
+runs:
+  # RAG Only: Base model (0.5B) with RAG contexts
+  - label: rag_baseline_0p5b
+    model_config: ../rag_baseline_ollama.yaml
+    prompt_mode: rag
+
+  # FT Only: Fine-tuned model (0.5B) WITHOUT RAG contexts
+  # Uses instruction-only trained model (trained without contexts)
+  - label: lora_science_0p5b_ft_only
+    model_config: ../lora_science_v1_instruction_only_ollama.yaml
+    prompt_mode: instruction
+
+  # RAG+FT: Same fine-tuned model (0.5B) WITH RAG contexts
+  # Uses the same instruction-only trained model, but evaluates WITH RAG contexts
+  - label: hybrid_science_0p5b
+    model_config: ../lora_science_v1_instruction_only_ollama.yaml
+    prompt_mode: rag

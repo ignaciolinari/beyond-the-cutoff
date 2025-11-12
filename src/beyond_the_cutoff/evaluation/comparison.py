@@ -29,6 +29,7 @@ class PlanDefaults:
     max_retries: int
     retry_delay: float
     skip_if_exists: bool
+    prompt_mode: str
 
 
 @dataclass
@@ -46,6 +47,7 @@ class ComparisonRunSpec:
     max_retries: int | None
     retry_delay: float | None
     skip_if_exists: bool
+    prompt_mode: str | None
 
 
 @dataclass
@@ -114,6 +116,7 @@ def load_comparison_plan(path: Path) -> ComparisonPlan:
         max_retries=int(defaults_payload.get("max_retries", 2)),
         retry_delay=float(defaults_payload.get("retry_delay", 15.0)),
         skip_if_exists=bool(defaults_payload.get("skip_if_exists", True)),
+        prompt_mode=str(defaults_payload.get("prompt_mode", "rag")),
     )
 
     run_specs: list[ComparisonRunSpec] = []
@@ -123,6 +126,13 @@ def load_comparison_plan(path: Path) -> ComparisonPlan:
         label = str(raw.get("label"))
         if not label or label == "None":
             raise ValueError("Each run entry requires a non-empty 'label'")
+        prompt_mode_raw = raw.get("prompt_mode")
+        prompt_mode_value: str | None = None
+        if prompt_mode_raw is not None:
+            prompt_mode_value = str(prompt_mode_raw)
+        elif defaults.prompt_mode:
+            prompt_mode_value = defaults.prompt_mode
+
         run_specs.append(
             ComparisonRunSpec(
                 label=label,
@@ -138,6 +148,7 @@ def load_comparison_plan(path: Path) -> ComparisonPlan:
                 max_retries=_ensure_optional_int(raw.get("max_retries")),
                 retry_delay=_ensure_optional_float(raw.get("retry_delay")),
                 skip_if_exists=bool(raw.get("skip_if_exists", defaults.skip_if_exists)),
+                prompt_mode=prompt_mode_value,
             )
         )
 
@@ -153,6 +164,7 @@ def execute_comparison_plan(
     max_retries_override: int | None = None,
     retry_delay_override: float | None = None,
     force: bool = False,
+    validate_same_examples: bool = True,
 ) -> list[ComparisonRunResult]:
     results: list[ComparisonRunResult] = []
     for spec in plan.runs:
@@ -220,6 +232,8 @@ def execute_comparison_plan(
             else plan.defaults.retry_delay
         )
 
+        prompt_mode = spec.prompt_mode or plan.defaults.prompt_mode or "rag"
+
         result: EvaluationResult = run_evaluation(
             project_config=project_config,
             dataset_path=dataset_path,
@@ -236,6 +250,7 @@ def execute_comparison_plan(
             metadata_output_path=metadata_path,
             max_retries=max_retries,
             retry_delay=retry_delay,
+            prompt_mode=prompt_mode,
         )
 
         results.append(
@@ -247,6 +262,30 @@ def execute_comparison_plan(
                 metadata_path=result.metadata_path,
             )
         )
+
+    # Validate that all runs evaluated the same examples
+    if validate_same_examples and len(results) > 1:
+        task_id_sets: list[set[str]] = []
+        for run_result in results:
+            if run_result.skipped:
+                continue
+            summary = run_result.summary
+            evaluated_ids = summary.get("evaluated_task_ids", [])
+            if evaluated_ids:
+                task_id_sets.append(set(evaluated_ids))
+
+        if len(task_id_sets) > 1:
+            first_set = task_id_sets[0]
+            for idx, task_set in enumerate(task_id_sets[1:], start=1):
+                if task_set != first_set:
+                    missing = first_set - task_set
+                    extra = task_set - first_set
+                    raise ValueError(
+                        f"Experiments evaluated different examples. "
+                        f"Run 0 has {len(first_set)} examples, run {idx} has {len(task_set)} examples. "
+                        f"Missing in run {idx}: {sorted(missing)[:10]}{'...' if len(missing) > 10 else ''}. "
+                        f"Extra in run {idx}: {sorted(extra)[:10]}{'...' if len(extra) > 10 else ''}."
+                    )
 
     return results
 
@@ -278,6 +317,7 @@ def describe_plan(plan: ComparisonPlan, project_config: ProjectConfig) -> list[d
                 "details_path": str(details_path) if details_path else None,
                 "metadata_path": str(metadata_path),
                 "skip_if_exists": spec.skip_if_exists,
+                "prompt_mode": spec.prompt_mode or plan.defaults.prompt_mode or "rag",
             }
         )
     return rows

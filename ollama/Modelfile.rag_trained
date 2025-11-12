@@ -1,13 +1,10 @@
-# Modelfile template for serving the 0.5B lora_science adapter via Ollama
-#
-# NOTE: This is the default Modelfile for the RAG-trained model.
-# For the instruction-only model, use Modelfile.instruction_only
+# Modelfile for RAG-trained fine-tuned model (trained WITH RAG contexts)
+# Use this for: RAG+FT evaluation (hybrid_science_0p5b)
 #
 # Convert your merged Hugging Face checkpoint to GGUF (e.g., llama.cpp `convert`
 # and `quantize`) and point FROM at the resulting file.
 #
-# This Modelfile is for the RAG-trained model (trained WITH contexts).
-# Use this for: RAG+FT evaluation (hybrid_science_0p5b)
+# This model was trained with RAG contexts, so it expects and can cite retrieved contexts.
 
 # Replace the relative path below with the GGUF you export from the merged adapter.
 # Example: outputs/lora_science_v1/merged_full_model/Qwen2.5-0.5B-lora_science_v1.Q4_K_M.gguf

@@ -1,0 +1,35 @@
+# Modelfile for instruction-only fine-tuned model (trained WITHOUT RAG contexts)
+# Use this for: BOTH FT-only AND RAG+FT evaluation
+#
+# This model is trained instruction-only, but used in two ways:
+# 1. FT-only: Without RAG contexts (instruction-only prompts)
+# 2. RAG+FT: WITH RAG contexts (same model, but evaluation provides contexts)
+#
+# Convert your merged Hugging Face checkpoint to GGUF (e.g., llama.cpp `convert`
+# and `quantize`) and point FROM at the resulting file.
+#
+# Note: For RAG+FT, contexts are provided in the evaluation prompt itself,
+# so the model will see them even though it wasn't trained with them.
+
+# Replace the relative path below with the GGUF you export from the merged adapter.
+# Example: outputs/lora_science_v1_instruction_only/merged_full_model/Qwen2.5-0.5B-lora_science_v1_instruction_only.Q4_K_M.gguf
+FROM ../outputs/lora_science_v1_instruction_only/merged_full_model/Qwen2.5-0.5B-lora_science_v1_instruction_only.Q4_K_M.gguf
+
+PARAMETER temperature 0
+PARAMETER top_p 0.9
+PARAMETER repeat_penalty 1.05
+PARAMETER num_ctx 4096
+PARAMETER stop "<|im_start|>"
+PARAMETER stop "<|im_end|>"
+
+TEMPLATE """
+{{- if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{- end }}{{- range .Messages }}<|im_start|>{{ .Role }}
+{{ .Content }}<|im_end|>
+{{- end }}<|im_start|>assistant
+"""
+
+# System prompt: Flexible for both FT-only and RAG+FT use
+# When contexts are provided (RAG+FT), the evaluation system will include them in the prompt
+SYSTEM "You are a scientific research assistant. Answer questions based on your knowledge. Provide accurate, evidence-based responses. If context is provided, use it to inform your answer."

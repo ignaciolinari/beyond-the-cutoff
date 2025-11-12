@@ -65,13 +65,28 @@ def load_judge_prompt(path: Path) -> JudgePrompt:
     )
 
 
-def render_judge_prompt(template: str, question: str, contexts: Iterable[Any], answer: str) -> str:
-    numbered_contexts = normalize_contexts(contexts)
-    context_block = "\n\n".join(numbered_contexts)
+def render_judge_prompt(
+    template: str, question: str, contexts: Iterable[Any], answer: str, *, has_contexts: bool = True
+) -> str:
+    numbered_contexts = normalize_contexts(contexts) if has_contexts else []
+    context_block = (
+        "\n\n".join(numbered_contexts) if numbered_contexts else "(No contexts provided)"
+    )
     rendered = template.replace("QUESTION", question.strip())
     rendered = rendered.replace("ASSISTANT_RESPONSE", answer.strip())
     rendered = rendered.replace("CONTEXTS", context_block)
     return rendered
+
+
+def _build_instruction_only_prompt(instruction: str) -> str:
+    """Build a prompt for instruction-only mode (no RAG contexts)."""
+    instruction_text = instruction.strip()
+    if not instruction_text:
+        raise ValueError("Instruction cannot be empty for instruction-only mode")
+    return (
+        "You are a research paper assistant. Answer the following question based on your knowledge.\n\n"
+        f"Question: {instruction_text}\n\nAnswer:"
+    )
 
 
 def parse_judge_output(payload: str) -> dict[str, Any]:
@@ -161,6 +176,7 @@ def run_evaluation(
     metadata_output_path: Path | None = None,
     max_retries: int = 2,
     retry_delay: float = 15.0,
+    prompt_mode: str = "rag",
 ) -> EvaluationResult:
     if not dataset_path.exists():
         raise FileNotFoundError(f"Offline dataset not found: {dataset_path}")
@@ -170,18 +186,34 @@ def run_evaluation(
     model_client: LLMClient = build_generation_client(model_cfg)
     judge_client: LLMClient = build_generation_client(judge_inference_cfg)
 
+    if prompt_mode not in ("rag", "instruction"):
+        raise ValueError(f"prompt_mode must be 'rag' or 'instruction', got {prompt_mode!r}")
+
     score_rows: list[dict[str, Any]] = []
+    evaluated_task_ids: set[str] = set()
 
     for idx, example in enumerate(_iter_dataset(dataset_path, limit=limit), start=1):
         task_id = example.get("task_id")
+        if task_id:
+            evaluated_task_ids.add(str(task_id))
         instruction = example.get("instruction", "")
         rag = example.get("rag", {})
-        prompt = rag.get("prompt") or example.get("rag_prompt")
-        contexts_raw = rag.get("contexts") or example.get("contexts") or []
-        if not prompt:
-            raise KeyError(f"Example {task_id} missing prompt field")
 
-        prompt_text = str(prompt)
+        # Determine prompt based on mode
+        if prompt_mode == "instruction":
+            if not instruction:
+                raise KeyError(
+                    f"Example {task_id} missing instruction field for instruction-only mode"
+                )
+            prompt_text = _build_instruction_only_prompt(instruction)
+            contexts_raw: list[Any] = []  # No contexts for instruction-only mode
+        else:  # prompt_mode == "rag"
+            prompt = rag.get("prompt") or example.get("rag_prompt")
+            if not prompt:
+                raise KeyError(f"Example {task_id} missing prompt field for RAG mode")
+            prompt_text = str(prompt)
+            contexts_raw = rag.get("contexts") or example.get("contexts") or []
+
         record_errors: dict[str, str] = {}
 
         model_response, generation_error = _call_with_retries(
@@ -197,12 +229,25 @@ def run_evaluation(
             record_errors["generation"] = generation_error
 
         contexts_numbered = normalize_contexts(contexts_raw)
+        has_contexts = len(contexts_raw) > 0
+
+        # For instruction-only mode, citation metrics are not meaningful
+        # We still compute them but mark them as N/A
         citation_metrics = evaluate_citations(assistant_answer, contexts_numbered)
+        if prompt_mode == "instruction":
+            # Mark citation metrics as not applicable for instruction-only mode
+            citation_metrics = {
+                **citation_metrics,
+                "mode": "instruction_only",
+                "note": "Citation metrics not applicable - no contexts provided",
+            }
+
         judge_prompt_text = render_judge_prompt(
             judge_prompt.prompt,
             instruction,
             contexts_numbered,
             assistant_answer,
+            has_contexts=has_contexts,
         )
         judge_response = None
         judge_payload: dict[str, Any] = {}
@@ -245,6 +290,8 @@ def run_evaluation(
             "judge_name": judge_prompt.name,
             "judge_model": judge_inference_cfg.model,
             "examples_with_errors": sum(1 for row in score_rows if row.get("errors")),
+            "prompt_mode": prompt_mode,
+            "evaluated_task_ids": sorted(evaluated_task_ids),
         }
     )
 

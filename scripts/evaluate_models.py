@@ -89,6 +89,12 @@ def parse_args() -> argparse.Namespace:
         default=15.0,
         help="Base delay in seconds between retry attempts (default: 15.0)",
     )
+    parser.add_argument(
+        "--prompt-mode",
+        choices=["rag", "instruction"],
+        default="rag",
+        help="Prompt mode: 'rag' uses RAG prompts with contexts, 'instruction' uses instruction-only prompts (default: rag)",
+    )
     return parser.parse_args()
 
 
@@ -141,6 +147,7 @@ def main() -> None:
         metadata_output_path=metadata_output_path,
         max_retries=args.max_retries,
         retry_delay=args.retry_delay,
+        prompt_mode=args.prompt_mode,
     )
 
     print(json.dumps(result.summary, indent=2))
