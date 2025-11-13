@@ -26,19 +26,28 @@ This directory contains Modelfiles for registering fine-tuned models with Ollama
 
 ## Usage
 
-### Register Instruction-Only Model (Used for Both FT-only and RAG+FT)
+### Register Models for 6-Condition Experiment
 
-**This is the ONLY model you need to register for the 0.5B experiment.**
+**You need TWO fine-tuned models for the complete 6-condition experiment:**
 
 ```bash
+# 1. Register instruction-only model
 # Update FROM path in Modelfile.instruction_only to point to your GGUF file
-# Then register:
 ollama create lora_science_0p5_instruction_only -f ollama/Modelfile.instruction_only
 ollama push lora_science_0p5_instruction_only
 
-# This same model is used for:
+# This model is used for:
 # - FT-only evaluation (without RAG contexts)
-# - RAG+FT evaluation (with RAG contexts)
+# - FT+RAG (instruction-only) evaluation (with RAG contexts)
+
+# 2. Register RAG-trained model
+# Update FROM path in vintage/ollama/Modelfile.rag_trained to point to your RAG-trained GGUF file
+ollama create lora_science_0p5 -f vintage/ollama/Modelfile.rag_trained
+ollama push lora_science_0p5
+
+# This model is used for:
+# - RAG-trained FT-only evaluation (without RAG contexts)
+# - RAG-trained FT+RAG evaluation (with RAG contexts - optimal setup)
 ```
 
 ## Key Differences
@@ -50,22 +59,27 @@ ollama push lora_science_0p5_instruction_only
 | Evaluation | RAG+FT mode only | FT-only AND RAG+FT modes |
 | Modelfile | `Modelfile` or `Modelfile.rag_trained` | `Modelfile.instruction_only` |
 
-**Note**: For this experiment, we only use the instruction-only model. The RAG-trained Modelfiles have been moved to `vintage/ollama/` for reference but are not used in the 0.5B comparison.
+**Note**: For the complete 6-condition experiment, you need BOTH models:
+- Instruction-only model (for conditions 3-4)
+- RAG-trained model (for conditions 5-6)
 
 ## Quick Reference
 
 | Evaluation Mode | Model | Modelfile | Ollama Tag | Config File |
 |----------------|-------|-----------|------------|-------------|
-| RAG Only | Base model | N/A | `qwen2.5:0.5b-instruct` | `rag_baseline_ollama.yaml` |
+| Base Baseline | Base model | N/A | `qwen2.5:0.5b-instruct` | `rag_baseline_ollama.yaml` |
+| RAG Baseline | Base model | N/A | `qwen2.5:0.5b-instruct` | `rag_baseline_ollama.yaml` |
 | FT Only | Fine-tuned (instruction-only) | `Modelfile.instruction_only` | `lora_science_0p5_instruction_only` | `lora_science_v1_instruction_only_ollama.yaml` |
-| RAG+FT | Same fine-tuned model | `Modelfile.instruction_only` | `lora_science_0p5_instruction_only` | `hybrid_science_v1_ollama.yaml` |
+| FT+RAG (instruction-only) | Fine-tuned (instruction-only) | `Modelfile.instruction_only` | `lora_science_0p5_instruction_only` | `lora_science_v1_instruction_only_ollama.yaml` |
+| RAG-trained FT Only | Fine-tuned (RAG-trained) | `Modelfile.rag_trained` | `lora_science_0p5` | `lora_science_v1_rag_trained_ollama.yaml` |
+| RAG-trained FT+RAG | Fine-tuned (RAG-trained) | `Modelfile.rag_trained` | `lora_science_0p5` | `lora_science_v1_rag_trained_ollama.yaml` |
 
-**Key Point**: Only ONE fine-tuned model is needed. It's used:
-- Without RAG contexts → FT-only
-- With RAG contexts → RAG+FT
+**Key Point**: TWO fine-tuned models are needed for the complete 6-condition experiment:
+- Instruction-only model: Used for FT-only and FT+RAG (instruction-only)
+- RAG-trained model: Used for RAG-trained FT-only and RAG-trained FT+RAG (optimal)
 
 ## Notes
 
-- Update the `FROM` path in Modelfile.instruction_only to point to your actual GGUF file location
-- The RAG-trained Modelfile (`Modelfile`/`Modelfile.rag_trained`) is NOT used in this experiment
-- Only the instruction-only model is needed for the 0.5B comparison
+- Update the `FROM` path in `Modelfile.instruction_only` to point to your instruction-only GGUF file
+- Update the `FROM` path in `vintage/ollama/Modelfile.rag_trained` to point to your RAG-trained GGUF file
+- Both models are needed for the complete 6-condition comparison

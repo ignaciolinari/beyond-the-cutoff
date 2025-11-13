@@ -12,7 +12,7 @@ Usage example::
         --config configs/default.yaml \
         --dataset evaluation/datasets/offline_dataset.jsonl \
         --model-label rag_baseline_0p5b \
-        --judge-config configs/judges/scientific_default.yaml \
+        --judge-config configs/judges/scientific_default_rag.yaml \
         --judge-inference configs/judges/ollama_qwen7b.yaml \
         --output evaluation/results/rag_baseline_0p5b/metrics.json
 
@@ -47,8 +47,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--judge-config",
-        default="configs/judges/scientific_default.yaml",
-        help="Judge prompt configuration YAML",
+        default="configs/judges/scientific_default_rag.yaml",
+        help="Judge prompt configuration YAML (use scientific_default_instruction.yaml for instruction-only evaluation)",
     )
     parser.add_argument(
         "--judge-inference",

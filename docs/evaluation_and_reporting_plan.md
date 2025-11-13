@@ -4,7 +4,7 @@ _Last updated: 2025-11-13_
 
 ## Metric Capture
 - Implement CLI `python scripts/evaluate_models.py` to:
-  - Load judge config (`configs/judges/scientific_default.yaml`).
+  - Load judge config (`configs/judges/scientific_default_rag.yaml` for RAG conditions, `configs/judges/scientific_default_instruction.yaml` for instruction-only conditions).
   - Compute factuality, grounding, completeness, and clarity scores.
   - Aggregate citation coverage statistics from `RAGPipeline.verify_citations`.
   - Record latency (seconds per sample) and cost estimates (for cloud judges/generators).

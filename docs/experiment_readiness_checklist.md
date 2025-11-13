@@ -19,12 +19,21 @@ Use this checklist before running the 0.5B model comparison experiments to ensur
 - [ ] **Ollama base model**: `ollama pull qwen2.5:0.5b-instruct` (or verify it's already available)
 - [ ] **Model accessible**: Test with `ollama list | grep qwen2.5:0.5b-instruct`
 
-#### Fine-Tuned Model (FT-only & RAG+FT)
+#### Fine-Tuned Models (6-condition experiment requires 2 models)
+
+**Instruction-Only Model** (for conditions 3-4):
 - [ ] **Model trained**: Fine-tuning completed in Colab using `notebooks/finetuning/lora_science_v1_instruction_only.ipynb`
 - [ ] **Checkpoint synced**: Merged model weights synced from Colab to local `outputs/lora_science_v1_instruction_only/merged_full_model/`
 - [ ] **GGUF converted**: Model converted to GGUF format (e.g., `Qwen2.5-0.5B-lora_science_v1_instruction_only.Q4_K_M.gguf`)
 - [ ] **Ollama model registered**: `ollama create lora_science_0p5_instruction_only -f ollama/Modelfile.instruction_only`
 - [ ] **Model accessible**: Test with `ollama list | grep lora_science_0p5_instruction_only`
+
+**RAG-Trained Model** (for conditions 5-6):
+- [ ] **Model trained**: Fine-tuning completed using `notebooks/finetuning/lora_science_v1.ipynb`
+- [ ] **Checkpoint synced**: Merged model weights synced to local (e.g., `outputs/lora_science_v1/merged_full_model/`)
+- [ ] **GGUF converted**: Model converted to GGUF format
+- [ ] **Ollama model registered**: `ollama create lora_science_0p5 -f ollama/Modelfile.rag_trained`
+- [ ] **Model accessible**: Test with `ollama list | grep lora_science_0p5`
 
 #### Judge Model
 - [ ] **Judge model available**: `ollama pull qwen2.5:7b-instruct-q4_K_M` (or verify it's already available)
@@ -33,18 +42,21 @@ Use this checklist before running the 0.5B model comparison experiments to ensur
 ### 3. Configuration Files
 
 #### Model Configs
-- [ ] **`configs/rag_baseline_ollama.yaml`**: Points to `qwen2.5:0.5b-instruct`
+- [ ] **`configs/rag_baseline_ollama.yaml`**: Points to `qwen2.5:0.5b-instruct` (used for base baseline and RAG baseline)
 - [ ] **`configs/lora_science_v1_instruction_only_ollama.yaml`**: Points to `lora_science_0p5_instruction_only`
-- [ ] **`configs/hybrid_science_v1_ollama.yaml`**: Points to `lora_science_0p5_instruction_only` (same as FT-only)
+- [ ] **`configs/lora_science_v1_rag_trained_ollama.yaml`**: Points to `lora_science_0p5` (RAG-trained model)
+- [ ] **`configs/hybrid_science_v1_ollama.yaml`**: Legacy config (kept for backward compatibility)
 
 #### Comparison Plan
 - [ ] **`configs/evaluation/compare_0p5b_experiments.yaml`**:
-  - Uses correct model configs
-  - Has correct `prompt_mode` settings (`rag` for RAG-only and RAG+FT, `instruction` for FT-only)
+  - Contains all 6 conditions (base baseline, RAG baseline, FT-only, FT+RAG instruction-only, RAG-trained FT-only, RAG-trained FT+RAG)
+  - Uses correct model configs for each condition
+  - Has correct `prompt_mode` settings (`rag` for conditions with RAG, `instruction` for conditions without RAG)
   - Points to correct dataset path
 
 #### Judge Config
-- [ ] **`configs/judges/scientific_default.yaml`**: Exists and has proper prompt template
+- [ ] **`configs/judges/scientific_default_rag.yaml`**: Exists and has proper prompt template (for RAG conditions)
+- [ ] **`configs/judges/scientific_default_instruction.yaml`**: Exists and has proper prompt template (for instruction-only conditions)
 - [ ] **`configs/judges/ollama_qwen7b.yaml`**: Points to judge model
 
 ### 4. Environment & Dependencies
@@ -69,7 +81,7 @@ python scripts/evaluate_models.py \
   --dataset evaluation/datasets/offline_dataset.jsonl \
   --model-config configs/rag_baseline_ollama.yaml \
   --model-label rag_baseline_0p5b_test \
-  --judge-config configs/judges/scientific_default.yaml \
+  --judge-config configs/judges/scientific_default_rag.yaml \
   --judge-inference configs/judges/ollama_qwen7b.yaml \
   --output evaluation/results/rag_baseline_0p5b_test/metrics.json \
   --prompt-mode rag \
@@ -96,21 +108,25 @@ After running the comparison, verify:
 ## Post-Experiment Verification
 
 ### Data Consistency
-- [ ] **Same examples evaluated**: All three runs evaluated the same task IDs (check `evaluated_task_ids` in metrics)
+- [ ] **Same examples evaluated**: All six runs evaluated the same task IDs (check `evaluated_task_ids` in metrics)
 - [ ] **No missing data**: All expected examples have predictions
 - [ ] **Error rate acceptable**: Check `examples_with_errors` in summary metrics
 
 ### Experimental Correctness
-- [ ] **RAG-only**: Used base model (`qwen2.5:0.5b-instruct`) with `prompt_mode: rag`
-- [ ] **FT-only**: Used fine-tuned model (`lora_science_0p5_instruction_only`) with `prompt_mode: instruction`
-- [ ] **RAG+FT**: Used same fine-tuned model (`lora_science_0p5_instruction_only`) with `prompt_mode: rag`
-- [ ] **Same dataset**: All three runs used the same `offline_dataset.jsonl`
-- [ ] **Same judge**: All three runs used the same judge model and prompt
+- [ ] **Base baseline**: Used base model (`qwen2.5:0.5b-instruct`) with `prompt_mode: instruction`
+- [ ] **RAG baseline**: Used base model (`qwen2.5:0.5b-instruct`) with `prompt_mode: rag`
+- [ ] **FT-only**: Used instruction-only model (`lora_science_0p5_instruction_only`) with `prompt_mode: instruction`
+- [ ] **FT+RAG (instruction-only)**: Used instruction-only model (`lora_science_0p5_instruction_only`) with `prompt_mode: rag`
+- [ ] **RAG-trained FT-only**: Used RAG-trained model (`lora_science_0p5`) with `prompt_mode: instruction`
+- [ ] **RAG-trained FT+RAG**: Used RAG-trained model (`lora_science_0p5`) with `prompt_mode: rag`
+- [ ] **Same dataset**: All six runs used the same `offline_dataset.jsonl`
+- [ ] **Same judge**: All six runs used the same judge model and prompt
 
 ### Results Analysis
-- [ ] **Metrics computed**: Factuality, citation accuracy, BLEU, BERTScore present in summaries
-- [ ] **Citation metrics**: FT-only run has citation metrics marked as N/A (expected for instruction-only mode)
-- [ ] **Comparison valid**: Results show clear differences between the three conditions
+- [ ] **Metrics computed**: Factuality, citation accuracy, BLEU, BERTScore present in summaries for all 6 conditions
+- [ ] **Citation metrics**: Conditions without RAG (base baseline, FT-only, RAG-trained FT-only) have citation metrics marked as N/A (expected)
+- [ ] **Comparison valid**: Results show clear differences between the six conditions
+- [ ] **Baseline comparisons**: Base baseline vs RAG baseline shows RAG benefit; Base baseline vs FT-only shows fine-tuning benefit
 
 ## Troubleshooting
 

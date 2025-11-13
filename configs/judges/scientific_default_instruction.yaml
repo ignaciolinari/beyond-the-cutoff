@@ -1,0 +1,89 @@
+name: scientific_default_instruction
+version: 0.1.0
+description: >-
+  Judge rubric for evaluating instruction-only answers (no RAG contexts) to post-cutoff scientific questions.
+  Evaluates factuality based on general knowledge, completeness, and clarity. Citation checks are skipped.
+prompt: |
+  You are a meticulous scientific reviewer. Evaluate the ASSISTANT_RESPONSE against the QUESTION.
+  **IMPORTANT**: No contexts are provided for this evaluation. The assistant answered based on its general knowledge only.
+  Do NOT check for citations or grounding against contexts—these are not applicable in instruction-only mode.
+
+  Review protocol:
+  1. **Factuality**: Check whether each factual statement is accurate based on general scientific knowledge.
+     Mark contradictions, speculation, or clearly incorrect information as factual errors. Since no contexts
+     are provided, evaluate based on whether the claims are plausible and consistent with established science.
+  2. **Completeness**: Determine whether the response fully addresses the QUESTION. Point out scope gaps,
+     missing sub-answers, or incomplete coverage of the question.
+  3. **Communication**: Assess writing clarity: favor concise, technically precise language without
+     hallucinated details or unnecessary verbosity.
+  4. **Citation/Grounding**: SKIP this entirely. Do not penalize for missing citations or lack of context
+     grounding—these are not applicable when no contexts are provided.
+
+  Scoring instructions:
+  • Assign a 0–1 value for every score in the FORMAT schema. Use 0 for completely inadequate,
+    0.5 for partially adequate, 1 for fully adequate.
+  • Compute the weighted overall score = 0.50*factuality + 0.30*completeness + 0.20*communication.
+    Note: grounding is set to 0.0 (not applicable) and excluded from the overall score.
+  • Set verdict = "pass" when overall score ≥ 0.65 and factuality ≥ 0.4; otherwise set verdict = "fail".
+  • Set missing_citations and hallucinated_citations to empty arrays (not applicable).
+
+  Output policy:
+  • Respond with valid JSON only—no markdown, no prose, no trailing commentary.
+  • Ensure every field described in FORMAT is present. Strings must be double-quoted.
+  • Do not invent new keys beyond those in FORMAT.
+
+  Example (illustrative values):
+  {
+   "scores": {
+    "factuality": 0.8,
+    "grounding": 0.0,
+    "completeness": 0.6,
+    "communication": 0.9
+   },
+   "verdict": "pass",
+   "reasoning": "Factually accurate claims, addresses main question but misses some details.",
+   "missing_citations": [],
+   "hallucinated_citations": []
+  }
+criteria:
+  - id: factuality
+    label: Factual Accuracy (Knowledge-Based)
+    weight: 0.50
+    description: Measures whether each claim is accurate based on general scientific knowledge (no context grounding).
+  - id: grounding
+    label: Citation Grounding
+    weight: 0.00
+    description: Not applicable for instruction-only evaluation. Always set to 0.0.
+  - id: completeness
+    label: Answer Completeness
+    weight: 0.30
+    description: Assesses coverage of the question scope, including methods/results emphasis.
+  - id: communication
+    label: Scientific Clarity
+    weight: 0.20
+    description: Rewards well-structured, scientifically toned explanations without fluff.
+format:
+  type: json
+  schema: |
+    {
+      "scores": {
+        "factuality": <float 0-1>,
+        "grounding": <float 0-1, always 0.0 for instruction-only>,
+        "completeness": <float 0-1>,
+        "communication": <float 0-1>
+      },
+      "verdict": "pass" | "fail",
+      "reasoning": "Concise justification focusing on factuality and completeness",
+      "missing_citations": [],
+      "hallucinated_citations": []
+    }
+references:
+  citation_marker_regex: "\\[(\\d+)\\]"
+  coverage_threshold: 0.35
+  fail_on_fabricated_citations: false
+notes:
+  - This prompt is for instruction-only evaluation (no RAG contexts).
+  - Grounding score should always be 0.0 (not applicable).
+  - Citation arrays should always be empty (not applicable).
+  - Factuality is evaluated based on general knowledge, not context grounding.
+  - Overall score excludes grounding: 0.50*factuality + 0.30*completeness + 0.20*communication.

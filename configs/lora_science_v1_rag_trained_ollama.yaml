@@ -1,0 +1,17 @@
+provider: ollama
+# Model tag for RAG-trained fine-tuned model (trained WITH RAG contexts)
+# This model is used for RAG+FT evaluation where the model was trained to use contexts
+# Ollama tag: lora_science_0p5 (or similar, depending on your naming)
+model: lora_science_0p5
+host: http://localhost
+port: 11434
+timeout: 480.0
+device: auto
+torch_dtype: auto
+max_new_tokens: 512
+temperature: 0.0
+top_p: 0.9
+repetition_penalty: 1.05
+stop_sequences:
+  - "<|im_start|>"
+  - "<|im_end|>"

@@ -1,8 +1,8 @@
-name: scientific_default
+name: scientific_default_rag
 version: 0.1.0
 description: >-
-  Judge rubric for evaluating retrieval-augmented answers to post-cutoff scientific questions.
-  Enforces citation grounding, factual accuracy, and clarity.
+  Judge rubric for evaluating retrieval-augmented answers (with RAG contexts) to post-cutoff scientific questions.
+  Enforces citation grounding, factual accuracy, and clarity. Use this for conditions that include RAG contexts.
 prompt: |
   You are a meticulous scientific reviewer. Evaluate the ASSISTANT_RESPONSE against the QUESTION
   and the referenced CONTEXTS extracted from recent papers. Only rely on the provided context; if

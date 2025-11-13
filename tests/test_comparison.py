@@ -29,9 +29,18 @@ def test_describe_plan_includes_expected_paths() -> None:
     plan = load_comparison_plan(plan_path)
     rows = describe_plan(plan, project_cfg)
     labels = {row["label"] for row in rows}
-    assert {"rag_baseline_0p5b", "lora_science_0p5b_ft_only", "hybrid_science_0p5b"}.issubset(
+    # Check for all 6 conditions in the comparison plan
+    expected_labels = {
+        "base_baseline_0p5b",
+        "rag_baseline_0p5b",
+        "lora_science_0p5b_ft_only",
+        "hybrid_science_0p5b_instruction_only",
+        "lora_science_0p5b_rag_trained_ft_only",
+        "hybrid_science_0p5b_rag_trained",
+    }
+    assert expected_labels.issubset(
         labels
-    )
+    ), f"Missing labels. Found: {labels}, Expected: {expected_labels}"
     baseline = next(row for row in rows if row["label"] == "rag_baseline_0p5b")
     assert baseline["metrics_path"].endswith("evaluation/results/rag_baseline_0p5b/metrics.json")
 
@@ -44,7 +53,7 @@ def test_execute_comparison_plan_invokes_runner(
     dataset_path = tmp_path / "dataset.jsonl"
     dataset_path.write_text('{"task_id": "t1", "instruction": "demo", "rag": {"prompt": "Q"}}\n')
 
-    judge_config_path = repo_root / "configs" / "judges" / "scientific_default.yaml"
+    judge_config_path = repo_root / "configs" / "judges" / "scientific_default_rag.yaml"
     judge_inference_path = repo_root / "configs" / "judges" / "ollama_qwen7b.yaml"
     model_config_path = repo_root / "configs" / "rag_baseline_ollama.yaml"
 
@@ -105,3 +114,43 @@ runs:
 
     report = build_comparison_report(results)
     assert report.as_dict()["runs"][0]["label"] == "demo"
+
+
+def test_comparison_plan_uses_dual_judge_system() -> None:
+    """Verify that the comparison plan uses appropriate judge configs for each condition."""
+    plan_path = Path("configs/evaluation/compare_0p5b_experiments.yaml")
+    plan = load_comparison_plan(plan_path)
+
+    # Check that default judge is RAG judge
+    assert plan.defaults.judge_config is not None
+    assert "scientific_default_rag.yaml" in str(plan.defaults.judge_config)
+
+    # Check instruction-only conditions use instruction judge
+    instruction_only_labels = {
+        "base_baseline_0p5b",
+        "lora_science_0p5b_ft_only",
+        "lora_science_0p5b_rag_trained_ft_only",
+    }
+    for run in plan.runs:
+        if run.label in instruction_only_labels:
+            assert run.judge_config is not None
+            assert "scientific_default_instruction.yaml" in str(
+                run.judge_config
+            ), f"Condition {run.label} should use instruction judge"
+            assert (
+                run.prompt_mode == "instruction"
+            ), f"Condition {run.label} should use instruction prompt mode"
+
+    # Check RAG conditions use RAG judge
+    rag_labels = {
+        "rag_baseline_0p5b",
+        "hybrid_science_0p5b_instruction_only",
+        "hybrid_science_0p5b_rag_trained",
+    }
+    for run in plan.runs:
+        if run.label in rag_labels:
+            assert run.judge_config is not None
+            assert "scientific_default_rag.yaml" in str(
+                run.judge_config
+            ), f"Condition {run.label} should use RAG judge"
+            assert run.prompt_mode == "rag", f"Condition {run.label} should use RAG prompt mode"

@@ -100,13 +100,13 @@ response = client.generate("Summarise the latest findings on generative retrieva
 print(response["response"])
 ```
 
-The default configuration connects to the Ollama daemon at `http://localhost:11434` and queries `qwen2.5:0.5b-instruct`. Override `configs/default.yaml` (or pass a custom config such as the original baseline) to toggle providers, sampling parameters, or model tags. Swap the `inference.model` to `qwen2.5:3b-instruct-q4_K_M` once the 0.5B RAG/FT/Hybrid experiments finish so you can rerun the trilogy at 3B capacity.
+The default configuration connects to the Ollama daemon at `http://localhost:11434` and queries `qwen2.5:0.5b-instruct`. Override `configs/default.yaml` (or pass a custom config such as the original baseline) to toggle providers, sampling parameters, or model tags. Swap the `inference.model` to `qwen2.5:3b-instruct-q4_K_M` once the 0.5B 6-condition experiments finish so you can rerun the full comparison at 3B capacity.
 
 ## Pipeline Workflow
 
 - **Ingestion/indexing**: run `python scripts/ingest_and_index.py --config configs/default.yaml` to turn the downloaded PDFs into text chunks and rebuild the FAISS index under `data/external/index`. Each run refreshes `data/processed/manifest.json` and writes metadata catalog exports under `data/processed/metadata_catalog*` for downstream analysis/versioning.
 - **Offline tasks**: once the index exists, call `python scripts/generate_offline_dataset.py --config configs/default.yaml` so the `qwen2.5:7b-instruct-q4_K_M` generator can produce QA/summaries/citation tasks backed by those chunks.
-- **Fine-tuning**: take the resulting JSONL plus your assistant prompts into Colab/Kaggle, fine-tune `Qwen/Qwen2.5-0.5B-Instruct` with LoRA (optional), export the adapter/full weights, and keep the safetensors checkpoints.
+- **Fine-tuning**: take the resulting JSONL into Colab/Kaggle notebooks (`notebooks/finetuning/`). For the 6-condition experiment, train TWO models: (1) `lora_science_v1_instruction_only.ipynb` trains WITHOUT RAG contexts, (2) `lora_science_v1.ipynb` trains WITH RAG contexts. Export adapter/full weights and keep the safetensors checkpoints.
 - **Deployment**: convert tuned checkpoints to GGUF (e.g., `llama.cpp convert` + `quantize`) and, if desired, register custom Ollama aliases; the default pipeline now calls the stock Qwen2.5 tags directly.
 - **Evaluation**: reuse `python scripts/ingest_and_index.py` results plus the evaluation datasets with the 7B judge (`qwen2.5:7b-instruct-q4_K_M`) or a cloud grader by flipping the provider/model in the config.
 - **Verification**: after each stage, run `pytest tests/test_config.py` (and the broader suite once the pipeline is populated) to ensure the configuration and adapters remain wired correctly.
@@ -194,13 +194,21 @@ The sidebar exposes text boxes for the curated dataset and raw tasks JSONL paths
 
 ## Fine-Tuning Workflow
 
-- Launch training from Colab/Kaggle notebooks that load `evaluation/datasets/offline_dataset.jsonl`, apply LoRA/PEFT using the `fine_tuning` config block, and export adapter weights (e.g., `adapter.safetensors`).
-- Store notebooks under `notebooks/finetuning/` so runs are reproducible; checkpoint artefacts should be synced back into `outputs/adapters/` (or another path declared in `fine_tuning.adapter_output_dir`).
-- Keep a manifest per run (model tag, dataset version, seeds, hyperparameters) so evaluations map cleanly back to the generated weights.
+For the 6-condition experiment, **two fine-tuned models are required**:
+
+1. **Instruction-only model** (`lora_science_v1_instruction_only.ipynb`): Trains WITHOUT RAG contexts
+   - Used for: FT-only (condition 3) and FT+RAG instruction-only (condition 4)
+   - Register with Ollama: `ollama create lora_science_0p5_instruction_only -f ollama/Modelfile.instruction_only`
+
+2. **RAG-trained model** (`lora_science_v1.ipynb`): Trains WITH RAG contexts
+   - Used for: RAG-trained FT-only (condition 5) and RAG-trained FT+RAG (condition 6)
+   - Register with Ollama: `ollama create lora_science_0p5 -f ollama/Modelfile.rag_trained`
+
+Both notebooks load `evaluation/datasets/offline_dataset.jsonl`, apply LoRA/PEFT using the `fine_tuning` config block, and export adapter weights (e.g., `adapter.safetensors`). Store notebooks under `notebooks/finetuning/` so runs are reproducible; checkpoint artefacts should be synced back into `outputs/adapters/` (or another path declared in `fine_tuning.adapter_output_dir`). Keep a manifest per run (model tag, dataset version, seeds, hyperparameters) so evaluations map cleanly back to the generated weights.
 
 ## Evaluation Strategy
 
-- Use the offline dataset to compare three systems: baseline RAG, fine-tuned model without retrieval, and the hybrid fine-tuned+RAG assistant.
+- Use the offline dataset to compare six conditions: base baseline, RAG baseline, FT-only (instruction-only), FT+RAG (instruction-only), RAG-trained FT-only, and RAG-trained FT+RAG. See `docs/six_condition_experiment_setup.md` for details.
 - For automated scoring, rely on a stronger judge model (cloud API or high-quality local checkpoint) to grade factuality, citation adherence, and summaries; log judge prompts/responses for reproducibility.
 - Complement automatic grading with targeted human spot checks, prioritising disagreements or low-confidence judge outputs.
 - Track results in `evaluation/results/` so trends over time (different checkpoints or datasets) remain auditable.
