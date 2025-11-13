@@ -6,13 +6,15 @@ This directory contains Modelfiles for registering fine-tuned models with Ollama
 
 ### `Modelfile` (Default - RAG-trained)
 - **Model**: RAG-trained fine-tuned model (trained WITH RAG contexts)
-- **Status**: NOT used in 0.5B experiment (kept for reference)
+- **Status**: NOT used in 0.5B experiment
+- **Location**: Moved to `vintage/ollama/` for reference
 - **Ollama tag**: `lora_science_0p5` (or similar)
 - **System prompt**: Mentions citations and contexts
 
 ### `Modelfile.rag_trained`
 - Same as `Modelfile` - explicit version for clarity
-- **Status**: NOT used in 0.5B experiment (kept for reference)
+- **Status**: NOT used in 0.5B experiment
+- **Location**: Moved to `vintage/ollama/` for reference
 
 ### `Modelfile.instruction_only`
 - **Model**: Instruction-only fine-tuned model (trained WITHOUT RAG contexts)
@@ -48,7 +50,7 @@ ollama push lora_science_0p5_instruction_only
 | Evaluation | RAG+FT mode only | FT-only AND RAG+FT modes |
 | Modelfile | `Modelfile` or `Modelfile.rag_trained` | `Modelfile.instruction_only` |
 
-**Note**: For this experiment, we only use the instruction-only model. The RAG-trained Modelfile is kept for reference but not used in the 0.5B comparison.
+**Note**: For this experiment, we only use the instruction-only model. The RAG-trained Modelfiles have been moved to `vintage/ollama/` for reference but are not used in the 0.5B comparison.
 
 ## Quick Reference
 
