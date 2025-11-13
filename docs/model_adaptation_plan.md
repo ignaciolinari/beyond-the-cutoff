@@ -1,6 +1,6 @@
 # Model Adaptation Portfolio
 
-_Last updated: 2025-11-11_
+_Last updated: 2025-11-13_
 
 ## Experiment Matrix
 | Experiment ID | Description | Model | Retrieval | Notes |
@@ -15,9 +15,9 @@ _Last updated: 2025-11-11_
 
 Run the 0.5B sequence (`rag_baseline_0p5` → `lora_science_0p5_ft` → `hybrid_science_0p5`) to completion before starting the 3B series; do not cross-compare across model sizes.
 
-> TODO before beginning the 3B phase: duplicate `configs/lora_science_v1_ollama.yaml` and adjust the model tag to `qwen2.5:3b-instruct-q4_K_M` (or the merged LoRA alias) so both experiment groups have dedicated config files.
+> TODO before beginning the 3B phase: create new config files for 3B experiments based on the 0.5B pattern (e.g., `lora_science_v1_instruction_only_ollama.yaml` → `lora_science_v1_3b_instruction_only_ollama.yaml`) and adjust the model tag to `qwen2.5:3b-instruct-q4_K_M` (or the merged LoRA alias) so both experiment groups have dedicated config files.
 
-Acceptance threshold for promotion to production pilot: **≥ +5 percentage points** factuality over `rag_baseline_v1` AND citation grounding ≥ 0.35 mean coverage.
+Acceptance threshold for promotion to production pilot: **≥ +5 percentage points** factuality over `rag_baseline_0p5` AND citation grounding ≥ 0.35 mean coverage.
 
 ## Data Splits
 - **Train**: 70% of offline dataset tasks, stratified by paper ID and task type.

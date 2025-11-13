@@ -1,6 +1,6 @@
 # Beyond the Cutoff – Lightweight Project Tracker
 
-_Last updated: 2025-11-11_
+_Last updated: 2025-11-13_
 
 ## Status Legend
 - [ ] Backlog
@@ -26,7 +26,7 @@ _Last updated: 2025-11-11_
 - [x] Add validation pass for offline dataset outputs (drops duplicate prompts, empty responses, and citation failures)
 - [x] Write data quality checks and unit tests covering edge cases (chunk ordering regression added; expanded coverage)
 - [x] Offline task viewer for human QA review
-- [x] Fine-tune `Qwen/Qwen2.5-0.5B-Instruct` (LoRA) in Colab/Kaggle using the offline JSONL outputs; export adapters and full checkpoints (artifacts in `outputs/lora_science_v1/`)
+- [x] Fine-tune `Qwen/Qwen2.5-0.5B-Instruct` (LoRA) in Colab/Kaggle using the offline JSONL outputs; export adapters and full checkpoints (artifacts in `outputs/lora_science_v1_instruction_only/`)
 - [x] Quantize the tuned checkpoint to GGUF (`llama.cpp convert` + `quantize`) and register it with Ollama; update `configs/default.yaml` with the new model tag (GGUF + Ollama tag live)
 - [x] Evaluate with the 3B judge using the refreshed datasets (or swap to a cloud judge/generator as needed) (metrics logged)
 

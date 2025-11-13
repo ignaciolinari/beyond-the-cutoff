@@ -11,10 +11,10 @@ Usage example::
     python scripts/evaluate_models.py \
         --config configs/default.yaml \
         --dataset evaluation/datasets/offline_dataset.jsonl \
-        --model-label rag_baseline_v1 \
+        --model-label rag_baseline_0p5b \
         --judge-config configs/judges/scientific_default.yaml \
         --judge-inference configs/judges/ollama_qwen7b.yaml \
-        --output evaluation/results/rag_baseline_v1/metrics.json
+        --output evaluation/results/rag_baseline_0p5b/metrics.json
 
 """
 

@@ -204,7 +204,7 @@ The sidebar exposes text boxes for the curated dataset and raw tasks JSONL paths
 - For automated scoring, rely on a stronger judge model (cloud API or high-quality local checkpoint) to grade factuality, citation adherence, and summaries; log judge prompts/responses for reproducibility.
 - Complement automatic grading with targeted human spot checks, prioritising disagreements or low-confidence judge outputs.
 - Track results in `evaluation/results/` so trends over time (different checkpoints or datasets) remain auditable.
-- Automate comparative sweeps with `python scripts/compare_models.py --plan configs/evaluation/compare_default.yaml` to evaluate multiple assistants and emit a consolidated JSON report.
+- Automate comparative sweeps with `python scripts/compare_models.py --plan configs/evaluation/compare_0p5b_experiments.yaml` to evaluate multiple assistants and emit a consolidated JSON report.
 
 ### Automated Metrics Harness
 

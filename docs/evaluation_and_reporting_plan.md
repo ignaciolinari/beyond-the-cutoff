@@ -1,6 +1,6 @@
 # Evaluation & Reporting Plan
 
-_Last updated: 2025-11-11_
+_Last updated: 2025-11-13_
 
 ## Metric Capture
 - Implement CLI `python scripts/evaluate_models.py` to:
@@ -28,7 +28,7 @@ _Last updated: 2025-11-11_
 ## Reporting Templates
 - Markdown summary (`evaluation/results/<experiment_id>/report.md`) containing:
   - Experiment metadata (dataset tag, model versions, judge config).
-  - Metric table (with deltas vs `rag_baseline_v1`).
+  - Metric table (with deltas vs `rag_baseline_0p5b`).
   - Citation coverage histogram image.
   - Latency and cost breakdown.
 - CSV export (`evaluation/results/<experiment_id>/metrics.csv`) for downstream plotting.

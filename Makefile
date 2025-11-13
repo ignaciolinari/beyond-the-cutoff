@@ -2,9 +2,9 @@ PYTHON = .venv/bin/python
 PIP = .venv/bin/pip
 
 SCORE_DATASET ?= evaluation/datasets/offline_dataset.jsonl
-SCORE_PREDICTIONS ?= evaluation/results/rag_baseline_v1/details.jsonl
-SCORE_OUTPUT ?= evaluation/results/rag_baseline_v1/automatic_metrics.json
-SCORE_DETAILS ?= evaluation/results/rag_baseline_v1/automatic_metrics_details.jsonl
+SCORE_PREDICTIONS ?= evaluation/results/rag_baseline_0p5b/details.jsonl
+SCORE_OUTPUT ?= evaluation/results/rag_baseline_0p5b/automatic_metrics.json
+SCORE_DETAILS ?= evaluation/results/rag_baseline_0p5b/automatic_metrics_details.jsonl
 
 .PHONY: init install lint format test clean score
 

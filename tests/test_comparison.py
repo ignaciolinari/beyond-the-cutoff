@@ -16,7 +16,7 @@ from beyond_the_cutoff.evaluation.runner import EvaluationResult
 
 
 def test_load_comparison_plan_defaults() -> None:
-    plan_path = Path("configs/evaluation/compare_default.yaml")
+    plan_path = Path("configs/evaluation/compare_0p5b_experiments.yaml")
     plan = load_comparison_plan(plan_path)
     assert plan.defaults.metrics_filename == "metrics.json"
     assert len(plan.runs) >= 2
@@ -25,13 +25,15 @@ def test_load_comparison_plan_defaults() -> None:
 
 def test_describe_plan_includes_expected_paths() -> None:
     project_cfg = load_config()
-    plan_path = Path("configs/evaluation/compare_default.yaml")
+    plan_path = Path("configs/evaluation/compare_0p5b_experiments.yaml")
     plan = load_comparison_plan(plan_path)
     rows = describe_plan(plan, project_cfg)
     labels = {row["label"] for row in rows}
-    assert {"rag_baseline_v1", "lora_science_v1"}.issubset(labels)
-    baseline = next(row for row in rows if row["label"] == "rag_baseline_v1")
-    assert baseline["metrics_path"].endswith("evaluation/results/rag_baseline_v1/metrics.json")
+    assert {"rag_baseline_0p5b", "lora_science_0p5b_ft_only", "hybrid_science_0p5b"}.issubset(
+        labels
+    )
+    baseline = next(row for row in rows if row["label"] == "rag_baseline_0p5b")
+    assert baseline["metrics_path"].endswith("evaluation/results/rag_baseline_0p5b/metrics.json")
 
 
 def test_execute_comparison_plan_invokes_runner(
