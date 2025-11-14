@@ -45,6 +45,43 @@ def _serialise_project_config(config: ProjectConfig) -> dict[str, Any]:
     }
 
 
+def _extract_dataset_metadata(dataset_path: Path) -> dict[str, Any]:
+    """Extract metadata from dataset file if available.
+
+    Looks for metadata in first line or dataset header.
+    Returns enhanced metadata dict.
+    """
+    metadata: dict[str, Any] = {}
+
+    try:
+        with dataset_path.open("r", encoding="utf-8") as handle:
+            first_line = handle.readline()
+            if first_line.strip():
+                try:
+                    first_record = json.loads(first_line)
+                    # Check for common metadata fields
+                    if "dataset_version" in first_record:
+                        metadata["version"] = first_record["dataset_version"]
+                    if "generated_at" in first_record:
+                        metadata["generated_at"] = first_record["generated_at"]
+                    if "generator_model" in first_record:
+                        metadata["generator_model"] = first_record["generator_model"]
+                    if "source_offline_dataset" in first_record:
+                        metadata["source_dataset"] = first_record["source_offline_dataset"]
+                except json.JSONDecodeError:
+                    pass
+
+        # Get file modification time as fallback generation timestamp
+        if "generated_at" not in metadata:
+            mtime = dataset_path.stat().st_mtime
+            metadata["file_mtime"] = datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
+    except Exception:
+        # If we can't read metadata, continue without it
+        pass
+
+    return metadata
+
+
 def append_experiment_record(
     metadata_path: Path,
     *,
@@ -64,6 +101,9 @@ def append_experiment_record(
 ) -> None:
     """Append a JSON record summarising the evaluation run."""
 
+    # Extract enhanced dataset metadata
+    dataset_metadata = _extract_dataset_metadata(dataset_path)
+
     record = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "model_label": model_label,
@@ -73,6 +113,7 @@ def append_experiment_record(
             "sha256": compute_file_sha256(dataset_path),
             "size_bytes": dataset_path.stat().st_size,
             "example_count": len(score_rows),
+            **dataset_metadata,  # Include extracted metadata (version, generated_at, etc.)
         },
         "project_config": {
             "path": str(config_path),

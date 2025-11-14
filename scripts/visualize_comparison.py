@@ -49,6 +49,19 @@ except ImportError:
     sys.exit(1)
 
 try:
+    import plotly.graph_objects as go  # type: ignore[import-not-found] # noqa: F401
+    from plotly.subplots import make_subplots  # type: ignore[import-not-found] # noqa: F401
+
+    PLOTLY_AVAILABLE = True
+except ImportError:
+    PLOTLY_AVAILABLE = False
+    print(
+        "[warn] plotly not available - interactive dashboards will be skipped.",
+        "Install with: pip install plotly",
+        file=sys.stderr,
+    )
+
+try:
     from scipy import stats
 except ImportError:
     stats = None
@@ -63,6 +76,57 @@ def load_comparison_report(report_path: Path) -> dict[str, Any]:
     """Load comparison report JSON."""
     with report_path.open("r", encoding="utf-8") as handle:
         return json.load(handle)  # type: ignore[no-any-return]
+
+
+def resolve_details_path(
+    label: str,
+    report_data: dict[str, Any] | None = None,
+    output_dir: Path | None = None,
+) -> Path | None:
+    """Resolve details.jsonl path for a given label.
+
+    Priority order:
+    1. Use details_path from comparison report if available
+    2. Try output_dir.parent / label / "details.jsonl"
+    3. Try evaluation/results / label / "details.jsonl"
+    4. Return None if not found
+
+    Args:
+        label: Model label to find details for
+        report_data: Optional comparison report data with runs
+        output_dir: Optional output directory for fallback resolution
+
+    Returns:
+        Path to details.jsonl if found, None otherwise
+    """
+    # First, try to get from report data
+    if report_data:
+        for run in report_data.get("runs", []):
+            if run.get("label") == label:
+                details_path_str = run.get("details_path")
+                if details_path_str:
+                    details_path = Path(details_path_str)
+                    if details_path.exists():
+                        return details_path.resolve()
+                    # Try relative to report location if absolute path doesn't exist
+                    if not details_path.is_absolute() and report_data.get("_report_path"):
+                        report_dir = Path(report_data["_report_path"]).parent
+                        candidate = report_dir / details_path
+                        if candidate.exists():
+                            return candidate.resolve()
+
+    # Fallback: try common locations
+    if output_dir:
+        candidate = output_dir.parent / label / "details.jsonl"
+        if candidate.exists():
+            return candidate.resolve()
+
+    # Last resort: try standard evaluation results location
+    candidate = Path("evaluation/results") / label / "details.jsonl"
+    if candidate.exists():
+        return candidate.resolve()
+
+    return None
 
 
 def load_metrics_file(metrics_path: Path) -> dict[str, Any]:
@@ -273,39 +337,89 @@ def plot_citation_metrics(
 
 
 def plot_task_type_breakdown(
-    data: dict[str, dict[str, Any]], output_dir: Path, *, figsize: tuple[int, int] = (14, 8)
+    data: dict[str, dict[str, Any]],
+    output_dir: Path,
+    *,
+    report_data: dict[str, Any] | None = None,
+    figsize: tuple[int, int] = (14, 8),
 ) -> None:
     """Create stacked bar chart showing task type distribution."""
-    # This requires details.jsonl files, so we'll create a placeholder
-    # In practice, this would read from details files
-    print(
-        "[info] Task type breakdown requires details.jsonl files (not yet implemented)",
-        file=sys.stderr,
-    )
-
-    # Placeholder: show example count per model
     labels = list(data.keys())
-    example_counts = [int(data[label].get("examples_evaluated", 0)) for label in labels]
 
+    # Try to load details files to get task type breakdown
+    task_types: dict[str, dict[str, int]] = {}
+    for label in labels:
+        # Use helper function to resolve details path
+        details_path = resolve_details_path(label, report_data, output_dir)
+
+        task_type_counts: dict[str, int] = {}
+        if details_path and details_path.exists():
+            try:
+                with details_path.open("r", encoding="utf-8") as handle:
+                    for line in handle:
+                        if not line.strip():
+                            continue
+                        example = json.loads(line)
+                        task_type = example.get("task_type", "unknown")
+                        task_type_counts[task_type] = task_type_counts.get(task_type, 0) + 1
+            except Exception as exc:
+                print(
+                    f"[warn] Failed to load task types from {details_path}: {exc}",
+                    file=sys.stderr,
+                )
+        elif details_path is None:
+            print(
+                f"[warn] Could not resolve details.jsonl path for '{label}'. "
+                "Task type breakdown will use fallback data.",
+                file=sys.stderr,
+            )
+
+        if not task_type_counts:
+            # Fallback: use example count
+            task_type_counts["total"] = int(data[label].get("examples_evaluated", 0))
+
+        task_types[label] = task_type_counts
+
+    # Collect all unique task types
+    all_task_types_set: set[str] = set()
+    for counts in task_types.values():
+        all_task_types_set.update(counts.keys())
+    all_task_types: list[str] = sorted(all_task_types_set)
+
+    if not all_task_types:
+        print("[warn] No task type data found", file=sys.stderr)
+        return
+
+    # Create stacked bar chart
     fig, ax = plt.subplots(figsize=figsize)
-    bars = ax.bar(labels, example_counts, color="#1f77b4", alpha=0.7)
+    x = np.arange(len(labels))
+    width = 0.6
+
+    colors = sns.color_palette("Set2", len(all_task_types))
+    bottom = np.zeros(len(labels))
+
+    bars = []
+    for idx, task_type in enumerate(all_task_types):
+        values = [task_types[label].get(task_type, 0) for label in labels]
+        bar = ax.bar(
+            x,
+            values,
+            width,
+            label=task_type.replace("_", " ").title(),
+            bottom=bottom,
+            color=colors[idx],
+            alpha=0.8,
+        )
+        bars.append(bar)
+        bottom += values
+
     ax.set_xlabel("Model", fontsize=12, fontweight="bold")
     ax.set_ylabel("Number of Examples", fontsize=12, fontweight="bold")
-    ax.set_title("Examples Evaluated per Model", fontsize=14, fontweight="bold")
+    ax.set_title("Task Type Breakdown by Model", fontsize=14, fontweight="bold")
+    ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=45, ha="right")
+    ax.legend(loc="best")
     ax.grid(axis="y", alpha=0.3)
-
-    # Add value labels
-    for bar, count in zip(bars, example_counts, strict=True):
-        height = bar.get_height()
-        ax.text(
-            bar.get_x() + bar.get_width() / 2.0,
-            height,
-            str(count),
-            ha="center",
-            va="bottom",
-            fontsize=10,
-        )
 
     plt.tight_layout()
     output_path = output_dir / "task_type_breakdown.png"
@@ -538,13 +652,259 @@ def plot_statistical_significance(
     print(f"[info] Saved statistical significance matrix to {output_path}")
 
 
-def plot_error_analysis(
-    data: dict[str, dict[str, Any]], output_dir: Path, *, figsize: tuple[int, int] = (14, 8)
+def plot_confusion_matrices(
+    data: dict[str, dict[str, Any]], output_dir: Path, *, figsize: tuple[int, int] = (16, 12)
 ) -> None:
-    """Create visualization analyzing error patterns across models."""
+    """Create confusion matrices for judge scores across conditions.
+
+    For each judge metric (factuality, grounding, completeness, communication),
+    creates a confusion matrix showing how models compare to each other.
+    """
+    labels = list(data.keys())
+    metrics = ["factuality", "grounding", "completeness", "communication"]
+
+    # Extract scores for each metric
+    metric_scores: dict[str, list[float]] = {}
+    for metric in metrics:
+        scores = []
+        for label in labels:
+            summary = data[label]
+            judge_scores = extract_judge_scores(summary)
+            scores.append(judge_scores.get(metric, 0.0))
+        if any(s > 0 for s in scores):  # Only include metrics with at least one non-zero score
+            metric_scores[metric] = scores
+
+    if not metric_scores:
+        print("[warn] No judge scores found for confusion matrices", file=sys.stderr)
+        return
+
+    # Create subplot grid
+    n_metrics = len(metric_scores)
+    n_cols = 2
+    n_rows = (n_metrics + 1) // 2
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
+    if n_metrics == 1:
+        axes = [axes]
+    else:
+        axes = axes.flatten()
+
+    for idx, (metric, scores) in enumerate(metric_scores.items()):
+        ax = axes[idx]
+
+        # Create confusion matrix: compare each model's score to all others
+        # Matrix[i, j] = difference between model i and model j scores
+        n_models = len(labels)
+        matrix = np.zeros((n_models, n_models))
+
+        for i in range(n_models):
+            for j in range(n_models):
+                if i == j:
+                    matrix[i, j] = 0.0  # Diagonal: same model
+                else:
+                    # Difference: positive means model i scored higher
+                    matrix[i, j] = scores[i] - scores[j]
+
+        # Create heatmap
+        im = ax.imshow(matrix, cmap="RdYlGn", aspect="auto", vmin=-1.0, vmax=1.0)
+
+        # Add text annotations
+        for i in range(n_models):
+            for j in range(n_models):
+                text_color = "black" if abs(matrix[i, j]) < 0.5 else "white"
+                ax.text(
+                    j,
+                    i,
+                    f"{matrix[i, j]:.2f}",
+                    ha="center",
+                    va="center",
+                    color=text_color,
+                    fontsize=9,
+                )
+
+        ax.set_xticks(np.arange(n_models))
+        ax.set_yticks(np.arange(n_models))
+        ax.set_xticklabels(labels, rotation=45, ha="right")
+        ax.set_yticklabels(labels)
+        ax.set_title(
+            f"{metric.replace('_', ' ').title()} Score Differences", fontsize=12, fontweight="bold"
+        )
+        plt.colorbar(im, ax=ax, label="Score Difference")
+
+    # Hide unused subplots
+    for idx in range(n_metrics, len(axes)):
+        axes[idx].axis("off")
+
+    plt.tight_layout()
+    output_path = output_dir / "confusion_matrices.png"
+    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close()
+    print(f"[info] Saved confusion matrices to {output_path}")
+
+
+def create_interactive_dashboard(data: dict[str, dict[str, Any]], output_dir: Path) -> None:
+    """Create an interactive Plotly dashboard for exploring results."""
+    if not PLOTLY_AVAILABLE:
+        print("[warn] Plotly not available - skipping interactive dashboard", file=sys.stderr)
+        return
+
+    labels = list(data.keys())
+
+    # Create subplots
+    fig = make_subplots(
+        rows=2,
+        cols=2,
+        subplot_titles=(
+            "Judge Scores Comparison",
+            "Citation Metrics (RAG Models)",
+            "Error Rates",
+            "Timing Comparison",
+        ),
+        specs=[[{"type": "bar"}, {"type": "bar"}], [{"type": "bar"}, {"type": "bar"}]],
+    )
+
+    # 1. Judge Scores Comparison
+    metrics = ["factuality", "grounding", "completeness", "communication"]
+    available_metrics = [
+        m for m in metrics if any(m in extract_judge_scores(data[label]) for label in labels)
+    ]
+
+    if available_metrics:
+        for metric in available_metrics:
+            values = [extract_judge_scores(data[label]).get(metric, 0.0) for label in labels]
+            fig.add_trace(
+                go.Bar(name=metric.replace("_", " ").title(), x=labels, y=values), row=1, col=1
+            )
+
+    # 2. Citation Metrics (RAG models only)
+    rag_labels = []
+    citation_coverage = []
+    for label in labels:
+        summary = data[label]
+        if summary.get("prompt_mode") == "rag":
+            rag_labels.append(label)
+            citation_coverage.append(extract_citation_metrics(summary).get("coverage", 0.0))
+
+    if rag_labels:
+        fig.add_trace(
+            go.Bar(name="Citation Coverage", x=rag_labels, y=citation_coverage), row=1, col=2
+        )
+
+    # 3. Error Rates
+    error_rates = [float(data[label].get("error_rate", 0.0)) for label in labels]
+    fig.add_trace(
+        go.Bar(
+            name="Error Rate",
+            x=labels,
+            y=error_rates,
+            marker_color=["#d62728" if r > 0.1 else "#2ca02c" for r in error_rates],
+        ),
+        row=2,
+        col=1,
+    )
+
+    # 4. Timing Comparison
+    generation_times = []
+    judge_times = []
+    for label in labels:
+        timing = data[label].get("timing", {})
+        if isinstance(timing, dict):
+            gen_stats = timing.get("generation", {})
+            judge_stats = timing.get("judge", {})
+            generation_times.append(
+                gen_stats.get("mean_seconds", 0.0) if isinstance(gen_stats, dict) else 0.0
+            )
+            judge_times.append(
+                judge_stats.get("mean_seconds", 0.0) if isinstance(judge_stats, dict) else 0.0
+            )
+        else:
+            generation_times.append(0.0)
+            judge_times.append(0.0)
+
+    fig.add_trace(go.Bar(name="Generation", x=labels, y=generation_times), row=2, col=2)
+    fig.add_trace(go.Bar(name="Judge", x=labels, y=judge_times), row=2, col=2)
+
+    # Update layout
+    fig.update_layout(
+        title_text="Model Comparison Dashboard", height=800, showlegend=True, hovermode="x unified"
+    )
+
+    # Update axes
+    fig.update_xaxes(title_text="Model", row=1, col=1)
+    fig.update_yaxes(title_text="Score", row=1, col=1, range=[0, 1])
+    fig.update_xaxes(title_text="Model", row=1, col=2)
+    fig.update_yaxes(title_text="Coverage", row=1, col=2, range=[0, 1])
+    fig.update_xaxes(title_text="Model", row=2, col=1)
+    fig.update_yaxes(title_text="Error Rate", row=2, col=1)
+    fig.update_xaxes(title_text="Model", row=2, col=2)
+    fig.update_yaxes(title_text="Time (seconds)", row=2, col=2)
+
+    output_path = output_dir / "interactive_dashboard.html"
+    fig.write_html(str(output_path))
+    print(f"[info] Saved interactive dashboard to {output_path}")
+
+
+def plot_error_analysis(
+    data: dict[str, dict[str, Any]],
+    output_dir: Path,
+    *,
+    report_data: dict[str, Any] | None = None,
+    figsize: tuple[int, int] = (16, 10),
+) -> None:
+    """Create visualization analyzing error patterns across models.
+
+    Enhanced with error type breakdowns and detailed error categorization.
+    """
     labels = list(data.keys())
     error_rates: list[float] = []
     empty_response_counts: list[int] = []
+
+    # Collect error type breakdowns from details files
+    error_type_counts: dict[str, dict[str, int]] = {}  # label -> error_type -> count
+    generation_error_counts: dict[str, int] = {}
+    judge_error_counts: dict[str, int] = {}
+
+    for label in labels:
+        error_type_counts[label] = {"generation": 0, "judge": 0, "both": 0, "other": 0}
+        generation_error_counts[label] = 0
+        judge_error_counts[label] = 0
+
+        # Use helper function to resolve details path
+        details_path = resolve_details_path(label, report_data, output_dir)
+
+        if details_path and details_path.exists():
+            try:
+                with details_path.open("r", encoding="utf-8") as handle:
+                    for line in handle:
+                        if not line.strip():
+                            continue
+                        example = json.loads(line)
+                        errors = example.get("errors", {})
+                        if errors:
+                            has_generation = "generation" in errors
+                            has_judge = "judge" in errors
+
+                            if has_generation and has_judge:
+                                error_type_counts[label]["both"] += 1
+                            elif has_generation:
+                                error_type_counts[label]["generation"] += 1
+                                generation_error_counts[label] += 1
+                            elif has_judge:
+                                error_type_counts[label]["judge"] += 1
+                                judge_error_counts[label] += 1
+                            else:
+                                error_type_counts[label]["other"] += 1
+            except Exception as exc:
+                print(
+                    f"[warn] Failed to load error details from {details_path}: {exc}",
+                    file=sys.stderr,
+                )
+        elif details_path is None:
+            print(
+                f"[warn] Could not resolve details.jsonl path for '{label}'. "
+                "Error analysis will use summary data only.",
+                file=sys.stderr,
+            )
 
     for label in labels:
         summary = data[label]
@@ -553,10 +913,19 @@ def plot_error_analysis(
         empty_count = summary.get("examples_with_empty_responses", 0)
         empty_response_counts.append(empty_count)
 
-    fig, axes = plt.subplots(2, 2, figsize=figsize)
+    fig = plt.figure(figsize=figsize)
+    gs = fig.add_gridspec(3, 3, hspace=0.3, wspace=0.3)
+    axes = [
+        fig.add_subplot(gs[0, 0]),  # Error rate
+        fig.add_subplot(gs[0, 1]),  # Empty responses
+        fig.add_subplot(gs[0, 2]),  # Error type breakdown
+        fig.add_subplot(gs[1, 0]),  # Error rate vs factuality
+        fig.add_subplot(gs[1, 1:]),  # Error type stacked bar
+        fig.add_subplot(gs[2, :]),  # Summary statistics
+    ]
 
     # Error rate comparison
-    ax1 = axes[0, 0]
+    ax1 = axes[0]
     colors = ["#d62728" if rate > 0.1 else "#2ca02c" for rate in error_rates]
     bars = ax1.bar(labels, error_rates, color=colors, alpha=0.7)
     ax1.axhline(y=0.1, color="r", linestyle="--", alpha=0.5, label="10% threshold")
@@ -578,7 +947,7 @@ def plot_error_analysis(
         )
 
     # Empty responses
-    ax2 = axes[0, 1]
+    ax2 = axes[1]
     ax2.bar(labels, empty_response_counts, color="#ff7f0e", alpha=0.7)
     ax2.set_xlabel("Model", fontsize=11)
     ax2.set_ylabel("Count", fontsize=11)
@@ -587,23 +956,93 @@ def plot_error_analysis(
     ax2.grid(axis="y", alpha=0.3)
 
     # Error rate vs factuality scatter
-    ax3 = axes[1, 0]
+    ax4 = axes[3]
     factuality_scores = [
         extract_judge_scores(data[label]).get("factuality", 0.0) for label in labels
     ]
-    ax3.scatter(
+    ax4.scatter(
         error_rates, factuality_scores, s=100, alpha=0.6, c=range(len(labels)), cmap="viridis"
     )
     for i, label in enumerate(labels):
-        ax3.annotate(label, (error_rates[i], factuality_scores[i]), fontsize=8, alpha=0.7)
-    ax3.set_xlabel("Error Rate", fontsize=11)
-    ax3.set_ylabel("Factuality Score", fontsize=11)
-    ax3.set_title("Error Rate vs Factuality", fontsize=12, fontweight="bold")
-    ax3.grid(alpha=0.3)
+        ax4.annotate(label, (error_rates[i], factuality_scores[i]), fontsize=8, alpha=0.7)
+    ax4.set_xlabel("Error Rate", fontsize=11)
+    ax4.set_ylabel("Factuality Score", fontsize=11)
+    ax4.set_title("Error Rate vs Factuality", fontsize=12, fontweight="bold")
+    ax4.grid(alpha=0.3)
 
-    # Summary statistics
-    ax4 = axes[1, 1]
-    ax4.axis("off")
+    # Error type breakdown (pie chart)
+    ax3 = axes[2]
+    if any(sum(error_type_counts[label].values()) > 0 for label in labels):
+        # Aggregate error types across all models
+        total_errors_by_type = {
+            "generation": sum(error_type_counts[label]["generation"] for label in labels),
+            "judge": sum(error_type_counts[label]["judge"] for label in labels),
+            "both": sum(error_type_counts[label]["both"] for label in labels),
+            "other": sum(error_type_counts[label]["other"] for label in labels),
+        }
+        # Filter out zero values
+        total_errors_by_type = {k: v for k, v in total_errors_by_type.items() if v > 0}
+
+        if total_errors_by_type:
+            colors_pie = ["#d62728", "#ff7f0e", "#9467bd", "#8c564b"]
+            ax3.pie(
+                total_errors_by_type.values(),
+                labels=[k.replace("_", " ").title() for k in total_errors_by_type.keys()],
+                autopct="%1.1f%%",
+                colors=colors_pie[: len(total_errors_by_type)],
+                startangle=90,
+            )
+            ax3.set_title("Error Type Distribution", fontsize=12, fontweight="bold")
+        else:
+            ax3.text(0.5, 0.5, "No error data available", ha="center", va="center", fontsize=11)
+            ax3.axis("off")
+    else:
+        ax3.text(0.5, 0.5, "No error data available", ha="center", va="center", fontsize=11)
+        ax3.axis("off")
+
+    # Error type stacked bar chart
+    ax5 = axes[4]
+    if any(sum(error_type_counts[label].values()) > 0 for label in labels):
+        x = np.arange(len(labels))
+        width = 0.6
+        bottom = np.zeros(len(labels))
+
+        error_types = ["generation", "judge", "both", "other"]
+        colors_stacked = ["#d62728", "#ff7f0e", "#9467bd", "#8c564b"]
+
+        for idx, error_type in enumerate(error_types):
+            values = [error_type_counts[label][error_type] for label in labels]
+            if any(v > 0 for v in values):
+                ax5.bar(
+                    x,
+                    values,
+                    width,
+                    label=error_type.replace("_", " ").title(),
+                    bottom=bottom,
+                    color=colors_stacked[idx],
+                    alpha=0.8,
+                )
+                bottom += values
+
+        ax5.set_xlabel("Model", fontsize=11, fontweight="bold")
+        ax5.set_ylabel("Error Count", fontsize=11, fontweight="bold")
+        ax5.set_title("Error Type Breakdown by Model", fontsize=12, fontweight="bold")
+        ax5.set_xticks(x)
+        ax5.set_xticklabels(labels, rotation=45, ha="right")
+        ax5.legend(loc="upper left")
+        ax5.grid(axis="y", alpha=0.3)
+    else:
+        ax5.text(0.5, 0.5, "No error data available", ha="center", va="center", fontsize=11)
+        ax5.axis("off")
+
+    # Summary statistics (enhanced)
+    ax6 = axes[5]
+    ax6.axis("off")
+
+    total_generation_errors = sum(generation_error_counts.values())
+    total_judge_errors = sum(judge_error_counts.values())
+    total_both_errors = sum(error_type_counts[label]["both"] for label in labels)
+
     summary_text = f"""
     Error Analysis Summary
 
@@ -612,14 +1051,20 @@ def plot_error_analysis(
     Total empty responses: {sum(empty_response_counts)}
     Mean error rate: {np.mean(error_rates):.1%}
     Mean factuality: {np.mean(factuality_scores):.2f}
+
+    Error Type Breakdown:
+    - Generation errors: {total_generation_errors}
+    - Judge errors: {total_judge_errors}
+    - Both types: {total_both_errors}
+    - Total errors: {total_generation_errors + total_judge_errors + total_both_errors}
     """
-    ax4.text(0.1, 0.5, summary_text, fontsize=11, verticalalignment="center", family="monospace")
+    ax6.text(0.1, 0.5, summary_text, fontsize=11, verticalalignment="center", family="monospace")
 
     plt.tight_layout()
     output_path = output_dir / "error_analysis.png"
     plt.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close()
-    print(f"[info] Saved error analysis to {output_path}")
+    print(f"[info] Saved enhanced error analysis to {output_path}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -648,7 +1093,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--only",
         nargs="+",
-        choices=["metrics", "error-rates", "citations", "timing", "prompt-mode", "task-type"],
+        choices=[
+            "metrics",
+            "error-rates",
+            "citations",
+            "timing",
+            "prompt-mode",
+            "task-type",
+            "confusion-matrices",
+            "interactive-dashboard",
+            "statistical-significance",
+            "error-analysis",
+        ],
         help="Generate only specific visualizations (default: all)",
     )
     parser.add_argument(
@@ -665,10 +1121,13 @@ def main() -> int:
 
     # Load data
     data: dict[str, dict[str, Any]] = {}
+    report_data: dict[str, Any] | None = None
 
     if args.report:
-        report = load_comparison_report(args.report)
-        for run in report.get("runs", []):
+        report_data = load_comparison_report(args.report)
+        # Store report path for relative path resolution
+        report_data["_report_path"] = str(args.report.resolve())
+        for run in report_data.get("runs", []):
             if run.get("skipped"):
                 continue
             label = run.get("label", "unknown")
@@ -708,6 +1167,8 @@ def main() -> int:
             "timing",
             "prompt-mode",
             "task-type",
+            "confusion-matrices",
+            "interactive-dashboard",
             "statistical-significance",
             "error-analysis",
         ]
@@ -730,13 +1191,19 @@ def main() -> int:
         plot_prompt_mode_comparison(data, args.output)
 
     if "task-type" in visualizations:
-        plot_task_type_breakdown(data, args.output)
+        plot_task_type_breakdown(data, args.output, report_data=report_data)
+
+    if "confusion-matrices" in visualizations:
+        plot_confusion_matrices(data, args.output)
+
+    if "interactive-dashboard" in visualizations:
+        create_interactive_dashboard(data, args.output)
 
     if "statistical-significance" in visualizations:
         plot_statistical_significance(data, args.output)
 
     if "error-analysis" in visualizations:
-        plot_error_analysis(data, args.output)
+        plot_error_analysis(data, args.output, report_data=report_data)
 
     print(f"\n[info] Visualizations saved to {args.output}")
     return 0

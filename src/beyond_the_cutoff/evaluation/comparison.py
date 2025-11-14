@@ -229,14 +229,27 @@ def execute_comparison_plan(
                 f"  Ensure the judge config file exists or update the comparison plan configuration."
             )
 
-        model_cfg = (
-            load_inference_from_yaml(spec.model_config)
-            if spec.model_config
-            else project_config.inference
-        )
+        if spec.model_config:
+            if not spec.model_config.exists():
+                raise FileNotFoundError(
+                    f"Model config for run '{spec.label}' not found: {spec.model_config}\n"
+                    f"  Checked path: {spec.model_config}\n"
+                    f"  Ensure the model config file exists or update the comparison plan configuration."
+                )
+            model_cfg = load_inference_from_yaml(spec.model_config)
+        else:
+            model_cfg = project_config.inference
 
         judge_inference_path = spec.judge_inference or plan.defaults.judge_inference
         if judge_inference_path:
+            if not judge_inference_path.exists():
+                raise FileNotFoundError(
+                    f"Judge inference config for run '{spec.label}' not found: {judge_inference_path}\n"
+                    f"  Checked paths:\n"
+                    f"    - Run-specific: {spec.judge_inference}\n"
+                    f"    - Plan default: {plan.defaults.judge_inference}\n"
+                    f"  Ensure the judge inference config file exists or update the comparison plan configuration."
+                )
             judge_inference_cfg = load_inference_from_yaml(judge_inference_path)
         else:
             judge_inference_cfg = model_cfg
@@ -265,6 +278,11 @@ def execute_comparison_plan(
 
         prompt_mode = spec.prompt_mode or plan.defaults.prompt_mode or "rag"
 
+        # Set checkpoint path based on output path
+        checkpoint_path = None
+        if metrics_path:
+            checkpoint_path = metrics_path.parent / f"{metrics_path.stem}.checkpoint.json"
+
         result: EvaluationResult = run_evaluation(
             project_config=project_config,
             dataset_path=dataset_path,
@@ -282,6 +300,9 @@ def execute_comparison_plan(
             max_retries=max_retries,
             retry_delay=retry_delay,
             prompt_mode=prompt_mode,
+            checkpoint_path=checkpoint_path,
+            checkpoint_interval=10,  # Save checkpoint every 10 examples
+            resume_from_checkpoint=True,
         )
 
         results.append(

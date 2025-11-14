@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import json
 import sys
 import time
@@ -87,6 +88,8 @@ def _detect_model_type(
     model_config_path: Path | None,
     model_name: str,
     model_cfg: InferenceConfig | None = None,
+    *,
+    warn_on_inference: bool = True,
 ) -> str:
     """Detect model type from config path or model name.
 
@@ -94,6 +97,7 @@ def _detect_model_type(
         model_config_path: Optional path to model config file
         model_name: Model name/Ollama tag
         model_cfg: Optional InferenceConfig with explicit model_type field
+        warn_on_inference: If True, warn when model_type is inferred rather than explicit
 
     Returns:
         'instruction_only', 'rag_trained', or 'base'
@@ -107,6 +111,19 @@ def _detect_model_type(
     # First, check explicit model_type in config (most reliable)
     if model_cfg and model_cfg.model_type:
         return model_cfg.model_type
+
+    # Model type was not explicit - warn if requested
+    if warn_on_inference:
+        inference_source = []
+        if model_config_path:
+            inference_source.append(f"config filename '{model_config_path.name}'")
+        inference_source.append(f"model name '{model_name}'")
+        source_str = " and ".join(inference_source)
+        print(
+            f"[warn] model_type not explicitly set in config. Inferring from {source_str}. "
+            "Consider adding explicit 'model_type' field to config for reliability.",
+            file=sys.stderr,
+        )
     # First, check config file name (most reliable indicator)
     if model_config_path:
         config_name = model_config_path.name.lower()
@@ -294,6 +311,10 @@ def summarise_scores(score_rows: list[dict[str, Any]]) -> dict[str, Any]:
     instruction_only_count = 0
     rag_count = 0
 
+    # Track error categories
+    error_category_counts: dict[str, int] = defaultdict(int)
+    error_stage_counts: dict[str, int] = defaultdict(int)
+
     for row in score_rows:
         scores = row.get("judge_scores", {})
         for key, value in scores.items():
@@ -328,6 +349,23 @@ def summarise_scores(score_rows: list[dict[str, Any]]) -> dict[str, Any]:
             if isinstance(coverage, int | float):
                 coverage_values.append(float(coverage))
 
+        # Track error information
+        if row.get("errors"):
+            errors = row.get("errors", {})
+            error_categories = row.get("error_categories", {})
+
+            # Count errors by stage
+            for stage in errors.keys():
+                error_stage_counts[stage] += 1
+
+            # Count errors by category
+            for _stage, category in error_categories.items():
+                error_category_counts[category] += 1
+            # If no category specified, count as unknown
+            for stage in errors.keys():
+                if stage not in error_categories:
+                    error_category_counts["unknown"] += 1
+
     summary: dict[str, Any] = {
         key: mean(values) if values else 0.0 for key, values in metrics.items()
     }
@@ -336,7 +374,80 @@ def summarise_scores(score_rows: list[dict[str, Any]]) -> dict[str, Any]:
         "instruction_only": instruction_only_count,
         "rag": rag_count,
     }
+
+    # Add error statistics
+    if error_category_counts or error_stage_counts:
+        summary["error_statistics"] = {
+            "by_category": dict(error_category_counts),
+            "by_stage": dict(error_stage_counts),
+        }
+
     return summary
+
+
+def _categorize_error(error_message: str, error_type: type[Exception]) -> str:
+    """Categorize an error into a structured error type.
+
+    Args:
+        error_message: Error message string
+        error_type: Exception type
+
+    Returns:
+        Error category: 'network', 'parsing', 'model', 'validation', 'timeout', 'unknown'
+    """
+    error_str = str(error_message).lower()
+    error_type_name = error_type.__name__.lower()
+
+    # Network-related errors
+    if any(
+        indicator in error_str or indicator in error_type_name
+        for indicator in [
+            "connection",
+            "network",
+            "timeout",
+            "http",
+            "socket",
+            "refused",
+            "unreachable",
+        ]
+    ):
+        if "timeout" in error_str or "timeout" in error_type_name:
+            return "timeout"
+        return "network"
+
+    # Parsing errors
+    if any(
+        indicator in error_str or indicator in error_type_name
+        for indicator in ["json", "parse", "decode", "syntax", "invalid format", "malformed"]
+    ):
+        return "parsing"
+
+    # Model/API errors
+    if any(
+        indicator in error_str or indicator in error_type_name
+        for indicator in [
+            "model",
+            "api",
+            "rate limit",
+            "quota",
+            "unauthorized",
+            "forbidden",
+            "401",
+            "403",
+            "429",
+        ]
+    ):
+        return "model"
+
+    # Validation errors
+    if any(
+        indicator in error_str or indicator in error_type_name
+        for indicator in ["validation", "invalid", "missing", "required", "valueerror"]
+    ):
+        return "validation"
+
+    # Default to unknown
+    return "unknown"
 
 
 def _call_with_retries(
@@ -345,19 +456,43 @@ def _call_with_retries(
     stage: str,
     max_retries: int,
     retry_delay: float,
-) -> tuple[Any | None, str | None]:
+    use_exponential_backoff: bool = True,
+) -> tuple[Any | None, str | None, str | None]:
+    """Call a function with retries and exponential backoff.
+
+    Args:
+        func: Function to call (no arguments)
+        stage: Description of the operation (for logging)
+        max_retries: Maximum number of retries (total attempts = max_retries + 1)
+        retry_delay: Base delay in seconds (doubles with exponential backoff)
+        use_exponential_backoff: If True, use exponential backoff; otherwise use linear
+
+    Returns:
+        Tuple of (result, error_message, error_category). Result is None if all attempts failed.
+    """
     attempts = max_retries + 1
     last_error: str | None = None
+    last_error_type: type[Exception] | None = None
     for attempt in range(1, attempts + 1):
         try:
-            return func(), None
+            return func(), None, None
         except KeyboardInterrupt:  # pragma: no cover - allow user aborts
             raise
         except Exception as exc:  # noqa: BLE001
             last_error = f"{type(exc).__name__}: {exc}"
+            last_error_type = type(exc)
             if attempt == attempts:
                 break
-            wait_seconds = max(retry_delay, 0.0) * attempt
+
+            # Calculate wait time: exponential backoff by default, linear fallback
+            if use_exponential_backoff:
+                # Exponential backoff: base_delay * 2^(attempt-1)
+                # Cap at 300 seconds (5 minutes) to avoid extremely long waits
+                wait_seconds = min(max(retry_delay, 0.0) * (2 ** (attempt - 1)), 300.0)
+            else:
+                # Linear backoff: base_delay * attempt
+                wait_seconds = max(retry_delay, 0.0) * attempt
+
             print(
                 f"[warn] {stage} failed on attempt {attempt}/{attempts}: {last_error}. "
                 f"Retrying in {wait_seconds:.1f}s...",
@@ -365,7 +500,102 @@ def _call_with_retries(
             )
             if wait_seconds > 0:
                 time.sleep(wait_seconds)
-    return None, last_error
+
+    # Categorize the error before returning
+    error_category = (
+        _categorize_error(last_error or "", last_error_type or Exception) if last_error else None
+    )
+    return None, last_error, error_category
+
+
+def _save_checkpoint(
+    checkpoint_path: Path,
+    score_rows: list[dict[str, Any]],
+    evaluated_task_ids: set[str],
+    *,
+    model_label: str,
+    dataset_path: Path,
+) -> None:
+    """Save evaluation checkpoint to disk.
+
+    Args:
+        checkpoint_path: Path where checkpoint should be saved
+        score_rows: List of evaluation results so far
+        evaluated_task_ids: Set of task IDs that have been evaluated
+        model_label: Label for the model being evaluated
+        dataset_path: Path to the dataset being evaluated
+    """
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Compute dataset hash for validation
+    from beyond_the_cutoff.utils.experiment_logging import compute_file_sha256
+
+    try:
+        dataset_sha256 = compute_file_sha256(dataset_path)
+        dataset_size = dataset_path.stat().st_size
+    except Exception:
+        dataset_sha256 = None
+        dataset_size = None
+
+    checkpoint_data = {
+        "model_label": model_label,
+        "dataset_path": str(dataset_path.resolve()),
+        "dataset_sha256": dataset_sha256,
+        "dataset_size_bytes": dataset_size,
+        "evaluated_task_ids": sorted(evaluated_task_ids),
+        "score_rows": score_rows,
+        "timestamp": time.time(),
+        "checkpoint_version": "1.1",  # Version for checkpoint format
+    }
+    checkpoint_path.write_text(
+        json.dumps(checkpoint_data, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+
+def _load_checkpoint(
+    checkpoint_path: Path,
+) -> tuple[list[dict[str, Any]], set[str], dict[str, Any]] | None:
+    """Load evaluation checkpoint from disk.
+
+    Args:
+        checkpoint_path: Path to checkpoint file
+
+    Returns:
+        Tuple of (score_rows, evaluated_task_ids, checkpoint_metadata) if checkpoint exists, None otherwise.
+        checkpoint_metadata contains summary information about the checkpoint.
+    """
+    if not checkpoint_path.exists():
+        return None
+
+    try:
+        checkpoint_data = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+        score_rows = checkpoint_data.get("score_rows", [])
+        evaluated_task_ids = set(checkpoint_data.get("evaluated_task_ids", []))
+
+        # Extract checkpoint metadata for summary
+        checkpoint_metadata = {
+            "model_label": checkpoint_data.get("model_label", "unknown"),
+            "dataset_path": checkpoint_data.get("dataset_path", "unknown"),
+            "timestamp": checkpoint_data.get("timestamp"),
+            "examples_count": len(score_rows),
+            "task_ids_count": len(evaluated_task_ids),
+            "errors_count": sum(1 for row in score_rows if row.get("errors")),
+            "empty_responses_count": sum(
+                1
+                for row in score_rows
+                if not str(row.get("model_answer", "")).strip()
+                and (not row.get("errors") or "generation" not in row.get("errors", {}))
+            ),
+        }
+
+        return score_rows, evaluated_task_ids, checkpoint_metadata
+    except Exception as exc:
+        print(
+            f"[warn] Failed to load checkpoint from {checkpoint_path}: {exc}. "
+            "Starting fresh evaluation.",
+            file=sys.stderr,
+        )
+        return None
 
 
 def run_evaluation(
@@ -387,6 +617,9 @@ def run_evaluation(
     retry_delay: float = 15.0,
     prompt_mode: str = "rag",
     validate: bool = True,
+    checkpoint_path: Path | None = None,
+    checkpoint_interval: int = 10,
+    resume_from_checkpoint: bool = True,
 ) -> EvaluationResult:
     if not dataset_path.exists():
         raise FileNotFoundError(f"Offline dataset not found: {dataset_path}")
@@ -434,11 +667,139 @@ def run_evaluation(
     # Validate dataset structure before processing
     _validate_dataset_structure(dataset_path, prompt_mode, limit=limit)
 
+    # Initialize checkpoint path if not provided
+    if checkpoint_path is None and output_path:
+        checkpoint_path = output_path.parent / f"{output_path.stem}.checkpoint.json"
+    elif checkpoint_path is None:
+        checkpoint_path = Path("evaluation/results") / model_label / "checkpoint.json"
+
+    # Try to load checkpoint if resume is enabled
     score_rows: list[dict[str, Any]] = []
     evaluated_task_ids: set[str] = set()
+    checkpoint_loaded = False
+    checkpoint_metadata: dict[str, Any] | None = None
+
+    if resume_from_checkpoint and checkpoint_path:
+        checkpoint_result = _load_checkpoint(checkpoint_path)
+        if checkpoint_result:
+            score_rows, evaluated_task_ids, checkpoint_metadata = checkpoint_result
+
+            # Validate checkpoint dataset path matches current dataset path
+            checkpoint_dataset_path = checkpoint_metadata.get("dataset_path", "")
+            checkpoint_dataset_sha256 = checkpoint_metadata.get("dataset_sha256")
+            current_dataset_path_str = str(dataset_path.resolve())
+            checkpoint_dataset_path_resolved = (
+                str(Path(checkpoint_dataset_path).resolve())
+                if checkpoint_dataset_path != "unknown"
+                else None
+            )
+
+            # Also validate SHA256 if available (more reliable than path)
+            dataset_mismatch = False
+            if checkpoint_dataset_sha256:
+                try:
+                    from beyond_the_cutoff.utils.experiment_logging import compute_file_sha256
+
+                    current_dataset_sha256 = compute_file_sha256(dataset_path)
+                    if checkpoint_dataset_sha256 != current_dataset_sha256:
+                        dataset_mismatch = True
+                        print(
+                            "[warn] Checkpoint dataset SHA256 mismatch detected:",
+                            file=sys.stderr,
+                        )
+                        print(
+                            f"  Checkpoint SHA256: {checkpoint_dataset_sha256[:16]}...",
+                            file=sys.stderr,
+                        )
+                        print(
+                            f"  Current SHA256: {current_dataset_sha256[:16]}...",
+                            file=sys.stderr,
+                        )
+                except Exception as exc:
+                    print(
+                        f"[warn] Could not compute dataset SHA256 for validation: {exc}",
+                        file=sys.stderr,
+                    )
+
+            if (
+                checkpoint_dataset_path_resolved
+                and checkpoint_dataset_path_resolved != current_dataset_path_str
+            ):
+                dataset_mismatch = True
+
+            if dataset_mismatch:
+                print(
+                    "[warn] Checkpoint dataset path mismatch detected:",
+                    file=sys.stderr,
+                )
+                print(
+                    f"  Checkpoint dataset: {checkpoint_dataset_path_resolved}",
+                    file=sys.stderr,
+                )
+                print(
+                    f"  Current dataset: {current_dataset_path_str}",
+                    file=sys.stderr,
+                )
+                print(
+                    "[warn] Dataset paths differ - checkpoint may be from a different dataset. "
+                    "Starting fresh evaluation to avoid incorrect resumption.",
+                    file=sys.stderr,
+                )
+                # Reset checkpoint data - don't resume from mismatched dataset
+                score_rows = []
+                evaluated_task_ids = set()
+                checkpoint_metadata = None
+                checkpoint_loaded = False
+            else:
+                checkpoint_loaded = True
+
+            if checkpoint_loaded and checkpoint_metadata:
+                # Print detailed checkpoint resumption summary
+                print("-" * 80, file=sys.stderr)
+                print("[info] Checkpoint resumption summary:", file=sys.stderr)
+                print(
+                    f"  Model: {checkpoint_metadata.get('model_label', 'unknown')}", file=sys.stderr
+                )
+                print(
+                    f"  Dataset: {checkpoint_metadata.get('dataset_path', 'unknown')}",
+                    file=sys.stderr,
+                )
+                print(
+                    f"  Examples already evaluated: {checkpoint_metadata.get('examples_count', 0)}",
+                    file=sys.stderr,
+                )
+                print(
+                    f"  Unique task IDs: {checkpoint_metadata.get('task_ids_count', 0)}",
+                    file=sys.stderr,
+                )
+                if checkpoint_metadata.get("errors_count", 0) > 0:
+                    print(
+                        f"  Examples with errors: {checkpoint_metadata.get('errors_count', 0)}",
+                        file=sys.stderr,
+                    )
+                if checkpoint_metadata.get("empty_responses_count", 0) > 0:
+                    print(
+                        f"  Empty responses: {checkpoint_metadata.get('empty_responses_count', 0)}",
+                        file=sys.stderr,
+                    )
+                if checkpoint_metadata.get("timestamp"):
+                    try:
+                        timestamp = checkpoint_metadata["timestamp"]
+                        if isinstance(timestamp, int | float):
+                            dt = datetime.datetime.fromtimestamp(timestamp)
+                            print(
+                                f"  Checkpoint timestamp: {dt.strftime('%Y-%m-%d %H:%M:%S')}",
+                                file=sys.stderr,
+                            )
+                    except Exception:
+                        pass
+                print("-" * 80, file=sys.stderr)
 
     # Count total examples for progress reporting
     total_examples = _count_dataset_examples(dataset_path, limit=limit)
+
+    # Track initial count from checkpoint for accurate timing calculations
+    initial_examples_count = len(score_rows) if checkpoint_loaded else 0
 
     # Start timing
     evaluation_start_time = time.time()
@@ -451,6 +812,14 @@ def run_evaluation(
     print(f"[info] Judge: {judge_prompt.name} ({judge_inference_cfg.model})", file=sys.stderr)
     print(f"[info] Dataset: {dataset_path}", file=sys.stderr)
     print(f"[info] Total examples: {total_examples}", file=sys.stderr)
+    if checkpoint_loaded and initial_examples_count > 0:
+        print(
+            f"[info] Resuming from checkpoint: {initial_examples_count} examples already evaluated",
+            file=sys.stderr,
+        )
+        print(
+            f"[info] Remaining examples: {total_examples - initial_examples_count}", file=sys.stderr
+        )
     if limit:
         print(f"[info] Limit: {limit} examples", file=sys.stderr)
     print(f"[info] Max retries: {max_retries}, Retry delay: {retry_delay}s", file=sys.stderr)
@@ -459,8 +828,9 @@ def run_evaluation(
     # Detect model type once before the loop for logging purposes
     detected_model_type_for_logging: str | None = None
     if prompt_mode == "rag":
+        # Only warn on inference during initial detection, not during loop
         detected_model_type_for_logging = _detect_model_type(
-            model_config_path, model_cfg.model, model_cfg=model_cfg
+            model_config_path, model_cfg.model, model_cfg=model_cfg, warn_on_inference=True
         )
         print(f"[info] Detected model type: {detected_model_type_for_logging}", file=sys.stderr)
         if detected_model_type_for_logging == "instruction_only":
@@ -470,11 +840,21 @@ def run_evaluation(
                 file=sys.stderr,
             )
     print("-" * 80, file=sys.stderr)
+    if checkpoint_path:
+        print(f"[info] Checkpoint path: {checkpoint_path}", file=sys.stderr)
+        print(f"[info] Checkpoint interval: every {checkpoint_interval} examples", file=sys.stderr)
+    print("-" * 80, file=sys.stderr)
 
+    examples_processed = 0
     for idx, example in enumerate(_iter_dataset(dataset_path, limit=limit), start=1):
-        task_id = example.get("task_id")
-        if task_id:
-            evaluated_task_ids.add(str(task_id))
+        task_id = str(example.get("task_id", f"line_{idx}"))
+
+        # Skip if already evaluated (from checkpoint)
+        if task_id in evaluated_task_ids:
+            continue
+
+        examples_processed += 1
+        evaluated_task_ids.add(task_id)
         instruction = example.get("instruction", "")
         rag = example.get("rag", {})
 
@@ -483,6 +863,20 @@ def run_evaluation(
             if not instruction:
                 raise KeyError(
                     f"Example {task_id} missing instruction field for instruction-only mode"
+                )
+            # Check if dataset has contexts that will be ignored
+            dataset_contexts = rag.get("contexts") or example.get("contexts") or []
+            if dataset_contexts:
+                print(
+                    f"[info] Instruction-only mode: ignoring {len(dataset_contexts)} context(s) from dataset for example {task_id}",
+                    file=sys.stderr,
+                )
+            # Detect model type for instruction-only prompt (warn only on first call)
+            # Check if we already detected it (for RAG mode) to avoid duplicate warnings
+            if prompt_mode == "instruction" and detected_model_type_for_logging is None:
+                # First time detecting - warn if inferred
+                _detect_model_type(
+                    model_config_path, model_cfg.model, model_cfg=model_cfg, warn_on_inference=True
                 )
             prompt_text = _build_instruction_only_prompt(
                 instruction,
@@ -496,8 +890,9 @@ def run_evaluation(
 
             # Use pre-detected model type (detected before loop for consistent logging)
             # Fallback to detection if not pre-detected (shouldn't happen in normal flow)
+            # Don't warn again during loop - warning already shown during initial detection
             detected_model_type = detected_model_type_for_logging or _detect_model_type(
-                model_config_path, model_cfg.model, model_cfg=model_cfg
+                model_config_path, model_cfg.model, model_cfg=model_cfg, warn_on_inference=False
             )
 
             if detected_model_type == "instruction_only":
@@ -515,6 +910,7 @@ def run_evaluation(
                         instruction,
                         model_config_path=model_config_path,
                         model_name=model_cfg.model,
+                        model_cfg=model_cfg,
                     )
                 else:
                     # Normalize contexts to numbered format if needed
@@ -559,10 +955,11 @@ def run_evaluation(
                     )
 
         record_errors: dict[str, str] = {}
+        error_categories: dict[str, str] = {}
 
         # Time generation
         generation_start = time.time()
-        model_response, generation_error = _call_with_retries(
+        model_response, generation_error, generation_error_category = _call_with_retries(
             partial(model_client.generate, prompt_text),
             stage=f"generation (task {task_id or idx})",
             max_retries=max(max_retries, 0),
@@ -574,11 +971,14 @@ def run_evaluation(
             assistant_answer = str(model_response.get("response", "")).strip()
         if generation_error:
             record_errors["generation"] = generation_error
+            if generation_error_category:
+                error_categories["generation"] = generation_error_category
 
         # Track empty responses
         has_empty_response = not assistant_answer.strip()
         if has_empty_response and not generation_error:
             record_errors.setdefault("generation", "Empty response received")
+            error_categories.setdefault("generation", "validation")
 
         contexts_numbered = normalize_contexts(contexts_raw)
         # has_contexts should be False for instruction mode, True for RAG mode only if contexts exist
@@ -626,10 +1026,11 @@ def run_evaluation(
 
         if generation_error:
             record_errors.setdefault("judge", "Skipped due to generation failure")
+            error_categories.setdefault("judge", "validation")
         else:
             # Time judging
             judge_start = time.time()
-            judge_response, judge_error = _call_with_retries(
+            judge_response, judge_error, judge_error_category = _call_with_retries(
                 partial(judge_client.generate, judge_prompt_text),
                 stage=f"judging (task {task_id or idx})",
                 max_retries=max(max_retries, 0),
@@ -638,37 +1039,79 @@ def run_evaluation(
             judge_time = time.time() - judge_start
             if judge_error:
                 record_errors["judge"] = judge_error
+                if judge_error_category:
+                    error_categories["judge"] = judge_error_category
             if judge_response is not None:
                 judge_payload = parse_judge_output(str(judge_response.get("response", "")))
 
         judge_scores = judge_payload.get("scores") if isinstance(judge_payload, dict) else {}
 
-        score_rows.append(
-            {
-                "task_id": task_id,
-                "task_type": example.get("task_type"),
-                "model_answer": assistant_answer,
-                "judge_scores": judge_scores if isinstance(judge_scores, dict) else {},
-                "judge_verdict": judge_payload.get("verdict"),
-                "citation_metrics": citation_metrics,
-                "model_label": model_label,
-                "timing": {
-                    "generation_seconds": generation_time,
-                    "judge_seconds": judge_time,
-                    "total_seconds": generation_time + judge_time,
-                },
-                **({"errors": record_errors} if record_errors else {}),
-            }
-        )
+        row_data: dict[str, Any] = {
+            "task_id": task_id,
+            "task_type": example.get("task_type"),
+            "model_answer": assistant_answer,
+            "judge_scores": judge_scores if isinstance(judge_scores, dict) else {},
+            "judge_verdict": judge_payload.get("verdict"),
+            "citation_metrics": citation_metrics,
+            "model_label": model_label,
+            "timing": {
+                "generation_seconds": generation_time,
+                "judge_seconds": judge_time,
+                "total_seconds": generation_time + judge_time,
+            },
+        }
+
+        # Add error information if present
+        if record_errors:
+            row_data["errors"] = record_errors
+            if error_categories:
+                row_data["error_categories"] = error_categories
+
+        score_rows.append(row_data)
+
+        # Save checkpoint periodically
+        if (
+            checkpoint_path
+            and examples_processed > 0
+            and examples_processed % checkpoint_interval == 0
+        ):
+            _save_checkpoint(
+                checkpoint_path,
+                score_rows,
+                evaluated_task_ids,
+                model_label=model_label,
+                dataset_path=dataset_path,
+            )
+            print(
+                f"[info] Checkpoint saved: {len(score_rows)} examples evaluated",
+                file=sys.stderr,
+            )
 
         # Progress reporting every 10 examples or at milestones
-        if idx % 10 == 0 or idx == total_examples:
+        # Use total examples evaluated (len(score_rows)) for consistent reporting
+        total_evaluated = len(score_rows)
+        if total_evaluated % 10 == 0 or total_evaluated == total_examples:
             error_count = sum(1 for row in score_rows if row.get("errors"))
             elapsed = time.time() - evaluation_start_time
-            avg_time_per_example = elapsed / idx if idx > 0 else 0
-            remaining = (total_examples - idx) * avg_time_per_example if idx > 0 else 0
+            # Calculate average time per example based on NEW examples processed in this run
+            # This gives accurate timing when resuming from checkpoint
+            if examples_processed > 0:
+                avg_time_per_example = elapsed / examples_processed
+                remaining_examples = total_examples - total_evaluated
+                remaining = remaining_examples * avg_time_per_example
+            else:
+                # No new examples processed yet (shouldn't happen, but handle gracefully)
+                avg_time_per_example = 0.0
+                remaining = 0.0
+
+            # Show checkpoint info if resuming
+            checkpoint_info = (
+                f" (resumed from {initial_examples_count})"
+                if checkpoint_loaded and initial_examples_count > 0
+                else ""
+            )
             print(
-                f"[info] Progress: {idx}/{total_examples} examples evaluated "
+                f"[info] Progress: {total_evaluated}/{total_examples} examples evaluated{checkpoint_info} "
                 f"({error_count} with errors) | "
                 f"Elapsed: {elapsed:.1f}s | "
                 f"Avg: {avg_time_per_example:.2f}s/example | "
@@ -686,6 +1129,15 @@ def run_evaluation(
     print(f"[info] Processed {len(score_rows)} examples", file=sys.stderr)
 
     summary = summarise_scores(score_rows)
+
+    # Warn if citation_mean_coverage is computed for instruction-only mode
+    if prompt_mode == "instruction" and summary.get("citation_mean_coverage", 0.0) > 0.0:
+        print(
+            "[warn] citation_mean_coverage > 0 detected for instruction-only mode. "
+            "Citation metrics should not be aggregated for instruction-only evaluations. "
+            "This may indicate a bug in the evaluation pipeline.",
+            file=sys.stderr,
+        )
 
     # Compute timing statistics
     timing_stats = _compute_timing_stats(score_rows)
@@ -727,6 +1179,14 @@ def run_evaluation(
             "timing": timing_stats,
         }
     )
+
+    # Add checkpoint resumption info if applicable
+    if checkpoint_loaded and initial_examples_count > 0:
+        summary["checkpoint_resumed"] = True
+        summary["checkpoint_examples_count"] = initial_examples_count
+        summary["new_examples_processed"] = examples_processed
+    else:
+        summary["checkpoint_resumed"] = False
 
     # Warn if error rate is high
     error_rate = summary.get("error_rate", 0.0)
@@ -777,6 +1237,27 @@ def run_evaluation(
         metrics_path=metrics_path,
     )
 
+    # Save final checkpoint and clean up if successful
+    if checkpoint_path:
+        _save_checkpoint(
+            checkpoint_path,
+            score_rows,
+            evaluated_task_ids,
+            model_label=model_label,
+            dataset_path=dataset_path,
+        )
+        # Clean up checkpoint file if evaluation completed successfully
+        # (keep it if there were errors so user can resume)
+        if metrics_path and metrics_path.exists() and not summary.get("error_rate", 0.0) > 0.1:
+            try:
+                checkpoint_path.unlink()
+                print(
+                    "[info] Checkpoint file cleaned up (evaluation completed successfully)",
+                    file=sys.stderr,
+                )
+            except Exception as exc:
+                print(f"[warn] Failed to clean up checkpoint file: {exc}", file=sys.stderr)
+
     # Run final evaluation sanity check after writing files
     if validate:
         final_sanity_check = validate_evaluation_sanity(
@@ -800,9 +1281,16 @@ def run_evaluation(
 def _validate_dataset_structure(
     dataset_path: Path, prompt_mode: str, *, limit: int | None = None
 ) -> None:
-    """Validate that dataset has required fields for the given prompt_mode."""
+    """Validate that dataset has required fields for the given prompt_mode.
+
+    Also performs pre-flight checks to warn about potential configuration issues,
+    such as using instruction-only mode with a dataset containing RAG contexts.
+    """
     issues: list[str] = []
+    warnings: list[str] = []
     sample_count = 0
+    instruction_mode_with_contexts_count = 0
+    rag_mode_without_contexts_count = 0
 
     for idx, example in enumerate(_iter_dataset(dataset_path, limit=limit), start=1):
         sample_count += 1
@@ -813,13 +1301,41 @@ def _validate_dataset_structure(
                 issues.append(
                     f"Example {task_id} missing 'instruction' field (required for instruction mode)"
                 )
+            # Pre-flight check: warn if dataset has RAG contexts that will be ignored
+            rag = example.get("rag", {})
+            contexts = rag.get("contexts") or example.get("contexts") or []
+            if contexts:
+                instruction_mode_with_contexts_count += 1
         else:  # prompt_mode == "rag"
             rag = example.get("rag", {})
             if not rag.get("prompt") and not example.get("rag_prompt"):
                 issues.append(
                     f"Example {task_id} missing 'rag.prompt' or 'rag_prompt' field (required for RAG mode)"
                 )
+            # Pre-flight check: warn if RAG mode but no contexts available
+            contexts = rag.get("contexts") or example.get("contexts") or []
+            if not contexts:
+                rag_mode_without_contexts_count += 1
 
+    # Report warnings for potential configuration issues
+    if prompt_mode == "instruction" and instruction_mode_with_contexts_count > 0:
+        warnings.append(
+            f"Pre-flight check: {instruction_mode_with_contexts_count}/{sample_count} examples have RAG contexts "
+            "that will be ignored in instruction-only mode. This may indicate a configuration mismatch. "
+            "Consider using 'rag' prompt_mode if you want to use the contexts."
+        )
+
+    if prompt_mode == "rag" and rag_mode_without_contexts_count > 0:
+        warnings.append(
+            f"Pre-flight check: {rag_mode_without_contexts_count}/{sample_count} examples have no RAG contexts "
+            "in RAG mode. Citation metrics may not be meaningful for these examples."
+        )
+
+    # Print warnings (non-fatal)
+    for warning in warnings:
+        print(f"[warn] {warning}", file=sys.stderr)
+
+    # Raise errors for critical issues
     if issues:
         error_msg = f"Dataset validation failed for {prompt_mode} mode:\n" + "\n".join(issues[:10])
         if len(issues) > 10:
