@@ -42,7 +42,7 @@ _Last updated: 2025-11-13_
 
 ## Evaluation Suite
 - [x] Design evaluation dataset (QA pairs, summaries) and storage format
-- [x] Implement automatic scoring metrics (factuality, citation accuracy, BLEU/BERTScore) via `scripts/score_predictions.py`
+- [x] Implement automatic scoring metrics (factuality, citation accuracy, BLEU/BERTScore) via `scripts/evaluation_harness.py` (uses `score_predictions()` function from `src/beyond_the_cutoff/evaluation/scoring.py`)
 - [x] Build comparative evaluation harness for baseline RAG vs fine-tuned vs hybrid setups (`scripts/compare_models.py` + plan)
 - [~] Integrate large-model judge (cloud or local) for automated evaluations and capture prompt/response logs (started with 3B judge scaled up to 7B... might scale up to cloud later)
 - [x] Introduce a small evaluation harness (faithfulness, citation accuracy, retrieval hit@k/MRR)

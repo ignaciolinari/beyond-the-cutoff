@@ -14,6 +14,10 @@ from beyond_the_cutoff.evaluation.runner import (
     load_inference_from_yaml,
     run_evaluation,
 )
+from beyond_the_cutoff.utils.validation import (
+    print_validation_result,
+    validate_dataset_versioning,
+)
 
 
 @dataclass
@@ -279,6 +283,26 @@ def execute_comparison_plan(
                 metadata_path=result.metadata_path,
             )
         )
+
+    # Validate dataset versioning across runs
+    if len(results) > 1:
+        dataset_paths: list[Path] = []
+        for spec in plan.runs:
+            dataset_source = (
+                spec.dataset
+                or plan.defaults.dataset
+                or project_config.evaluation.offline_dataset_path
+            )
+            if dataset_source:
+                dataset_paths.append(Path(dataset_source).resolve())
+
+        if dataset_paths:
+            dataset_validation = validate_dataset_versioning(dataset_paths)
+            if dataset_validation.issues:
+                print_validation_result(dataset_validation)
+                # Only fail on errors
+                if any(i.severity == "error" for i in dataset_validation.issues):
+                    raise ValueError("Dataset versioning validation failed. See errors above.")
 
     # Validate that all runs evaluated the same examples
     if validate_same_examples and len(results) > 1:

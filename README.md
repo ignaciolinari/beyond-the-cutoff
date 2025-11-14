@@ -220,6 +220,71 @@ Both notebooks load `evaluation/datasets/offline_dataset.jsonl`, apply LoRA/PEFT
 - Provide `--output` and `--details-output` paths to persist the overall metrics JSON and per-example JSONL rows. Override retrieval assets with `--index`/`--mapping`, and adjust Hit@K calculation with `--retrieval-topk`.
 - The Makefile exposes `make score`, which wraps the harness under `BTC_USE_FAISS_STUB=1` so CI environments can execute without native FAISS. Tweak the `SCORE_*` variables at the top of the Makefile to point at different datasets or prediction files.
 
+### Experiment Validation
+
+The evaluation pipeline includes automatic validation to ensure reproducibility and correctness:
+
+- **Configuration validation**: Checks config files exist, are valid, and don't have conflicts (e.g., prompt mode vs judge config mismatch)
+- **Dataset versioning**: Ensures all runs in a comparison use the same dataset version (via SHA256 hashing)
+- **Reproducibility checks**: Validates that experiment metadata includes all required fields
+- **Evaluation sanity checks**: Detects common issues like high error rates, missing predictions, empty responses
+
+Validation runs automatically during evaluation, but you can also run it independently:
+
+```bash
+# Validate configuration before running evaluation
+python scripts/validate_experiment.py \
+    --config configs/default.yaml \
+    --model-config configs/rag_baseline_ollama.yaml \
+    --judge-config configs/judges/scientific_default_rag.yaml \
+    --prompt-mode rag
+
+# Validate dataset versioning across runs
+python scripts/validate_experiment.py \
+    --dataset evaluation/datasets/offline_dataset.jsonl \
+    --dataset evaluation/results/rag_baseline_0p5b/details.jsonl
+
+# Validate experiment reproducibility
+python scripts/validate_experiment.py \
+    --metadata evaluation/results/rag_baseline_0p5b/metadata.jsonl
+
+# Validate evaluation results
+python scripts/validate_experiment.py \
+    --metrics evaluation/results/rag_baseline_0p5b/metrics.json \
+    --details evaluation/results/rag_baseline_0p5b/details.jsonl
+```
+
+### Visualization Tools
+
+Generate visualizations from evaluation results to compare models:
+
+```bash
+# Visualize from comparison report JSON
+python scripts/visualize_comparison.py \
+    --report evaluation/results/comparison_report.json \
+    --output evaluation/results/visualizations/
+
+# Visualize from individual metrics files
+python scripts/visualize_comparison.py \
+    --metrics evaluation/results/rag_baseline_0p5b/metrics.json \
+    --metrics evaluation/results/lora_science_0p5b_ft_only/metrics.json \
+    --output evaluation/results/visualizations/
+
+# Generate specific visualizations only
+python scripts/visualize_comparison.py \
+    --report evaluation/results/comparison_report.json \
+    --output evaluation/results/visualizations/ \
+    --only metrics error-rates citations
+```
+
+The visualization tool generates:
+- **Metrics comparison**: Bar charts comparing judge scores (factuality, grounding, completeness, communication) across models
+- **Error rates**: Comparison of error rates and examples with errors
+- **Citation metrics**: Citation coverage, precision, and recall for RAG models
+- **Timing comparison**: Generation, judge, and total timing metrics
+- **Prompt mode comparison**: RAG vs instruction-only mode performance comparison
+- **Task type breakdown**: Distribution of examples across task types
+
 ### Project Structure
 
 ```

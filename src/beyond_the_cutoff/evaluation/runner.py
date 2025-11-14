@@ -19,6 +19,11 @@ from beyond_the_cutoff.config import InferenceConfig, ProjectConfig
 from beyond_the_cutoff.evaluation.metrics import evaluate_citations, normalize_contexts
 from beyond_the_cutoff.models import LLMClient, build_generation_client
 from beyond_the_cutoff.utils.experiment_logging import append_experiment_record
+from beyond_the_cutoff.utils.validation import (
+    print_validation_result,
+    validate_configuration,
+    validate_evaluation_sanity,
+)
 
 
 @dataclass
@@ -365,9 +370,25 @@ def run_evaluation(
     max_retries: int = 2,
     retry_delay: float = 15.0,
     prompt_mode: str = "rag",
+    validate: bool = True,
 ) -> EvaluationResult:
     if not dataset_path.exists():
         raise FileNotFoundError(f"Offline dataset not found: {dataset_path}")
+
+    # Validate configuration before running evaluation
+    if validate:
+        config_validation = validate_configuration(
+            config_path,
+            model_config_path=model_config_path,
+            judge_config_path=judge_prompt_path,
+            judge_inference_path=judge_inference_path,
+            prompt_mode=prompt_mode,
+        )
+        if not config_validation.passed:
+            print_validation_result(config_validation)
+            # Only fail on errors, warnings are informational
+            if any(i.severity == "error" for i in config_validation.issues):
+                raise ValueError("Configuration validation failed. See errors above.")
 
     judge_prompt = load_judge_prompt(judge_prompt_path.resolve())
 
@@ -685,6 +706,17 @@ def run_evaluation(
         details_path=details_path_resolved,
         metrics_path=metrics_path,
     )
+
+    # Run final evaluation sanity check after writing files
+    if validate:
+        final_sanity_check = validate_evaluation_sanity(
+            metrics_path=metrics_path,
+            details_path=details_path_resolved,
+            max_error_rate=0.1,
+            min_examples=1,
+        )
+        if final_sanity_check.issues:
+            print_validation_result(final_sanity_check)
 
     return EvaluationResult(
         summary=summary,

@@ -1,1 +1,1 @@
-"""Utility helpers for preprocessing and chunking."""
+"""Utility helpers for preprocessing, chunking, and validation."""

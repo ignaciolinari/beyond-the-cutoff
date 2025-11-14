@@ -89,6 +89,10 @@ mypy_path = "src"
 module = [
   "numpy",
   "numpy.*",
+  "matplotlib",
+  "matplotlib.*",
+  "seaborn",
+  "seaborn.*",
   "faiss",
   "faiss.*",
   "sentence_transformers",

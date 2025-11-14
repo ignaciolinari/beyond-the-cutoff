@@ -10,7 +10,7 @@ _Last updated: 2025-11-04_
 ## Scope
 - **Offline dataset build** (`scripts/generate_offline_dataset.py`) and manifest integrity checks.
 - **Retrieval stack** (index creation + query execution) with FAISS stub and real FAISS (when available).
-- **Evaluation CLI** (`scripts/score_predictions.py`, `scripts/evaluate_models.py`) including metric aggregation and artifact emission.
+- **Evaluation CLI** (`scripts/evaluation_harness.py`, `scripts/evaluate_models.py`) including metric aggregation and artifact emission.
 - **Fine-tuning checkpoints** loading/sanity inference round-trip (subset only) to ensure adapters remain compatible.
 - Excludes notebook smoke tests (tracked separately in `evaluation_and_reporting_plan.md`).
 

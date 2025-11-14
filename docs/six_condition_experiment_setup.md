@@ -46,6 +46,7 @@ This experiment compares **six conditions** to understand the interaction betwee
 - **Label**: `hybrid_science_0p5b_instruction_only`
 - **What it tests**: Can a model trained without contexts benefit from RAG at inference? (Transfer learning)
 - **Note**: This may underperform because the model wasn't trained to use contexts
+- **Prompt Format**: Uses a hybrid prompt format that preserves the training structure (`"Question: ... Answer:"`) while adding RAG contexts between them. This intentional distribution shift tests whether the model can adapt to contexts at inference time despite being trained without them. The evaluation runner automatically detects instruction-only models and applies this hybrid format (see `src/beyond_the_cutoff/evaluation/runner.py::_build_rag_prompt_for_instruction_only_model()`).
 
 ### Condition 5: RAG-trained FT Only
 - **Model**: `lora_science_0p5` (RAG-trained)
