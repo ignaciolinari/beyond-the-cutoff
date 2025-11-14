@@ -170,12 +170,20 @@ def execute_comparison_plan(
     force: bool = False,
     validate_same_examples: bool = True,
 ) -> list[ComparisonRunResult]:
+    import sys
+
     results: list[ComparisonRunResult] = []
-    for spec in plan.runs:
+    total_runs = len(plan.runs)
+    for run_idx, spec in enumerate(plan.runs, start=1):
+        print(f"\n[info] Run {run_idx}/{total_runs}: {spec.label}", file=sys.stderr)
         resolved_paths = _compute_artifact_paths(plan.defaults, spec)
         metrics_path, details_path, metadata_path = resolved_paths
 
         if spec.skip_if_exists and not force and metrics_path.exists():
+            print(
+                f"[info] Skipping {spec.label}: metrics already exist at {metrics_path}",
+                file=sys.stderr,
+            )
             results.append(
                 ComparisonRunResult(
                     label=spec.label,
@@ -188,6 +196,8 @@ def execute_comparison_plan(
                 )
             )
             continue
+
+        print(f"[info] Executing evaluation for {spec.label}...", file=sys.stderr)
 
         dataset_source = (
             spec.dataset or plan.defaults.dataset or project_config.evaluation.offline_dataset_path

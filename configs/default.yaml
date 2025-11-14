@@ -28,8 +28,6 @@ evaluation:
     - citation_accuracy
     - bleu
     - bertscore
-  qa_dataset_path: ../evaluation/datasets/qa_pairs.jsonl
-  summary_dataset_path: ../evaluation/datasets/summaries.jsonl
   offline_tasks_path: ../evaluation/datasets/offline_tasks.jsonl
   offline_dataset_path: ../evaluation/datasets/offline_dataset.jsonl
 dataset_generation:

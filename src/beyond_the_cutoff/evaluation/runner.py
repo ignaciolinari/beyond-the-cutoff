@@ -437,7 +437,22 @@ def run_evaluation(
 
     # Count total examples for progress reporting
     total_examples = _count_dataset_examples(dataset_path, limit=limit)
-    print(f"[info] Starting evaluation of {total_examples} example(s)", file=sys.stderr)
+
+    # Start timing
+    evaluation_start_time = time.time()
+
+    print("=" * 80, file=sys.stderr)
+    print("[info] Starting evaluation run", file=sys.stderr)
+    print("=" * 80, file=sys.stderr)
+    print(f"[info] Model: {model_cfg.model} ({model_label})", file=sys.stderr)
+    print(f"[info] Prompt mode: {prompt_mode}", file=sys.stderr)
+    print(f"[info] Judge: {judge_prompt.name} ({judge_inference_cfg.model})", file=sys.stderr)
+    print(f"[info] Dataset: {dataset_path}", file=sys.stderr)
+    print(f"[info] Total examples: {total_examples}", file=sys.stderr)
+    if limit:
+        print(f"[info] Limit: {limit} examples", file=sys.stderr)
+    print(f"[info] Max retries: {max_retries}, Retry delay: {retry_delay}s", file=sys.stderr)
+    print("-" * 80, file=sys.stderr)
 
     # Detect model type once before the loop for logging purposes
     detected_model_type_for_logging: str | None = None
@@ -445,12 +460,14 @@ def run_evaluation(
         detected_model_type_for_logging = _detect_model_type(
             model_config_path, model_cfg.model, model_cfg=model_cfg
         )
+        print(f"[info] Detected model type: {detected_model_type_for_logging}", file=sys.stderr)
         if detected_model_type_for_logging == "instruction_only":
             print(
                 "[info] Using hybrid RAG prompt format for instruction-only model (Condition 4). "
                 "Prompt format matches training while including RAG contexts.",
                 file=sys.stderr,
             )
+    print("-" * 80, file=sys.stderr)
 
     for idx, example in enumerate(_iter_dataset(dataset_path, limit=limit), start=1):
         task_id = example.get("task_id")
@@ -645,16 +662,44 @@ def run_evaluation(
         # Progress reporting every 10 examples or at milestones
         if idx % 10 == 0 or idx == total_examples:
             error_count = sum(1 for row in score_rows if row.get("errors"))
+            elapsed = time.time() - evaluation_start_time
+            avg_time_per_example = elapsed / idx if idx > 0 else 0
+            remaining = (total_examples - idx) * avg_time_per_example if idx > 0 else 0
             print(
                 f"[info] Progress: {idx}/{total_examples} examples evaluated "
-                f"({error_count} with errors)",
+                f"({error_count} with errors) | "
+                f"Elapsed: {elapsed:.1f}s | "
+                f"Avg: {avg_time_per_example:.2f}s/example | "
+                f"ETA: {remaining/60:.1f}min",
                 file=sys.stderr,
             )
+
+    evaluation_time = time.time() - evaluation_start_time
+
+    print("-" * 80, file=sys.stderr)
+    print(
+        f"[info] Evaluation completed in {evaluation_time:.2f}s ({evaluation_time/60:.1f} minutes)",
+        file=sys.stderr,
+    )
+    print(f"[info] Processed {len(score_rows)} examples", file=sys.stderr)
 
     summary = summarise_scores(score_rows)
 
     # Compute timing statistics
     timing_stats = _compute_timing_stats(score_rows)
+
+    print(
+        f"[info] Average generation time: {timing_stats.get('mean_generation_seconds', 0):.2f}s",
+        file=sys.stderr,
+    )
+    print(
+        f"[info] Average judge time: {timing_stats.get('mean_judge_seconds', 0):.2f}s",
+        file=sys.stderr,
+    )
+    print(
+        f"[info] Average total time per example: {timing_stats.get('mean_total_seconds', 0):.2f}s",
+        file=sys.stderr,
+    )
 
     summary.update(
         {

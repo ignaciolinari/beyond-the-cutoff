@@ -103,14 +103,10 @@ class EvaluationConfig(BaseModel):
     """Evaluation dataset and metric configuration."""
 
     metrics: list[str] = Field(default_factory=lambda: ["factuality", "citation_accuracy"])
-    qa_dataset_path: Path = Field(default=Path("evaluation/datasets/qa_pairs.jsonl"))
-    summary_dataset_path: Path = Field(default=Path("evaluation/datasets/summaries.jsonl"))
     offline_tasks_path: Path = Field(default=Path("evaluation/datasets/offline_tasks.jsonl"))
     offline_dataset_path: Path = Field(default=Path("evaluation/datasets/offline_dataset.jsonl"))
 
     @field_validator(
-        "qa_dataset_path",
-        "summary_dataset_path",
         "offline_tasks_path",
         "offline_dataset_path",
         mode="before",
@@ -125,8 +121,6 @@ class EvaluationConfig(BaseModel):
         """Return a copy with absolute dataset paths."""
         return self.model_copy(
             update={
-                "qa_dataset_path": self._resolve_path(self.qa_dataset_path, base_dir),
-                "summary_dataset_path": self._resolve_path(self.summary_dataset_path, base_dir),
                 "offline_tasks_path": self._resolve_path(self.offline_tasks_path, base_dir),
                 "offline_dataset_path": self._resolve_path(self.offline_dataset_path, base_dir),
             }
