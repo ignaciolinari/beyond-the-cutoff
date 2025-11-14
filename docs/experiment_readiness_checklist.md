@@ -45,7 +45,7 @@ Use this checklist before running the 0.5B model comparison experiments to ensur
 - [ ] **`configs/rag_baseline_ollama.yaml`**: Points to `qwen2.5:0.5b-instruct` (used for base baseline and RAG baseline)
 - [ ] **`configs/lora_science_v1_instruction_only_ollama.yaml`**: Points to `lora_science_0p5_instruction_only`
 - [ ] **`configs/lora_science_v1_rag_trained_ollama.yaml`**: Points to `lora_science_0p5` (RAG-trained model)
-- [ ] **`configs/hybrid_science_v1_ollama.yaml`**: Legacy config (kept for backward compatibility)
+- [x] **`configs/hybrid_science_v1_ollama.yaml`**: Legacy config (moved to `vintage/configs/` - not used in current experiment)
 
 #### Comparison Plan
 - [ ] **`configs/evaluation/compare_0p5b_experiments.yaml`**:

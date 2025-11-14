@@ -210,14 +210,29 @@ class TestModelTypeDetection:
         assert model_type == "base"
 
     def test_detect_hybrid_config_uses_rag_trained(self) -> None:
-        """Test that hybrid configs are detected as RAG-trained (unless explicitly instruction-only)."""
-        config_path = Path("configs/hybrid_science_v1_ollama.yaml")
+        """Test that hybrid configs are detected as RAG-trained based on filename.
+
+        Note: This test uses a legacy config file that has been moved to vintage/configs/.
+        When model_cfg is not provided, detection falls back to filename-based inference.
+        Configs with 'hybrid' in the name (but not 'instruction') are detected as rag_trained.
+        """
+        config_path = Path("vintage/configs/hybrid_science_v1_ollama.yaml")
         model_name = "lora_science_0p5"
 
-        model_type = _detect_model_type(config_path, model_name)
+        # Test filename-based detection (model_cfg=None)
+        model_type = _detect_model_type(config_path, model_name, model_cfg=None)
 
-        # Hybrid configs typically use RAG-trained models
+        # Filename-based detection: "hybrid" without "instruction" -> rag_trained
         assert model_type == "rag_trained"
+
+        # Test that explicit model_type takes precedence when config is loaded
+        from beyond_the_cutoff.evaluation.runner import load_inference_from_yaml
+
+        model_cfg = load_inference_from_yaml(config_path)
+        model_type_with_config = _detect_model_type(config_path, model_name, model_cfg=model_cfg)
+
+        # With explicit model_type: instruction_only, detection should use that
+        assert model_type_with_config == "instruction_only"
 
 
 class TestPromptFormatConsistency:

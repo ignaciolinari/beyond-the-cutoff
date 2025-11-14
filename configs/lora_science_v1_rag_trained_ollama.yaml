@@ -3,6 +3,7 @@ provider: ollama
 # This model is used for RAG+FT evaluation where the model was trained to use contexts
 # Ollama tag: lora_science_0p5 (or similar, depending on your naming)
 model: lora_science_0p5
+model_type: rag_trained  # Explicitly mark as RAG-trained model
 host: http://localhost
 port: 11434
 timeout: 480.0

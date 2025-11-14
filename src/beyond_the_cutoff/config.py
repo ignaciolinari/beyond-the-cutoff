@@ -142,6 +142,13 @@ class InferenceConfig(BaseModel):
 
     provider: str = Field(default="ollama")
     model: str = Field(default="qwen2.5:0.5b-instruct")
+    # Explicit model type: "base", "instruction_only", or "rag_trained"
+    # If not specified, will be inferred from config file name or model name
+    model_type: str | None = Field(
+        default=None,
+        description="Explicit model type: 'base', 'instruction_only', or 'rag_trained'. "
+        "If None, will be inferred from config filename or model name.",
+    )
     host: str = Field(default="http://localhost")
     port: int | None = Field(default=11434)
     timeout: float = Field(default=480.0, gt=0.0)
@@ -152,6 +159,18 @@ class InferenceConfig(BaseModel):
     top_p: float = Field(default=0.9, gt=0.0, le=1.0)
     repetition_penalty: float = Field(default=1.05, gt=0.0)
     stop_sequences: list[str] = Field(default_factory=list)
+
+    @field_validator("model_type", mode="before")
+    @classmethod
+    def _validate_model_type(cls, value: Any) -> str | None:
+        if value is None:
+            return None
+        value_str = str(value).strip().lower()
+        if value_str in ("base", "instruction_only", "rag_trained"):
+            return value_str
+        raise ValueError(
+            f"model_type must be 'base', 'instruction_only', or 'rag_trained', got {value!r}"
+        )
 
     def base_url(self) -> str:
         """Return the full base URL for the inference endpoint."""

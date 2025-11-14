@@ -1,5 +1,6 @@
 provider: ollama
 model: qwen2.5:0.5b-instruct
+model_type: base  # Base model without fine-tuning
 host: http://localhost
 port: 11434
 timeout: 480.0

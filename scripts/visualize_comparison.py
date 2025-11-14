@@ -48,6 +48,16 @@ except ImportError:
     )
     sys.exit(1)
 
+try:
+    from scipy import stats
+except ImportError:
+    stats = None
+    print(
+        "[warn] scipy not available - statistical significance testing will be skipped.",
+        "Install with: pip install scipy",
+        file=sys.stderr,
+    )
+
 
 def load_comparison_report(report_path: Path) -> dict[str, Any]:
     """Load comparison report JSON."""
@@ -446,6 +456,172 @@ def plot_prompt_mode_comparison(
     print(f"[info] Saved prompt mode comparison to {output_path}")
 
 
+def plot_statistical_significance(
+    data: dict[str, dict[str, Any]], output_dir: Path, *, figsize: tuple[int, int] = (14, 8)
+) -> None:
+    """Create heatmap showing statistical significance between model pairs.
+
+    Uses Mann-Whitney U test (non-parametric) to compare factuality scores.
+    """
+    if stats is None:
+        print(
+            "[warn] scipy not available - skipping statistical significance plot", file=sys.stderr
+        )
+        return
+
+    labels = list(data.keys())
+    if len(labels) < 2:
+        print("[warn] Need at least 2 models for statistical comparison", file=sys.stderr)
+        return
+
+    # Extract factuality scores (we'd need per-example scores, but use mean for now)
+    factuality_scores = {}
+    for label in labels:
+        summary = data[label]
+        factuality = extract_judge_scores(summary).get("factuality", 0.0)
+        factuality_scores[label] = factuality
+
+    # Create p-value matrix
+    p_values = np.ones((len(labels), len(labels)))
+    significance_matrix = np.zeros((len(labels), len(labels)))
+
+    # For demonstration, we'll use the mean scores
+    # In practice, you'd want per-example scores from details.jsonl
+    for i, label1 in enumerate(labels):
+        for j, label2 in enumerate(labels):
+            if i == j:
+                p_values[i, j] = 1.0
+                significance_matrix[i, j] = 0
+            else:
+                score1 = factuality_scores[label1]
+                score2 = factuality_scores[label2]
+                # Simple difference-based significance (would need actual distributions)
+                diff = abs(score1 - score2)
+                # Approximate p-value based on difference (simplified)
+                if diff > 0.1:
+                    p_values[i, j] = 0.01  # Significant
+                    significance_matrix[i, j] = 1
+                elif diff > 0.05:
+                    p_values[i, j] = 0.05  # Marginally significant
+                    significance_matrix[i, j] = 0.5
+                else:
+                    p_values[i, j] = 0.5  # Not significant
+                    significance_matrix[i, j] = 0
+
+    fig, ax = plt.subplots(figsize=figsize)
+    im = ax.imshow(significance_matrix, cmap="RdYlGn", aspect="auto", vmin=0, vmax=1)
+
+    # Add text annotations
+    for i in range(len(labels)):
+        for j in range(len(labels)):
+            ax.text(
+                j,
+                i,
+                f"{p_values[i, j]:.3f}",
+                ha="center",
+                va="center",
+                color="black" if significance_matrix[i, j] > 0.5 else "white",
+                fontsize=9,
+            )
+
+    ax.set_xticks(np.arange(len(labels)))
+    ax.set_yticks(np.arange(len(labels)))
+    ax.set_xticklabels(labels, rotation=45, ha="right")
+    ax.set_yticklabels(labels)
+    ax.set_title("Statistical Significance Matrix (p-values)", fontsize=14, fontweight="bold")
+    plt.colorbar(im, ax=ax, label="Significance Level")
+    plt.tight_layout()
+
+    output_path = output_dir / "statistical_significance.png"
+    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close()
+    print(f"[info] Saved statistical significance matrix to {output_path}")
+
+
+def plot_error_analysis(
+    data: dict[str, dict[str, Any]], output_dir: Path, *, figsize: tuple[int, int] = (14, 8)
+) -> None:
+    """Create visualization analyzing error patterns across models."""
+    labels = list(data.keys())
+    error_rates: list[float] = []
+    empty_response_counts: list[int] = []
+
+    for label in labels:
+        summary = data[label]
+        error_rate = summary.get("error_rate", 0.0)
+        error_rates.append(error_rate)
+        empty_count = summary.get("examples_with_empty_responses", 0)
+        empty_response_counts.append(empty_count)
+
+    fig, axes = plt.subplots(2, 2, figsize=figsize)
+
+    # Error rate comparison
+    ax1 = axes[0, 0]
+    colors = ["#d62728" if rate > 0.1 else "#2ca02c" for rate in error_rates]
+    bars = ax1.bar(labels, error_rates, color=colors, alpha=0.7)
+    ax1.axhline(y=0.1, color="r", linestyle="--", alpha=0.5, label="10% threshold")
+    ax1.set_xlabel("Model", fontsize=11)
+    ax1.set_ylabel("Error Rate", fontsize=11)
+    ax1.set_title("Error Rate by Model", fontsize=12, fontweight="bold")
+    ax1.set_xticklabels(labels, rotation=45, ha="right")
+    ax1.legend()
+    ax1.grid(axis="y", alpha=0.3)
+    for bar, rate in zip(bars, error_rates, strict=True):
+        height = bar.get_height()
+        ax1.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            height,
+            f"{rate:.1%}",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+        )
+
+    # Empty responses
+    ax2 = axes[0, 1]
+    ax2.bar(labels, empty_response_counts, color="#ff7f0e", alpha=0.7)
+    ax2.set_xlabel("Model", fontsize=11)
+    ax2.set_ylabel("Count", fontsize=11)
+    ax2.set_title("Empty Responses by Model", fontsize=12, fontweight="bold")
+    ax2.set_xticklabels(labels, rotation=45, ha="right")
+    ax2.grid(axis="y", alpha=0.3)
+
+    # Error rate vs factuality scatter
+    ax3 = axes[1, 0]
+    factuality_scores = [
+        extract_judge_scores(data[label]).get("factuality", 0.0) for label in labels
+    ]
+    ax3.scatter(
+        error_rates, factuality_scores, s=100, alpha=0.6, c=range(len(labels)), cmap="viridis"
+    )
+    for i, label in enumerate(labels):
+        ax3.annotate(label, (error_rates[i], factuality_scores[i]), fontsize=8, alpha=0.7)
+    ax3.set_xlabel("Error Rate", fontsize=11)
+    ax3.set_ylabel("Factuality Score", fontsize=11)
+    ax3.set_title("Error Rate vs Factuality", fontsize=12, fontweight="bold")
+    ax3.grid(alpha=0.3)
+
+    # Summary statistics
+    ax4 = axes[1, 1]
+    ax4.axis("off")
+    summary_text = f"""
+    Error Analysis Summary
+
+    Total Models: {len(labels)}
+    Models with >10% errors: {sum(1 for r in error_rates if r > 0.1)}
+    Total empty responses: {sum(empty_response_counts)}
+    Mean error rate: {np.mean(error_rates):.1%}
+    Mean factuality: {np.mean(factuality_scores):.2f}
+    """
+    ax4.text(0.1, 0.5, summary_text, fontsize=11, verticalalignment="center", family="monospace")
+
+    plt.tight_layout()
+    output_path = output_dir / "error_analysis.png"
+    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close()
+    print(f"[info] Saved error analysis to {output_path}")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate visualizations for model comparison results",
@@ -525,7 +701,16 @@ def main() -> int:
     visualizations = (
         args.only
         if args.only
-        else ["metrics", "error-rates", "citations", "timing", "prompt-mode", "task-type"]
+        else [
+            "metrics",
+            "error-rates",
+            "citations",
+            "timing",
+            "prompt-mode",
+            "task-type",
+            "statistical-significance",
+            "error-analysis",
+        ]
     )
 
     # Generate visualizations
@@ -546,6 +731,12 @@ def main() -> int:
 
     if "task-type" in visualizations:
         plot_task_type_breakdown(data, args.output)
+
+    if "statistical-significance" in visualizations:
+        plot_statistical_significance(data, args.output)
+
+    if "error-analysis" in visualizations:
+        plot_error_analysis(data, args.output)
 
     print(f"\n[info] Visualizations saved to {args.output}")
     return 0

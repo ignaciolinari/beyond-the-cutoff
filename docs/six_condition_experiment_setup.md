@@ -139,7 +139,7 @@ All configs are in `configs/`:
 - `rag_baseline_ollama.yaml` ✅ (exists)
 - `lora_science_v1_instruction_only_ollama.yaml` ✅ (exists)
 - `lora_science_v1_rag_trained_ollama.yaml` ✅ (created)
-- `hybrid_science_v1_ollama.yaml` (legacy, kept for backward compatibility)
+- `hybrid_science_v1_ollama.yaml` (legacy, moved to `vintage/configs/` - not used in current experiment)
 
 ### Comparison Plan
 

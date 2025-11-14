@@ -2,6 +2,7 @@ provider: ollama
 # Model tag for instruction-only fine-tuned model (trained without RAG contexts)
 # This model is used for FT-only evaluation
 model: lora_science_0p5_instruction_only
+model_type: instruction_only  # Explicitly mark as instruction-only trained model
 host: http://localhost
 port: 11434
 timeout: 480.0

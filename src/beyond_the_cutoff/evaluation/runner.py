@@ -83,17 +83,30 @@ def render_judge_prompt(
     return rendered
 
 
-def _detect_model_type(model_config_path: Path | None, model_name: str) -> str:
+def _detect_model_type(
+    model_config_path: Path | None,
+    model_name: str,
+    model_cfg: InferenceConfig | None = None,
+) -> str:
     """Detect model type from config path or model name.
+
+    Args:
+        model_config_path: Optional path to model config file
+        model_name: Model name/Ollama tag
+        model_cfg: Optional InferenceConfig with explicit model_type field
 
     Returns:
         'instruction_only', 'rag_trained', or 'base'
 
     Detection priority:
-    1. Config file name (most reliable)
-    2. Model name/Ollama tag
-    3. Default to 'base'
+    1. Explicit model_type in InferenceConfig (most reliable)
+    2. Config file name
+    3. Model name/Ollama tag
+    4. Default to 'base'
     """
+    # First, check explicit model_type in config (most reliable)
+    if model_cfg and model_cfg.model_type:
+        return model_cfg.model_type
     # First, check config file name (most reliable indicator)
     if model_config_path:
         config_name = model_config_path.name.lower()
@@ -146,6 +159,7 @@ def _build_instruction_only_prompt(
     model_type: str | None = None,
     model_config_path: Path | None = None,
     model_name: str = "",
+    model_cfg: InferenceConfig | None = None,
 ) -> str:
     """Build a prompt for instruction-only mode (no RAG contexts).
 
@@ -169,7 +183,7 @@ def _build_instruction_only_prompt(
 
     # Detect model type if not provided
     if model_type is None:
-        model_type = _detect_model_type(model_config_path, model_name)
+        model_type = _detect_model_type(model_config_path, model_name, model_cfg=model_cfg)
         # Log detection for debugging
         if model_config_path:
             print(
@@ -425,6 +439,19 @@ def run_evaluation(
     total_examples = _count_dataset_examples(dataset_path, limit=limit)
     print(f"[info] Starting evaluation of {total_examples} example(s)", file=sys.stderr)
 
+    # Detect model type once before the loop for logging purposes
+    detected_model_type_for_logging: str | None = None
+    if prompt_mode == "rag":
+        detected_model_type_for_logging = _detect_model_type(
+            model_config_path, model_cfg.model, model_cfg=model_cfg
+        )
+        if detected_model_type_for_logging == "instruction_only":
+            print(
+                "[info] Using hybrid RAG prompt format for instruction-only model (Condition 4). "
+                "Prompt format matches training while including RAG contexts.",
+                file=sys.stderr,
+            )
+
     for idx, example in enumerate(_iter_dataset(dataset_path, limit=limit), start=1):
         task_id = example.get("task_id")
         if task_id:
@@ -442,14 +469,17 @@ def run_evaluation(
                 instruction,
                 model_config_path=model_config_path,
                 model_name=model_cfg.model,
+                model_cfg=model_cfg,
             )
             contexts_raw: list[Any] = []  # No contexts for instruction-only mode
         else:  # prompt_mode == "rag"
             contexts_raw = rag.get("contexts") or example.get("contexts") or []
 
-            # Detect if this is an instruction-only model being evaluated with RAG (Condition 4)
-            # In this case, we need to use a hybrid prompt format that matches training
-            detected_model_type = _detect_model_type(model_config_path, model_cfg.model)
+            # Use pre-detected model type (detected before loop for consistent logging)
+            # Fallback to detection if not pre-detected (shouldn't happen in normal flow)
+            detected_model_type = detected_model_type_for_logging or _detect_model_type(
+                model_config_path, model_cfg.model, model_cfg=model_cfg
+            )
 
             if detected_model_type == "instruction_only":
                 # Condition 4: Instruction-only model evaluated WITH RAG contexts
@@ -476,13 +506,6 @@ def run_evaluation(
                         model_config_path=model_config_path,
                         model_name=model_cfg.model,
                     )
-                    # Log once at the start of evaluation (not per example)
-                    if idx == 1:
-                        print(
-                            "[info] Using hybrid RAG prompt format for instruction-only model (Condition 4). "
-                            "Prompt format matches training while including RAG contexts.",
-                            file=sys.stderr,
-                        )
             else:
                 # Standard RAG mode: use pre-built RAG prompt from dataset
                 prompt = rag.get("prompt") or example.get("rag_prompt")
