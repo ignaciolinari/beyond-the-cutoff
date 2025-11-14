@@ -141,7 +141,7 @@ class InferenceConfig(BaseModel):
     """Settings for local inference backends (defaults to Ollama)."""
 
     provider: str = Field(default="ollama")
-    model: str = Field(default="qwen2.5:0.5b-instruct-q4_K_M")
+    model: str = Field(default="qwen2.5:0.5b-instruct")
     host: str = Field(default="http://localhost")
     port: int | None = Field(default=11434)
     timeout: float = Field(default=480.0, gt=0.0)

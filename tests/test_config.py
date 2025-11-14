@@ -14,4 +14,4 @@ def test_load_default_config() -> None:
     assert cfg.dataset_generation.generator.provider == "ollama"
     assert cfg.dataset_generation.generator.model == "qwen2.5:7b-instruct-q4_K_M"
     assert cfg.inference.provider == "ollama"
-    assert cfg.inference.model == "qwen2.5:0.5b-instruct-q4_K_M"
+    assert cfg.inference.model == "qwen2.5:0.5b-instruct"

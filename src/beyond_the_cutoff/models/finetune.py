@@ -42,8 +42,16 @@ def load_supervised_samples(
     dataset_path: Path,
     *,
     allowed_task_types: Sequence[str] | None = None,
+    use_rag_contexts: bool = True,
 ) -> list[SupervisedSample]:
-    """Parse a JSONL offline dataset into prompt/response pairs."""
+    """Parse a JSONL offline dataset into prompt/response pairs.
+
+    Args:
+        dataset_path: Path to the JSONL offline dataset file
+        allowed_task_types: Optional sequence of task types to include (e.g., ["qa", "summary"])
+        use_rag_contexts: If True, use RAG prompts with contexts when available.
+                          If False, extract instruction-only prompts (for instruction-only training).
+    """
 
     path = dataset_path.expanduser().resolve()
     if not path.exists():
@@ -69,7 +77,7 @@ def load_supervised_samples(
             if allowed is not None and task_type_raw not in allowed:
                 continue
 
-            prompt = _extract_prompt(record)
+            prompt = _extract_prompt(record, use_rag_contexts=use_rag_contexts)
             response = _extract_response(record)
             if not prompt or not response:
                 continue
@@ -197,13 +205,32 @@ def tokenise_samples(
     return dataset, stats
 
 
-def _extract_prompt(record: dict[str, Any]) -> str:
+def _extract_prompt(record: dict[str, Any], *, use_rag_contexts: bool = True) -> str:
+    """Extract prompt from an offline dataset record.
+
+    Args:
+        record: Dictionary containing task data from offline_dataset.jsonl
+        use_rag_contexts: If True, prefer RAG prompts with contexts when available.
+                         If False, extract instruction-only prompts (for instruction-only training).
+
+    Returns:
+        Extracted prompt string, or empty string if no valid prompt found.
+    """
+    instruction = str(record.get("instruction") or "").strip()
+
+    # For instruction-only mode, return just the instruction
+    if not use_rag_contexts:
+        if instruction:
+            return instruction
+        return ""
+
+    # For RAG mode, prefer the pre-built RAG prompt if available
     rag = record.get("rag") or {}
     prompt = rag.get("prompt")
     if isinstance(prompt, str) and prompt.strip():
         return prompt
 
-    instruction = str(record.get("instruction") or "").strip()
+    # Fallback: construct prompt from instruction + contexts
     contexts: Iterable[str] = rag.get("contexts") or []
     context_text = "\n\n".join(str(item).strip() for item in contexts if str(item).strip())
     if context_text:

@@ -158,7 +158,11 @@ This will run all 6 conditions and generate comparative results.
 
 The Microsoft paper likely used:
 - **RAG Baseline**: Base model + RAG
-- **FT Only**: Fine-tuned model (trained with contexts, evaluated without) - *different from our setup*
-- **RAG-trained FT+RAG**: Fine-tuned model (trained with contexts, evaluated with contexts) - **matches our condition #4**
+- **FT Only**: Fine-tuned model (trained with contexts, evaluated without) - *matches our condition #5 (RAG-trained FT Only)*
+- **RAG-trained FT+RAG**: Fine-tuned model (trained with contexts, evaluated with contexts) - **matches our condition #6**
 
-Our **condition #3** (FT+RAG instruction-only) tests a different research question: transfer learning when training doesn't match evaluation.
+**Key Difference**: Our experiment includes additional conditions that the Microsoft paper did not:
+- **Condition 3 (FT Only)**: Trained WITHOUT contexts, evaluated WITHOUT contexts - Tests if fine-tuning can memorize knowledge without RAG
+- **Condition 4 (FT+RAG instruction-only)**: Trained WITHOUT contexts, evaluated WITH contexts - Tests transfer learning (can a model trained without contexts benefit from RAG?)
+
+This creates a complete 2×2 matrix that allows us to isolate the effects of training mode vs evaluation mode, providing more comprehensive insights than the Microsoft paper's setup.

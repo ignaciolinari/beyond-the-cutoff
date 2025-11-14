@@ -67,7 +67,7 @@ dataset_generation:
   raw_tasks_path: ../evaluation/datasets/offline_tasks.jsonl
 inference:
   provider: ollama
-  model: qwen2.5:0.5b-instruct-q4_K_M
+  model: qwen2.5:0.5b-instruct
   host: http://localhost
   port: 11434
   timeout: 480.0
@@ -80,4 +80,4 @@ inference:
   stop_sequences:
     - "<|im_start|>"
     - "<|im_end|>"
-  # Swap to qwen2.5:3b-instruct-q4_K_M once the 0.5B experiment sequence finishes.
+  # Swap to qwen2.5:3b-instruct once the 0.5B experiment sequence finishes.
