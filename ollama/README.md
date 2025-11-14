@@ -13,8 +13,8 @@ This directory contains Modelfiles for registering fine-tuned models with Ollama
 
 ### `Modelfile.rag_trained`
 - Same as `Modelfile` - explicit version for clarity
-- **Status**: NOT used in 0.5B experiment
-- **Location**: Moved to `vintage/ollama/` for reference
+- **Status**: ✅ **USED** in 0.5B experiment (for conditions 5-6)
+- **Location**: `ollama/Modelfile.rag_trained`
 
 ### `Modelfile.instruction_only`
 - **Model**: Instruction-only fine-tuned model (trained WITHOUT RAG contexts)
@@ -41,8 +41,8 @@ ollama push lora_science_0p5_instruction_only
 # - FT+RAG (instruction-only) evaluation (with RAG contexts)
 
 # 2. Register RAG-trained model
-# Update FROM path in vintage/ollama/Modelfile.rag_trained to point to your RAG-trained GGUF file
-ollama create lora_science_0p5 -f vintage/ollama/Modelfile.rag_trained
+# Update FROM path in ollama/Modelfile.rag_trained to point to your RAG-trained GGUF file
+ollama create lora_science_0p5 -f ollama/Modelfile.rag_trained
 ollama push lora_science_0p5
 
 # This model is used for:
@@ -81,5 +81,5 @@ ollama push lora_science_0p5
 ## Notes
 
 - Update the `FROM` path in `Modelfile.instruction_only` to point to your instruction-only GGUF file
-- Update the `FROM` path in `vintage/ollama/Modelfile.rag_trained` to point to your RAG-trained GGUF file
+- Update the `FROM` path in `Modelfile.rag_trained` to point to your RAG-trained GGUF file
 - Both models are needed for the complete 6-condition comparison

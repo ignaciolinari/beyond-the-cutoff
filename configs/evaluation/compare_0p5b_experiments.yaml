@@ -40,9 +40,9 @@ runs:
   # Note: This may underperform because model wasn't trained to use contexts
   # Uses RAG judge (checks citations and grounding)
   # IMPORTANT: The evaluation runner automatically uses a hybrid prompt format that
-  # matches the instruction-only training format ("Answer the following question based on
-  # your knowledge") while including RAG contexts. This ensures prompt format consistency
-  # and avoids distribution shift from format mismatch.
+  # matches the instruction-only training format ("Question: ... Answer:") while including
+  # RAG contexts. This ensures prompt format consistency and avoids distribution shift
+  # from format mismatch.
   - label: hybrid_science_0p5b_instruction_only
     model_config: ../lora_science_v1_instruction_only_ollama.yaml
     prompt_mode: rag

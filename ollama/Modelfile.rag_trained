@@ -1,5 +1,7 @@
 # Modelfile for RAG-trained fine-tuned model (trained WITH RAG contexts)
-# Use this for: RAG+FT evaluation (hybrid_science_0p5b)
+# Use this for: BOTH Condition 5 (RAG-trained FT Only) AND Condition 6 (RAG-trained FT+RAG)
+#   - Condition 5: RAG-trained FT Only (evaluated WITHOUT RAG contexts)
+#   - Condition 6: RAG-trained FT+RAG (evaluated WITH RAG contexts - optimal setup)
 #
 # Convert your merged Hugging Face checkpoint to GGUF (e.g., llama.cpp `convert`
 # and `quantize`) and point FROM at the resulting file.
