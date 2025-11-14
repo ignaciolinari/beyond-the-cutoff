@@ -35,31 +35,31 @@ def validate_prompt_format_consistency(
                 f"  This can cause distribution shift between training and evaluation."
             )
 
-    # Check 2: No system-like text in user content (for instruction mode)
+    # Check 2: Instruction-only mode format consistency
     if mode == "instruction":
-        system_indicators = [
-            "You are a",
-            "You are an",
-            "You are the",
-            "Act as",
-            "Your role is",
-        ]
-        evaluation_lower = evaluation_prompt.lower()
-        for indicator in system_indicators:
-            if indicator.lower() in evaluation_lower:
-                issues.append(
-                    f"System-like text found in user content: {indicator!r}\n"
-                    f"  This may cause duplication when Ollama applies Modelfile system message.\n"
-                    f"  User content should only contain the question/instruction."
-                )
-                break  # Only report once
+        # Expected training format includes instruction text in user content
+        expected_prefix = "You are a research paper assistant. Answer the following question based on your knowledge."
+        expected_question_marker = "Question:"
+        expected_answer_marker = "Answer:"
 
-    # Check 3: Instruction-only prompts should be simple
-    if mode == "instruction":
-        if "Question:" not in evaluation_prompt and "Answer:" not in evaluation_prompt:
+        evaluation_lower = evaluation_prompt.lower()
+        has_prefix = expected_prefix.lower() in evaluation_lower
+        has_question = expected_question_marker.lower() in evaluation_lower
+        has_answer = expected_answer_marker.lower() in evaluation_lower
+
+        # Check if format matches training format
+        if not has_prefix:
             issues.append(
-                "Instruction-only prompt should follow format: 'Question: ...\\n\\nAnswer:'\n"
-                "  This ensures consistency with training format."
+                f"Evaluation prompt missing expected training format prefix.\n"
+                f"  Expected prefix: {expected_prefix!r}\n"
+                f"  This ensures consistency with training format where instruction text is included in user content.\n"
+                f"  Current prompt: {evaluation_prompt[:100]!r}..."
+            )
+        elif not has_question or not has_answer:
+            issues.append(
+                f"Evaluation prompt missing required markers.\n"
+                f"  Expected format: '{expected_prefix}\\n\\nQuestion: ...\\n\\nAnswer:'\n"
+                f"  This ensures consistency with training format."
             )
 
     return issues

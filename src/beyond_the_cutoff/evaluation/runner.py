@@ -81,16 +81,20 @@ def render_judge_prompt(
 def _build_instruction_only_prompt(instruction: str) -> str:
     """Build a prompt for instruction-only mode (no RAG contexts).
 
-    Note: System message comes from the Ollama Modelfile. This function only
-    formats the user content (question) to avoid duplication. The Modelfile
-    system message should match the training system message for consistency.
+    Note: System message comes from the Ollama Modelfile. This function formats
+    the user content to match the training format exactly. The training format
+    includes instruction text in the user message, so we must replicate it here
+    for consistency, even though the Modelfile also provides a system message.
     """
     instruction_text = instruction.strip()
     if not instruction_text:
         raise ValueError("Instruction cannot be empty for instruction-only mode")
-    # Only include the question - system message comes from Modelfile
-    # This matches the training format where system message is separate
-    return f"Question: {instruction_text}\n\nAnswer:"
+    # Match training format exactly - training includes this instruction text in user content
+    # This ensures evaluation matches training conditions and avoids distribution shift
+    return (
+        "You are a research paper assistant. Answer the following question based on your knowledge.\n\n"
+        f"Question: {instruction_text}\n\nAnswer:"
+    )
 
 
 def parse_judge_output(payload: str) -> dict[str, Any]:
@@ -120,19 +124,51 @@ def parse_judge_output(payload: str) -> dict[str, Any]:
 def summarise_scores(score_rows: list[dict[str, Any]]) -> dict[str, Any]:
     metrics: dict[str, list[float]] = defaultdict(list)
     coverage_values: list[float] = []
+    instruction_only_count = 0
+    rag_count = 0
+
     for row in score_rows:
         scores = row.get("judge_scores", {})
         for key, value in scores.items():
             if isinstance(value, int | float):
                 metrics[key].append(float(value))
         citation_metrics = row.get("citation_metrics", {})
-        # Exclude citation metrics from instruction-only mode (not applicable)
-        if citation_metrics.get("mode") != "instruction_only":
+
+        # Validate citation metrics mode
+        citation_mode = citation_metrics.get("mode")
+        if citation_mode == "instruction_only":
+            instruction_only_count += 1
+            # Ensure citation metrics are not aggregated for instruction-only mode
+            if "validated" not in citation_metrics:
+                print(
+                    "[warn] Citation metrics for instruction-only mode missing validation flag. "
+                    "This may indicate a bug in the evaluation pipeline.",
+                    file=sys.stderr,
+                )
+        elif citation_mode == "rag":
+            rag_count += 1
+            # Only aggregate citation metrics for RAG mode
             coverage = citation_metrics.get("mean_coverage")
             if isinstance(coverage, int | float):
                 coverage_values.append(float(coverage))
-    summary = {key: mean(values) if values else 0.0 for key, values in metrics.items()}
+        elif citation_metrics:  # Has citation metrics but no mode specified
+            print(
+                "[warn] Citation metrics missing mode specification. "
+                "Assuming RAG mode for aggregation.",
+                file=sys.stderr,
+            )
+            coverage = citation_metrics.get("mean_coverage")
+            if isinstance(coverage, int | float):
+                coverage_values.append(float(coverage))
+
+    summary: dict[str, Any] = {
+        key: mean(values) if values else 0.0 for key, values in metrics.items()
+    }
     summary["citation_mean_coverage"] = mean(coverage_values) if coverage_values else 0.0
+    summary["citation_metrics_mode_counts"] = {
+        "instruction_only": instruction_only_count,
+        "rag": rag_count,
+    }
     return summary
 
 
@@ -281,12 +317,30 @@ def run_evaluation(
         # We still compute them but mark them as N/A
         citation_metrics = evaluate_citations(assistant_answer, contexts_numbered)
         if prompt_mode == "instruction":
+            # Validate: instruction-only mode should not have contexts
+            if contexts_raw:
+                print(
+                    f"[warn] Instruction-only mode but example {task_id or idx} has contexts. "
+                    "This may indicate a configuration error. Citation metrics will be marked as N/A.",
+                    file=sys.stderr,
+                )
             # Mark citation metrics as not applicable for instruction-only mode
             citation_metrics = {
                 **citation_metrics,
                 "mode": "instruction_only",
                 "note": "Citation metrics not applicable - no contexts provided",
+                "validated": True,  # Flag to prevent accidental aggregation
             }
+        else:
+            # RAG mode: validate that contexts exist
+            if not contexts_raw:
+                print(
+                    f"[warn] RAG mode but example {task_id or idx} has no contexts. "
+                    "Citation metrics may not be meaningful.",
+                    file=sys.stderr,
+                )
+            citation_metrics["mode"] = "rag"
+            citation_metrics["validated"] = True
 
         judge_prompt_text = render_judge_prompt(
             judge_prompt.prompt,

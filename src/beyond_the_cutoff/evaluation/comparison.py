@@ -190,13 +190,30 @@ def execute_comparison_plan(
         )
         dataset_path = Path(dataset_source).resolve()
         if not dataset_path.exists():
-            raise FileNotFoundError(f"Dataset for run '{spec.label}' not found: {dataset_path}")
+            raise FileNotFoundError(
+                f"Dataset for run '{spec.label}' not found: {dataset_path}\n"
+                f"  Checked paths:\n"
+                f"    - Run-specific: {spec.dataset}\n"
+                f"    - Plan default: {plan.defaults.dataset}\n"
+                f"    - Config default: {project_config.evaluation.offline_dataset_path}\n"
+                f"  Ensure the dataset file exists or update the comparison plan configuration."
+            )
         judge_prompt_path = spec.judge_config or plan.defaults.judge_config
         if judge_prompt_path is None:
             raise ValueError(
-                f"Run '{spec.label}' is missing judge_config and no default was provided"
+                f"Run '{spec.label}' is missing judge_config and no default was provided.\n"
+                f"  Either specify judge_config in the run specification or set a default in the plan.\n"
+                f"  Judge configs are typically in configs/judges/ directory."
             )
         judge_prompt_path = judge_prompt_path.resolve()
+        if not judge_prompt_path.exists():
+            raise FileNotFoundError(
+                f"Judge config for run '{spec.label}' not found: {judge_prompt_path}\n"
+                f"  Checked paths:\n"
+                f"    - Run-specific: {spec.judge_config}\n"
+                f"    - Plan default: {plan.defaults.judge_config}\n"
+                f"  Ensure the judge config file exists or update the comparison plan configuration."
+            )
 
         model_cfg = (
             load_inference_from_yaml(spec.model_config)
@@ -265,27 +282,51 @@ def execute_comparison_plan(
 
     # Validate that all runs evaluated the same examples
     if validate_same_examples and len(results) > 1:
-        task_id_sets: list[set[str]] = []
+        task_id_sets: list[tuple[str, set[str]]] = []  # (label, task_ids)
         for run_result in results:
             if run_result.skipped:
                 continue
             summary = run_result.summary
             evaluated_ids = summary.get("evaluated_task_ids", [])
             if evaluated_ids:
-                task_id_sets.append(set(evaluated_ids))
+                task_id_sets.append((run_result.label, set(evaluated_ids)))
 
         if len(task_id_sets) > 1:
-            first_set = task_id_sets[0]
-            for idx, task_set in enumerate(task_id_sets[1:], start=1):
+            first_label, first_set = task_id_sets[0]
+            for _idx, (label, task_set) in enumerate(task_id_sets[1:], start=1):
                 if task_set != first_set:
                     missing = first_set - task_set
                     extra = task_set - first_set
-                    raise ValueError(
-                        f"Experiments evaluated different examples. "
-                        f"Run 0 has {len(first_set)} examples, run {idx} has {len(task_set)} examples. "
-                        f"Missing in run {idx}: {sorted(missing)[:10]}{'...' if len(missing) > 10 else ''}. "
-                        f"Extra in run {idx}: {sorted(extra)[:10]}{'...' if len(extra) > 10 else ''}."
+
+                    # Build detailed error message
+                    error_parts = [
+                        "Experiments evaluated different examples.",
+                        f"  Baseline run '{first_label}' evaluated {len(first_set)} examples.",
+                        f"  Run '{label}' evaluated {len(task_set)} examples.",
+                    ]
+
+                    if missing:
+                        missing_preview = sorted(missing)[:10]
+                        missing_msg = f"  Missing in '{label}': {missing_preview}"
+                        if len(missing) > 10:
+                            missing_msg += f" ... and {len(missing) - 10} more"
+                        error_parts.append(missing_msg)
+
+                    if extra:
+                        extra_preview = sorted(extra)[:10]
+                        extra_msg = f"  Extra in '{label}': {extra_preview}"
+                        if len(extra) > 10:
+                            extra_msg += f" ... and {len(extra) - 10} more"
+                        error_parts.append(extra_msg)
+
+                    error_parts.append(
+                        "  This may indicate dataset filtering differences, limit overrides, or evaluation errors."
                     )
+                    error_parts.append(
+                        "  Check that all runs use the same dataset and limit settings."
+                    )
+
+                    raise ValueError("\n".join(error_parts))
 
     return results
 
