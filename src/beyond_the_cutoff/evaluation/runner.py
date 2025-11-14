@@ -196,13 +196,15 @@ def _build_instruction_only_prompt(
     # For RAG-trained models evaluated without contexts (Condition 5), use a format that
     # acknowledges the mismatch: model was trained WITH contexts, evaluated WITHOUT.
     if model_type == "rag_trained":
-        # RAG-trained model has system message about citations, so use a format
-        # that doesn't contradict it. The model was trained with RAG prompts,
-        # but when evaluated without contexts (Condition 5), we use a format that
-        # acknowledges we're asking for knowledge-based answers without contexts.
+        # RAG-trained model has system message about citations, so we need to explicitly
+        # tell it not to cite sources since no contexts are provided. The model was trained
+        # with RAG prompts, but when evaluated without contexts (Condition 5), we use a format
+        # that acknowledges we're asking for knowledge-based answers without contexts.
         # This tests distribution shift: model trained WITH contexts, evaluated WITHOUT.
+        # We explicitly instruct not to cite to prevent spurious citations.
         return (
             "Answer the following question based on your knowledge. "
+            "Do not include citations or source references as no sources are provided. "
             "Provide a clear and concise response.\n\n"
             f"Question: {instruction_text}\n\nAnswer:"
         )

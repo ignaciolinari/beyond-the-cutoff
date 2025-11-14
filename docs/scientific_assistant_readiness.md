@@ -24,7 +24,7 @@ _Last updated: 2025-11-11_
 - Response schema needs explicit `model_tag`, `dataset_tag`, and `retrieval_config_id` fields for auditing.
 
 ## Retrieval Presets
-- Define YAML presets under `configs/retrieval_presets/` (to be created) mapping scenario → retrieval parameters.
+- Retrieval presets have been moved to `vintage/configs/retrieval_presets/` (not currently used in active pipeline).
 - Each preset should specify:
   - Embedding model.
   - `chunk_size`, `chunk_overlap`, `top_k`.

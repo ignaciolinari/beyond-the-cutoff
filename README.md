@@ -329,7 +329,7 @@ The visualization tool generates:
 ### Data & Checkpoints Sync
 
 - Scripts in `scripts/` handle downloading, cleaning, and converting recent papers to JSONL; keep inputs in `data/raw/` and processed assets in `data/processed/`.
-- Use cloud storage (Drive, S3, Hugging Face Hub) to move LoRA/PEFT checkpoints trained on remote notebooks; document sync commands (e.g., `scripts/sync_checkpoints.py`, to be created).
+- Use cloud storage (Drive, S3, Hugging Face Hub) to move LoRA/PEFT checkpoints trained on remote notebooks. See `vintage/scripts/sync_checkpoints.py` for reference implementation.
 - Track versioning and quantization metadata inside each checkpoint to map evaluations back to the corresponding model.
 
 ## Roadmap
@@ -337,7 +337,7 @@ The visualization tool generates:
 1. Implement reproducible data ingestion pipeline for 2025 papers.
 2. Build QA generation scripts and evaluation dataset.
 3. Develop RAG baseline with FAISS/Chroma + local inference via Ollama-backed models.
-4. Orchestrate fine-tuning workflows on cloud notebooks (LoRA/PEFT) and sync checkpoints.
+4. Orchestrate fine-tuning workflows on cloud notebooks (LoRA/PEFT) and sync checkpoints (see `vintage/scripts/sync_checkpoints.py`).
 5. Run comparative evaluation suite; summarize findings with visualizations.
 
 ## License

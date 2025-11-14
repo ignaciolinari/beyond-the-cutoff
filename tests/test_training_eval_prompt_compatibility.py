@@ -71,8 +71,9 @@ class TestInstructionOnlyPromptCompatibility:
         assert instruction in prompt
         assert "Answer:" in prompt
 
-        # Should not contradict system message about citations
-        assert "cite" not in prompt.lower()
+        # Should explicitly instruct not to cite since no sources are provided
+        assert "do not include citations" in prompt.lower() or "do not cite" in prompt.lower()
+        assert "no sources are provided" in prompt.lower() or "no sources" in prompt.lower()
 
 
 class TestCondition4HybridPrompt:

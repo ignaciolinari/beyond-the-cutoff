@@ -24,11 +24,15 @@ class ProjectMetadata(BaseModel):
 
 
 class PathsConfig(BaseModel):
-    """Filesystem layout for the project."""
+    """Filesystem layout for the project.
 
-    raw_data: Path = Field(default=Path("data/raw"))
-    processed_data: Path = Field(default=Path("data/processed"))
-    external_data: Path = Field(default=Path("data/external"))
+    Paths are resolved relative to the config file's parent directory.
+    For configs in `configs/`, use `../data/raw` to reach the repo root.
+    """
+
+    raw_data: Path = Field(default=Path("../data/raw"))
+    processed_data: Path = Field(default=Path("../data/processed"))
+    external_data: Path = Field(default=Path("../data/external"))
 
     @field_validator("raw_data", "processed_data", "external_data", mode="before")
     @classmethod
@@ -73,10 +77,14 @@ class RetrievalConfig(BaseModel):
 
 
 class FineTuningConfig(BaseModel):
-    """Fine-tuning hyperparameters."""
+    """Fine-tuning hyperparameters.
+
+    Paths are resolved relative to the config file's parent directory.
+    For configs in `configs/`, use `../outputs/...` to reach the repo root.
+    """
 
     base_model: str = Field(default="Qwen/Qwen2.5-0.5B-Instruct")
-    adapter_output_dir: Path = Field(default=Path("outputs/adapters"))
+    adapter_output_dir: Path = Field(default=Path("../outputs/adapters"))
     lora_rank: int = Field(default=16, ge=1)
     learning_rate: float = Field(default=1e-4, gt=0)
     batch_size: int = Field(default=4, ge=1)
@@ -100,11 +108,15 @@ class FineTuningConfig(BaseModel):
 
 
 class EvaluationConfig(BaseModel):
-    """Evaluation dataset and metric configuration."""
+    """Evaluation dataset and metric configuration.
+
+    Paths are resolved relative to the config file's parent directory.
+    For configs in `configs/`, use `../evaluation/...` to reach the repo root.
+    """
 
     metrics: list[str] = Field(default_factory=lambda: ["factuality", "citation_accuracy"])
-    offline_tasks_path: Path = Field(default=Path("evaluation/datasets/offline_tasks.jsonl"))
-    offline_dataset_path: Path = Field(default=Path("evaluation/datasets/offline_dataset.jsonl"))
+    offline_tasks_path: Path = Field(default=Path("../evaluation/datasets/offline_tasks.jsonl"))
+    offline_dataset_path: Path = Field(default=Path("../evaluation/datasets/offline_dataset.jsonl"))
 
     @field_validator(
         "offline_tasks_path",
@@ -205,11 +217,15 @@ def _default_generator_config() -> InferenceConfig:
 
 
 class DatasetGenerationConfig(BaseModel):
-    """Settings controlling offline dataset generation."""
+    """Settings controlling offline dataset generation.
+
+    Paths are resolved relative to the config file's parent directory.
+    For configs in `configs/`, use `../evaluation/...` to reach the repo root.
+    """
 
     generator: InferenceConfig = Field(default_factory=_default_generator_config)
-    output_dataset_path: Path = Field(default=Path("evaluation/datasets/offline_dataset.jsonl"))
-    raw_tasks_path: Path = Field(default=Path("evaluation/datasets/offline_tasks.jsonl"))
+    output_dataset_path: Path = Field(default=Path("../evaluation/datasets/offline_dataset.jsonl"))
+    raw_tasks_path: Path = Field(default=Path("../evaluation/datasets/offline_tasks.jsonl"))
     questions_per_document: int = Field(default=4, ge=0)
     summary_prompts_per_document: int = Field(default=1, ge=0)
     citation_prompts_per_document: int = Field(default=1, ge=0)

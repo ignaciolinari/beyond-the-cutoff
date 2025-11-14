@@ -37,7 +37,7 @@ _Last updated: 2025-11-13_
 - [x] Include page/section metadata in retrieval mapping and surface inline citations in answers
 - [x] Implement fine-tuning harness (LoRA/PEFT) with configuration options
 - [x] Create Colab/Kaggle notebook that trains from `offline_dataset.jsonl`, logs hyperparameters, and exports adapter weights to `outputs/adapters/`
-- [x] Create scripts to sync fine-tuned checkpoints between local and cloud environments
+- [x] Create scripts to sync fine-tuned checkpoints between local and cloud environments (see `vintage/scripts/sync_checkpoints.py`)
 - [x] Track experiment metadata (model version, dataset version, hyperparameters)
 
 ## Evaluation Suite
