@@ -151,10 +151,9 @@ def _build_instruction_only_prompt(
         model_config_path: Optional path to model config file for type detection
         model_name: Optional model name for type detection
 
-    Note: System message comes from the Ollama Modelfile. This function formats
-    the user content to match the training format exactly. The training format
-    includes instruction text in the user message, so we must replicate it here
-    for consistency, even though the Modelfile also provides a system message.
+    Note: System message comes from the Ollama Modelfile. User content should NOT
+    duplicate the system message - it should only contain the question and answer prompt.
+    The Modelfile provides the system message, so user content is simplified to avoid duplication.
 
     For RAG-trained models evaluated in instruction-only mode, we use a format
     that doesn't contradict the system message (which mentions citations).
@@ -174,8 +173,9 @@ def _build_instruction_only_prompt(
                 file=sys.stderr,
             )
 
-    # Match training format exactly - training includes this instruction text in user content
-    # This ensures evaluation matches training conditions and avoids distribution shift
+    # Match training format exactly for instruction-only models
+    # For RAG-trained models evaluated without contexts (Condition 5), use a format that
+    # acknowledges the mismatch: model was trained WITH contexts, evaluated WITHOUT.
     if model_type == "rag_trained":
         # RAG-trained model has system message about citations, so use a format
         # that doesn't contradict it. The model was trained with RAG prompts,
@@ -188,17 +188,11 @@ def _build_instruction_only_prompt(
             f"Question: {instruction_text}\n\nAnswer:"
         )
     elif model_type == "instruction_only":
-        # Instruction-only trained model: matches training format exactly
-        return (
-            "You are a research paper assistant. Answer the following question based on your knowledge.\n\n"
-            f"Question: {instruction_text}\n\nAnswer:"
-        )
+        # Instruction-only trained model: Modelfile provides system message, user content is just question/answer
+        return f"Question: {instruction_text}\n\nAnswer:"
     else:
-        # Base model: use neutral format
-        return (
-            "You are a research paper assistant. Answer the following question based on your knowledge.\n\n"
-            f"Question: {instruction_text}\n\nAnswer:"
-        )
+        # Base model: Modelfile provides system message, user content is just question/answer
+        return f"Question: {instruction_text}\n\nAnswer:"
 
 
 def _build_rag_prompt_for_instruction_only_model(
@@ -208,12 +202,12 @@ def _build_rag_prompt_for_instruction_only_model(
     model_config_path: Path | None = None,
     model_name: str = "",
 ) -> str:
-    """Build a RAG prompt for instruction-only models that matches their training format.
+    """Build a RAG prompt for instruction-only models evaluated with RAG contexts.
 
     This is used for Condition 4 (FT+RAG instruction-only) where an instruction-only
-    trained model is evaluated WITH RAG contexts. The prompt format must match the
-    training format ("Answer the following question based on your knowledge") while
-    still including contexts and citation instructions.
+    trained model is evaluated WITH RAG contexts. The Modelfile provides the system
+    message, so user content should not duplicate it. User content includes contexts
+    and citation instructions.
 
     Args:
         instruction: The instruction/question text
@@ -234,15 +228,16 @@ def _build_rag_prompt_for_instruction_only_model(
     # Build context block from numbered contexts
     context_block = "\n\n".join(contexts)
 
-    # Use training format ("Answer the following question based on your knowledge")
-    # but add context and citation instructions
-    # This matches the instruction-only training format while enabling RAG evaluation
+    # Hybrid format: Preserves training instruction structure ("Question: ... Answer:")
+    # while adding RAG context requirements. This bridges the training format with RAG needs.
+    # Training format: "Question: X\n\nAnswer:" (system message provided separately)
+    # This hybrid format ensures the model sees familiar instruction patterns while learning to use contexts.
     prompt = (
-        "You are a research paper assistant. Answer the following question based on your knowledge. "
-        "Use the provided context to inform your answer. Cite sources inline as [#] based on the order of the snippets. "
-        "If the answer is not in the context, say you don't know.\n\n"
+        f"Question: {instruction_text}\n\n"
         f"Context:\n{context_block}\n\n"
-        f"Question: {instruction_text}\n\nAnswer:"
+        "Answer using the provided context. Cite sources inline as [#] based on the order of the snippets. "
+        "If the answer is not in the context, say you don't know.\n\n"
+        "Answer:"
     )
 
     return prompt
@@ -473,6 +468,25 @@ def run_evaluation(
                 if not prompt:
                     raise KeyError(f"Example {task_id} missing prompt field for RAG mode")
                 prompt_text = str(prompt)
+
+                # Validate: RAG prompt should not include system text (Modelfile provides it)
+                # This prevents distribution shift and system message duplication
+                prompt_lower = prompt_text.lower()
+                system_text_indicators = [
+                    "you are a research paper assistant",
+                    "you are a scientific research assistant",
+                    "you are an assistant",
+                ]
+                for indicator in system_text_indicators:
+                    if indicator in prompt_lower:
+                        print(
+                            f"[warn] RAG prompt for example {task_id} contains system text '{indicator}'. "
+                            "System message is provided separately via Modelfile, so user content should not duplicate it. "
+                            "This may cause distribution shift between training and evaluation.",
+                            file=sys.stderr,
+                        )
+                        break  # Only warn once per prompt
+
                 # Warn if RAG mode but no contexts retrieved
                 if not contexts_raw:
                     print(

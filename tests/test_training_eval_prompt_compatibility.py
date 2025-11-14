@@ -30,9 +30,9 @@ class TestInstructionOnlyPromptCompatibility:
             model_type="instruction_only",
         )
 
-        # Training format includes: "You are a research paper assistant. Answer the following question based on your knowledge."
-        assert "You are a research paper assistant" in prompt
-        assert "Answer the following question based on your knowledge" in prompt
+        # Training format: System message is separate, user content is just question/answer
+        # Should NOT include system text duplication
+        assert "You are a research paper assistant" not in prompt
         assert "Question:" in prompt
         assert instruction in prompt
         assert "Answer:" in prompt
@@ -50,8 +50,8 @@ class TestInstructionOnlyPromptCompatibility:
             model_type="base",
         )
 
-        # Base model should also get the standard format
-        assert "You are a research paper assistant" in prompt
+        # Base model: System message is separate, user content is just question/answer
+        assert "You are a research paper assistant" not in prompt
         assert "Question:" in prompt
         assert instruction in prompt
         assert "Answer:" in prompt
@@ -91,20 +91,21 @@ class TestCondition4HybridPrompt:
             contexts,
         )
 
-        # Must match training format prefix
-        assert "You are a research paper assistant" in prompt
-        assert "Answer the following question based on your knowledge" in prompt
+        # System message is separate, user content should not duplicate it
+        assert "You are a research paper assistant" not in prompt
+
+        # Must include question first (matching training format)
+        assert "Question:" in prompt
+        assert instruction in prompt
 
         # Must include RAG contexts and citation instructions
-        assert "Use the provided context to inform your answer" in prompt
-        assert "Cite sources inline as [#]" in prompt
         assert "Context:" in prompt
         assert contexts[0] in prompt
         assert contexts[1] in prompt
+        assert "using the provided context" in prompt.lower()
+        assert "Cite sources inline as [#]" in prompt
 
-        # Must include question and answer markers
-        assert "Question:" in prompt
-        assert instruction in prompt
+        # Must include answer marker at the end (matching training format)
         assert "Answer:" in prompt
 
     def test_hybrid_prompt_preserves_training_instruction_style(self) -> None:
@@ -117,20 +118,20 @@ class TestCondition4HybridPrompt:
             contexts,
         )
 
-        # Critical: Must use "Answer the following question based on your knowledge"
-        # This matches the training format exactly
-        training_prefix = "Answer the following question based on your knowledge"
-        assert training_prefix in prompt, (
-            f"Hybrid prompt must include training format prefix '{training_prefix}' "
-            "to avoid distribution shift. Current prompt: {prompt[:200]}"
-        )
+        # System message is separate, user content should not duplicate it
+        # Should start with Question: (matching training format)
+        assert prompt.strip().startswith(
+            "Question:"
+        ), "Hybrid prompt should start with 'Question:' to match training format"
 
-        # Should NOT use the standard RAG format "Answer the question using the provided context"
-        # (without "based on your knowledge")
-        standard_rag_format = "Answer the question using the provided context"
-        assert standard_rag_format not in prompt or "based on your knowledge" in prompt, (
-            f"Hybrid prompt should not use standard RAG format '{standard_rag_format}' "
-            "without the training format prefix. This would cause distribution shift."
+        # Should include context usage instructions
+        assert "using the provided context" in prompt.lower()
+
+        # Should preserve training structure: Question: ... Answer:
+        # (not the standard RAG format that starts with "Answer the question")
+        assert not prompt.strip().startswith("Answer the question"), (
+            "Hybrid prompt should preserve training structure (Question: ... Answer:), "
+            "not use standard RAG format that starts with 'Answer the question'"
         )
 
     def test_hybrid_prompt_requires_contexts(self) -> None:
@@ -239,15 +240,11 @@ class TestPromptFormatConsistency:
             contexts,
         )
 
-        # Verify it matches training format
-        training_format_marker = "Answer the following question based on your knowledge"
-        assert training_format_marker in prompt, (
-            "Condition 4 must use training format to avoid distribution shift. "
-            f"Expected '{training_format_marker}' in prompt."
-        )
+        # Verify it doesn't duplicate system message
+        assert "You are a research paper assistant" not in prompt
 
         # Verify it includes RAG elements
-        assert "Use the provided context" in prompt
+        assert "using the provided context" in prompt.lower()
         assert "Cite sources inline" in prompt
         assert "Context:" in prompt
 
@@ -255,11 +252,8 @@ class TestPromptFormatConsistency:
         """Test that instruction-only evaluation format exactly matches training format."""
         instruction = "What is the methodology?"
 
-        # Training format from notebook
-        training_user_content = (
-            "You are a research paper assistant. Answer the following question based on your knowledge.\n\n"
-            f"Question: {instruction}\n\nAnswer:"
-        )
+        # Training format: System message is separate, user content is just question/answer
+        training_user_content = f"Question: {instruction}\n\nAnswer:"
 
         # Evaluation format
         eval_prompt = _build_instruction_only_prompt(

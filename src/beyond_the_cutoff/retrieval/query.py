@@ -240,9 +240,10 @@ class RAGPipeline:
             assembled.append(ctx)
             current += len(ctx) + 2
         context_block = "\n\n".join(assembled)
-        instructions = (
-            "You are a research paper assistant. Answer the question using the provided context. "
-        )
+        # Note: System message is provided separately (via Modelfile during evaluation,
+        # or in training via chat template). User content should NOT include system text
+        # to avoid duplication and ensure consistency with Modelfile system messages.
+        instructions = "Answer the question using the provided context. "
         if require_citations:
             instructions += "Cite the sources inline as [#] based on the order of the snippets. "
         else:

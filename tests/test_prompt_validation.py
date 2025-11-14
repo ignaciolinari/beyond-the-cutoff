@@ -7,13 +7,32 @@ from pathlib import Path
 from beyond_the_cutoff.utils.prompt_validation import (
     validate_modelfile_system_message,
     validate_prompt_format_consistency,
+    validate_rag_prompt_no_system_text,
 )
 
 
 def test_validate_prompt_format_consistency_instruction_mode_matches() -> None:
-    """Test that validation passes when instruction-only format matches training."""
+    """Test that validation passes when instruction-only format matches training (no system text)."""
     training_system = "You are a research paper assistant."
     modelfile_system = "You are a research paper assistant."
+    # Evaluation format should NOT include system text (Modelfile provides it)
+    evaluation_prompt = "Question: What is the main contribution?\n\nAnswer:"
+
+    issues = validate_prompt_format_consistency(
+        training_system_message=training_system,
+        modelfile_system_message=modelfile_system,
+        evaluation_prompt=evaluation_prompt,
+        mode="instruction",
+    )
+
+    assert issues == [], f"Expected no issues but got: {issues}"
+
+
+def test_validate_prompt_format_consistency_instruction_mode_has_system_text() -> None:
+    """Test that validation fails when instruction-only format includes system text."""
+    training_system = "You are a research paper assistant."
+    modelfile_system = "You are a research paper assistant."
+    # Includes system text - this should fail validation
     evaluation_prompt = (
         "You are a research paper assistant. Answer the following question based on your knowledge.\n\n"
         "Question: What is the main contribution?\n\nAnswer:"
@@ -26,25 +45,8 @@ def test_validate_prompt_format_consistency_instruction_mode_matches() -> None:
         mode="instruction",
     )
 
-    assert issues == [], f"Expected no issues but got: {issues}"
-
-
-def test_validate_prompt_format_consistency_instruction_mode_missing_prefix() -> None:
-    """Test that validation fails when instruction-only format is missing training prefix."""
-    training_system = "You are a research paper assistant."
-    modelfile_system = "You are a research paper assistant."
-    # Missing the training prefix - this is the old buggy format
-    evaluation_prompt = "Question: What is the main contribution?\n\nAnswer:"
-
-    issues = validate_prompt_format_consistency(
-        training_system_message=training_system,
-        modelfile_system_message=modelfile_system,
-        evaluation_prompt=evaluation_prompt,
-        mode="instruction",
-    )
-
-    assert len(issues) > 0, "Expected validation issues for missing training format prefix"
-    assert any("missing expected training format prefix" in issue.lower() for issue in issues)
+    assert len(issues) > 0, "Expected validation issues for system text duplication"
+    assert any("system text duplication" in issue.lower() for issue in issues)
 
 
 def test_validate_prompt_format_consistency_system_message_mismatch() -> None:
@@ -115,3 +117,63 @@ def test_validate_modelfile_missing_system(tmp_path: Path) -> None:
 
     assert len(issues) > 0, "Expected validation issues for missing SYSTEM directive"
     assert any("missing system directive" in issue.lower() for issue in issues)
+
+
+def test_validate_rag_prompt_no_system_text_valid() -> None:
+    """Test that validation passes when RAG prompt doesn't contain system text."""
+    rag_prompt = (
+        "Answer the question using the provided context. "
+        "Cite the sources inline as [#] based on the order of the snippets. "
+        "If the answer is not in the context, say you don't know.\n\n"
+        "Context:\n[1] First context...\n\n"
+        "Question: What is X?\nAnswer:"
+    )
+
+    issues = validate_rag_prompt_no_system_text(rag_prompt)
+
+    assert issues == [], f"Expected no issues but got: {issues}"
+
+
+def test_validate_rag_prompt_no_system_text_contains_research_paper_assistant() -> None:
+    """Test that validation fails when RAG prompt contains 'research paper assistant'."""
+    rag_prompt = (
+        "You are a research paper assistant. "
+        "Answer the question using the provided context. "
+        "Cite the sources inline as [#] based on the order of the snippets.\n\n"
+        "Context:\n[1] First context...\n\n"
+        "Question: What is X?\nAnswer:"
+    )
+
+    issues = validate_rag_prompt_no_system_text(rag_prompt)
+
+    assert len(issues) > 0, "Expected validation issues for system text in RAG prompt"
+    assert any("research paper assistant" in issue.lower() for issue in issues)
+
+
+def test_validate_rag_prompt_no_system_text_contains_scientific_assistant() -> None:
+    """Test that validation fails when RAG prompt contains 'scientific research assistant'."""
+    rag_prompt = (
+        "You are a scientific research assistant. "
+        "Answer the question using the provided context.\n\n"
+        "Context:\n[1] First context...\n\n"
+        "Question: What is X?\nAnswer:"
+    )
+
+    issues = validate_rag_prompt_no_system_text(rag_prompt)
+
+    assert len(issues) > 0, "Expected validation issues for system text in RAG prompt"
+    assert any("scientific research assistant" in issue.lower() for issue in issues)
+
+
+def test_validate_rag_prompt_no_system_text_contains_generic_assistant() -> None:
+    """Test that validation fails when RAG prompt contains generic 'you are an assistant'."""
+    rag_prompt = (
+        "You are an assistant. Answer the question using the provided context.\n\n"
+        "Context:\n[1] First context...\n\n"
+        "Question: What is X?\nAnswer:"
+    )
+
+    issues = validate_rag_prompt_no_system_text(rag_prompt)
+
+    assert len(issues) > 0, "Expected validation issues for system text in RAG prompt"
+    assert any("you are an assistant" in issue.lower() for issue in issues)

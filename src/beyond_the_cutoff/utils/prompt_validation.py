@@ -37,29 +37,32 @@ def validate_prompt_format_consistency(
 
     # Check 2: Instruction-only mode format consistency
     if mode == "instruction":
-        # Expected training format includes instruction text in user content
-        expected_prefix = "You are a research paper assistant. Answer the following question based on your knowledge."
+        # Expected format: System message is separate, user content should NOT duplicate it
         expected_question_marker = "Question:"
         expected_answer_marker = "Answer:"
+        system_text_markers = [
+            "you are a research paper assistant",
+            "you are a scientific research assistant",
+        ]
 
         evaluation_lower = evaluation_prompt.lower()
-        has_prefix = expected_prefix.lower() in evaluation_lower
         has_question = expected_question_marker.lower() in evaluation_lower
         has_answer = expected_answer_marker.lower() in evaluation_lower
+        has_system_duplication = any(marker in evaluation_lower for marker in system_text_markers)
 
-        # Check if format matches training format
-        if not has_prefix:
+        # Check for system text duplication (should NOT be present)
+        if has_system_duplication:
             issues.append(
-                f"Evaluation prompt missing expected training format prefix.\n"
-                f"  Expected prefix: {expected_prefix!r}\n"
-                f"  This ensures consistency with training format where instruction text is included in user content.\n"
+                f"Evaluation prompt contains system text duplication.\n"
+                f"  System message is provided separately (via Modelfile), so user content should not duplicate it.\n"
+                f"  User content should only contain: 'Question: ...\\n\\nAnswer:'\n"
                 f"  Current prompt: {evaluation_prompt[:100]!r}..."
             )
         elif not has_question or not has_answer:
             issues.append(
-                f"Evaluation prompt missing required markers.\n"
-                f"  Expected format: '{expected_prefix}\\n\\nQuestion: ...\\n\\nAnswer:'\n"
-                f"  This ensures consistency with training format."
+                "Evaluation prompt missing required markers.\n"
+                "  Expected format: 'Question: ...\\n\\nAnswer:'\n"
+                "  System message is provided separately, user content should be simplified."
             )
 
     return issues
@@ -124,7 +127,42 @@ def validate_modelfile_system_message(
     return issues
 
 
+def validate_rag_prompt_no_system_text(rag_prompt: str) -> list[str]:
+    """Validate that a RAG prompt does not contain system text.
+
+    RAG prompts stored in the dataset should contain only user content, as the system
+    message is provided separately via Modelfile during evaluation. Including system
+    text in the prompt causes duplication and potential distribution shift.
+
+    Args:
+        rag_prompt: The RAG prompt string to validate
+
+    Returns:
+        List of validation issues (empty if valid)
+    """
+    issues: list[str] = []
+
+    prompt_lower = rag_prompt.lower()
+    system_text_indicators = [
+        "you are a research paper assistant",
+        "you are a scientific research assistant",
+        "you are an assistant",
+    ]
+
+    for indicator in system_text_indicators:
+        if indicator in prompt_lower:
+            issues.append(
+                f"RAG prompt contains system text '{indicator}'. "
+                "System message is provided separately via Modelfile, so user content should not duplicate it. "
+                "This may cause distribution shift between training and evaluation."
+            )
+            break  # Only report once per prompt
+
+    return issues
+
+
 __all__ = [
     "validate_prompt_format_consistency",
     "validate_modelfile_system_message",
+    "validate_rag_prompt_no_system_text",
 ]
