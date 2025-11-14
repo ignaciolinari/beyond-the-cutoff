@@ -78,23 +78,174 @@ def render_judge_prompt(
     return rendered
 
 
-def _build_instruction_only_prompt(instruction: str) -> str:
+def _detect_model_type(model_config_path: Path | None, model_name: str) -> str:
+    """Detect model type from config path or model name.
+
+    Returns:
+        'instruction_only', 'rag_trained', or 'base'
+
+    Detection priority:
+    1. Config file name (most reliable)
+    2. Model name/Ollama tag
+    3. Default to 'base'
+    """
+    # First, check config file name (most reliable indicator)
+    if model_config_path:
+        config_name = model_config_path.name.lower()
+        # Check for RAG-trained indicators (must come before instruction_only check)
+        if "rag_trained" in config_name or "rag-trained" in config_name:
+            return "rag_trained"
+        # Check for instruction-only indicators
+        if "instruction_only" in config_name or "instruction-only" in config_name:
+            return "instruction_only"
+        # Check for hybrid configs (these use RAG-trained models)
+        if "hybrid" in config_name and "instruction" not in config_name:
+            # Hybrid configs typically use RAG-trained models unless explicitly instruction-only
+            return "rag_trained"
+
+    # Second, check model name/Ollama tag
+    model_lower = model_name.lower()
+
+    # Check for explicit instruction-only indicators in model name
+    if "instruction_only" in model_lower or "instruction-only" in model_lower:
+        return "instruction_only"
+
+    # Check for RAG-trained indicators (but exclude instruction-only variants)
+    # Common patterns: "lora_science_0p5" (without instruction_only suffix) = RAG-trained
+    #                  "lora_science_0p5_instruction_only" = instruction-only
+    if "lora_science" in model_lower:
+        # If it contains "lora_science" but NOT "instruction_only", it's likely RAG-trained
+        if "instruction" not in model_lower:
+            return "rag_trained"
+        # If it has both, check which comes first or is more specific
+        if "instruction_only" in model_lower:
+            return "instruction_only"
+
+    # Check for base model indicators
+    if any(
+        base_indicator in model_lower
+        for base_indicator in ["qwen2.5:0.5b", "qwen2.5:3b", "qwen2.5:7b"]
+    ):
+        # Base models from Ollama (not fine-tuned)
+        if "lora" not in model_lower and "science" not in model_lower:
+            return "base"
+
+    # Default to base model if we can't determine
+    # This is conservative - better to treat as base than misclassify
+    return "base"
+
+
+def _build_instruction_only_prompt(
+    instruction: str,
+    *,
+    model_type: str | None = None,
+    model_config_path: Path | None = None,
+    model_name: str = "",
+) -> str:
     """Build a prompt for instruction-only mode (no RAG contexts).
+
+    Args:
+        instruction: The instruction/question text
+        model_type: Model type ('instruction_only', 'rag_trained', or 'base').
+                    If None, will be inferred from model_config_path and model_name.
+        model_config_path: Optional path to model config file for type detection
+        model_name: Optional model name for type detection
 
     Note: System message comes from the Ollama Modelfile. This function formats
     the user content to match the training format exactly. The training format
     includes instruction text in the user message, so we must replicate it here
     for consistency, even though the Modelfile also provides a system message.
+
+    For RAG-trained models evaluated in instruction-only mode, we use a format
+    that doesn't contradict the system message (which mentions citations).
     """
     instruction_text = instruction.strip()
     if not instruction_text:
         raise ValueError("Instruction cannot be empty for instruction-only mode")
+
+    # Detect model type if not provided
+    if model_type is None:
+        model_type = _detect_model_type(model_config_path, model_name)
+        # Log detection for debugging
+        if model_config_path:
+            print(
+                f"[info] Detected model type '{model_type}' from config '{model_config_path.name}' "
+                f"and model name '{model_name}'",
+                file=sys.stderr,
+            )
+
     # Match training format exactly - training includes this instruction text in user content
     # This ensures evaluation matches training conditions and avoids distribution shift
-    return (
-        "You are a research paper assistant. Answer the following question based on your knowledge.\n\n"
+    if model_type == "rag_trained":
+        # RAG-trained model has system message about citations, so use a format
+        # that doesn't contradict it. The model was trained with RAG prompts,
+        # but when evaluated without contexts (Condition 5), we use a format that
+        # acknowledges we're asking for knowledge-based answers without contexts.
+        # This tests distribution shift: model trained WITH contexts, evaluated WITHOUT.
+        return (
+            "Answer the following question based on your knowledge. "
+            "Provide a clear and concise response.\n\n"
+            f"Question: {instruction_text}\n\nAnswer:"
+        )
+    elif model_type == "instruction_only":
+        # Instruction-only trained model: matches training format exactly
+        return (
+            "You are a research paper assistant. Answer the following question based on your knowledge.\n\n"
+            f"Question: {instruction_text}\n\nAnswer:"
+        )
+    else:
+        # Base model: use neutral format
+        return (
+            "You are a research paper assistant. Answer the following question based on your knowledge.\n\n"
+            f"Question: {instruction_text}\n\nAnswer:"
+        )
+
+
+def _build_rag_prompt_for_instruction_only_model(
+    instruction: str,
+    contexts: list[str],
+    *,
+    model_config_path: Path | None = None,
+    model_name: str = "",
+) -> str:
+    """Build a RAG prompt for instruction-only models that matches their training format.
+
+    This is used for Condition 4 (FT+RAG instruction-only) where an instruction-only
+    trained model is evaluated WITH RAG contexts. The prompt format must match the
+    training format ("Answer the following question based on your knowledge") while
+    still including contexts and citation instructions.
+
+    Args:
+        instruction: The instruction/question text
+        contexts: List of numbered context strings (e.g., "[1] context text")
+        model_config_path: Optional path to model config file for type detection
+        model_name: Optional model name for type detection
+
+    Returns:
+        Formatted prompt string that matches instruction-only training format but includes contexts
+    """
+    instruction_text = instruction.strip()
+    if not instruction_text:
+        raise ValueError("Instruction cannot be empty")
+
+    if not contexts:
+        raise ValueError("Contexts cannot be empty for RAG prompt")
+
+    # Build context block from numbered contexts
+    context_block = "\n\n".join(contexts)
+
+    # Use training format ("Answer the following question based on your knowledge")
+    # but add context and citation instructions
+    # This matches the instruction-only training format while enabling RAG evaluation
+    prompt = (
+        "You are a research paper assistant. Answer the following question based on your knowledge. "
+        "Use the provided context to inform your answer. Cite sources inline as [#] based on the order of the snippets. "
+        "If the answer is not in the context, say you don't know.\n\n"
+        f"Context:\n{context_block}\n\n"
         f"Question: {instruction_text}\n\nAnswer:"
     )
+
+    return prompt
 
 
 def parse_judge_output(payload: str) -> dict[str, Any]:
@@ -271,21 +422,64 @@ def run_evaluation(
                 raise KeyError(
                     f"Example {task_id} missing instruction field for instruction-only mode"
                 )
-            prompt_text = _build_instruction_only_prompt(instruction)
+            prompt_text = _build_instruction_only_prompt(
+                instruction,
+                model_config_path=model_config_path,
+                model_name=model_cfg.model,
+            )
             contexts_raw: list[Any] = []  # No contexts for instruction-only mode
         else:  # prompt_mode == "rag"
-            prompt = rag.get("prompt") or example.get("rag_prompt")
-            if not prompt:
-                raise KeyError(f"Example {task_id} missing prompt field for RAG mode")
-            prompt_text = str(prompt)
             contexts_raw = rag.get("contexts") or example.get("contexts") or []
-            # Warn if RAG mode but no contexts retrieved
-            if not contexts_raw:
-                print(
-                    f"[warn] RAG mode enabled but example {task_id} has no contexts. "
-                    "Citation metrics may not be meaningful.",
-                    file=sys.stderr,
-                )
+
+            # Detect if this is an instruction-only model being evaluated with RAG (Condition 4)
+            # In this case, we need to use a hybrid prompt format that matches training
+            detected_model_type = _detect_model_type(model_config_path, model_cfg.model)
+
+            if detected_model_type == "instruction_only":
+                # Condition 4: Instruction-only model evaluated WITH RAG contexts
+                # Use hybrid format that matches training format while including contexts
+                if not instruction:
+                    raise KeyError(f"Example {task_id} missing instruction field for RAG mode")
+                if not contexts_raw:
+                    print(
+                        f"[warn] RAG mode enabled for instruction-only model but example {task_id} has no contexts. "
+                        "Falling back to instruction-only prompt format.",
+                        file=sys.stderr,
+                    )
+                    prompt_text = _build_instruction_only_prompt(
+                        instruction,
+                        model_config_path=model_config_path,
+                        model_name=model_cfg.model,
+                    )
+                else:
+                    # Normalize contexts to numbered format if needed
+                    contexts_numbered = normalize_contexts(contexts_raw)
+                    prompt_text = _build_rag_prompt_for_instruction_only_model(
+                        instruction,
+                        contexts_numbered,
+                        model_config_path=model_config_path,
+                        model_name=model_cfg.model,
+                    )
+                    # Log once at the start of evaluation (not per example)
+                    if idx == 1:
+                        print(
+                            "[info] Using hybrid RAG prompt format for instruction-only model (Condition 4). "
+                            "Prompt format matches training while including RAG contexts.",
+                            file=sys.stderr,
+                        )
+            else:
+                # Standard RAG mode: use pre-built RAG prompt from dataset
+                prompt = rag.get("prompt") or example.get("rag_prompt")
+                if not prompt:
+                    raise KeyError(f"Example {task_id} missing prompt field for RAG mode")
+                prompt_text = str(prompt)
+                # Warn if RAG mode but no contexts retrieved
+                if not contexts_raw:
+                    print(
+                        f"[warn] RAG mode enabled but example {task_id} has no contexts. "
+                        "Citation metrics may not be meaningful.",
+                        file=sys.stderr,
+                    )
 
         record_errors: dict[str, str] = {}
 
