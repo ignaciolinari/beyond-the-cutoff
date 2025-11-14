@@ -30,6 +30,8 @@ TEMPLATE """
 {{- end }}<|im_start|>assistant
 """
 
-# System prompt: Flexible for both FT-only and RAG+FT use
-# When contexts are provided (RAG+FT), the evaluation system will include them in the prompt
-SYSTEM "You are a scientific research assistant. Answer questions based on your knowledge. Provide accurate, evidence-based responses. If context is provided, use it to inform your answer."
+# System prompt: Matches training system message for consistency
+# Training uses: "You are a research paper assistant."
+# This ensures evaluation matches training conditions exactly
+# When contexts are provided (RAG+FT), the evaluation prompt will include them in the user content
+SYSTEM "You are a research paper assistant."

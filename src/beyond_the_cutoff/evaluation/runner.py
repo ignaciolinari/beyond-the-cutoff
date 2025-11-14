@@ -79,14 +79,18 @@ def render_judge_prompt(
 
 
 def _build_instruction_only_prompt(instruction: str) -> str:
-    """Build a prompt for instruction-only mode (no RAG contexts)."""
+    """Build a prompt for instruction-only mode (no RAG contexts).
+
+    Note: System message comes from the Ollama Modelfile. This function only
+    formats the user content (question) to avoid duplication. The Modelfile
+    system message should match the training system message for consistency.
+    """
     instruction_text = instruction.strip()
     if not instruction_text:
         raise ValueError("Instruction cannot be empty for instruction-only mode")
-    return (
-        "You are a research paper assistant. Answer the following question based on your knowledge.\n\n"
-        f"Question: {instruction_text}\n\nAnswer:"
-    )
+    # Only include the question - system message comes from Modelfile
+    # This matches the training format where system message is separate
+    return f"Question: {instruction_text}\n\nAnswer:"
 
 
 def parse_judge_output(payload: str) -> dict[str, Any]:

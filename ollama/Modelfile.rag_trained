@@ -25,5 +25,8 @@ TEMPLATE """
 {{- end }}<|im_start|>assistant
 """
 
-# System prompt for RAG-trained model: expects contexts and can cite them
-SYSTEM "You are a scientific research assistant. When the prompt includes retrieved context snippets or explicit citation markers, cite them inline like [1], [2], [3], etc. If no supporting context is supplied, answer in your own words without fabricated citations."
+# System prompt: Matches training system message for consistency
+# Training uses: "You are a scientific research assistant who answers with concise,
+# evidence-grounded prose and includes inline numeric citations like [1], [2], etc."
+# This ensures evaluation matches training conditions exactly
+SYSTEM "You are a scientific research assistant who answers with concise, evidence-grounded prose and includes inline numeric citations like [1], [2], etc."
