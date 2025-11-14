@@ -21,7 +21,7 @@ _Last updated: 2025-11-04_
 | `make score` (FAISS stub) | Every PR touching evaluation | ~3 min | CLI wiring, JSONL outputs, metric aggregation sanity.
 | `pytest tests/test_rag_pipeline.py::TestOfflineRAGEndToEnd` | Nightly | ~12 min | Offline dataset + retrieval + generation pipeline regression.
 | `scripts/evaluate_models.py --dataset subset20` | Nightly | ~20 min | Judge scoring integration, artifact structure, cost logging.
-| `scripts/run_lora_finetune.py --smoke --epochs 1` | Weekly | ~25 min (GPU) | Adapter training entry point & checkpoint sync.
+| ~~`scripts/run_lora_finetune.py --smoke --epochs 1`~~ | ~~Weekly~~ | ~~~25 min (GPU)~~ | ~~Adapter training entry point & checkpoint sync.~~ **Deprecated**: Moved to `vintage/scripts/`. Fine-tuning now handled via Colab notebooks (`notebooks/finetuning/`).
 | `make score BTC_USE_FAISS_STUB=0` | Weekly (lab machine) | ~6 min | Real FAISS path to catch native index regressions.
 
 ## Tooling & Automation

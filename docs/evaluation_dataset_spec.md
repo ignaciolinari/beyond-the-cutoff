@@ -105,7 +105,7 @@ Version identifiers follow `vN` (semantic-like once we add major changes). Updat
 
 ## Generation Process
 1. Ensure the latest offline dataset is present (`scripts/generate_offline_dataset.py`).
-2. Run the new builder: `python scripts/build_evaluation_dataset.py --config configs/default.yaml`.
+2. ~~Run the new builder: `python scripts/build_evaluation_dataset.py --config configs/default.yaml`.~~ **Deprecated**: `build_evaluation_dataset.py` has been moved to `vintage/scripts/`. The evaluation pipeline uses `offline_dataset.jsonl` directly, which contains all task types. Filter by `task_type` field if needed.
    - Optional flags:
      - `--offline-dataset` to point at alternate raw data.
      - `--qa-output` / `--summary-output` for custom destinations.
