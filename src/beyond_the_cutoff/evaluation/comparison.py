@@ -291,6 +291,22 @@ def execute_comparison_plan(
 
 
 def build_comparison_report(results: Sequence[ComparisonRunResult]) -> ComparisonReport:
+    """Build comparison report with enhanced metrics separation by prompt mode."""
+    # Add aggregated metrics separated by prompt mode
+    rag_summaries: list[dict[str, Any]] = []
+    instruction_summaries: list[dict[str, Any]] = []
+
+    for result in results:
+        if result.skipped or not result.summary:
+            continue
+        prompt_mode = result.summary.get("prompt_mode", "rag")
+        if prompt_mode == "instruction":
+            instruction_summaries.append(result.summary)
+        else:
+            rag_summaries.append(result.summary)
+
+    # Note: The report structure remains the same, but we could add aggregated stats here
+    # For now, the separation is visible in individual run summaries via prompt_mode field
     return ComparisonReport(runs=list(results))
 
 

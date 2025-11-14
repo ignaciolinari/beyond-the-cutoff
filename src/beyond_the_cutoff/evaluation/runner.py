@@ -122,9 +122,11 @@ def summarise_scores(score_rows: list[dict[str, Any]]) -> dict[str, Any]:
             if isinstance(value, int | float):
                 metrics[key].append(float(value))
         citation_metrics = row.get("citation_metrics", {})
-        coverage = citation_metrics.get("mean_coverage")
-        if isinstance(coverage, int | float):
-            coverage_values.append(float(coverage))
+        # Exclude citation metrics from instruction-only mode (not applicable)
+        if citation_metrics.get("mode") != "instruction_only":
+            coverage = citation_metrics.get("mean_coverage")
+            if isinstance(coverage, int | float):
+                coverage_values.append(float(coverage))
     summary = {key: mean(values) if values else 0.0 for key, values in metrics.items()}
     summary["citation_mean_coverage"] = mean(coverage_values) if coverage_values else 0.0
     return summary
@@ -183,14 +185,38 @@ def run_evaluation(
 
     judge_prompt = load_judge_prompt(judge_prompt_path.resolve())
 
+    # Warn if judge config might not match prompt mode
+    judge_name_lower = judge_prompt.name.lower()
+    is_instruction_judge = "instruction" in judge_name_lower and "rag" not in judge_name_lower
+    is_rag_judge = "rag" in judge_name_lower and "instruction" not in judge_name_lower
+    if prompt_mode == "instruction" and is_rag_judge:
+        print(
+            f"[warn] prompt_mode='instruction' but judge config '{judge_prompt.name}' appears to be for RAG evaluation. "
+            "Consider using an instruction-only judge config.",
+            file=sys.stderr,
+        )
+    elif prompt_mode == "rag" and is_instruction_judge:
+        print(
+            f"[warn] prompt_mode='rag' but judge config '{judge_prompt.name}' appears to be for instruction-only evaluation. "
+            "Consider using a RAG judge config.",
+            file=sys.stderr,
+        )
+
     model_client: LLMClient = build_generation_client(model_cfg)
     judge_client: LLMClient = build_generation_client(judge_inference_cfg)
 
     if prompt_mode not in ("rag", "instruction"):
         raise ValueError(f"prompt_mode must be 'rag' or 'instruction', got {prompt_mode!r}")
 
+    # Validate dataset structure before processing
+    _validate_dataset_structure(dataset_path, prompt_mode, limit=limit)
+
     score_rows: list[dict[str, Any]] = []
     evaluated_task_ids: set[str] = set()
+
+    # Count total examples for progress reporting
+    total_examples = _count_dataset_examples(dataset_path, limit=limit)
+    print(f"[info] Starting evaluation of {total_examples} example(s)", file=sys.stderr)
 
     for idx, example in enumerate(_iter_dataset(dataset_path, limit=limit), start=1):
         task_id = example.get("task_id")
@@ -213,23 +239,39 @@ def run_evaluation(
                 raise KeyError(f"Example {task_id} missing prompt field for RAG mode")
             prompt_text = str(prompt)
             contexts_raw = rag.get("contexts") or example.get("contexts") or []
+            # Warn if RAG mode but no contexts retrieved
+            if not contexts_raw:
+                print(
+                    f"[warn] RAG mode enabled but example {task_id} has no contexts. "
+                    "Citation metrics may not be meaningful.",
+                    file=sys.stderr,
+                )
 
         record_errors: dict[str, str] = {}
 
+        # Time generation
+        generation_start = time.time()
         model_response, generation_error = _call_with_retries(
             partial(model_client.generate, prompt_text),
             stage=f"generation (task {task_id or idx})",
             max_retries=max(max_retries, 0),
             retry_delay=retry_delay,
         )
+        generation_time = time.time() - generation_start
         assistant_answer = ""
         if model_response is not None:
             assistant_answer = str(model_response.get("response", "")).strip()
         if generation_error:
             record_errors["generation"] = generation_error
 
+        # Track empty responses
+        has_empty_response = not assistant_answer.strip()
+        if has_empty_response and not generation_error:
+            record_errors.setdefault("generation", "Empty response received")
+
         contexts_numbered = normalize_contexts(contexts_raw)
-        has_contexts = len(contexts_raw) > 0
+        # has_contexts should be False for instruction mode, True for RAG mode only if contexts exist
+        has_contexts = prompt_mode == "rag" and len(contexts_raw) > 0
 
         # For instruction-only mode, citation metrics are not meaningful
         # We still compute them but mark them as N/A
@@ -251,16 +293,20 @@ def run_evaluation(
         )
         judge_response = None
         judge_payload: dict[str, Any] = {}
+        judge_time = 0.0
 
         if generation_error:
             record_errors.setdefault("judge", "Skipped due to generation failure")
         else:
+            # Time judging
+            judge_start = time.time()
             judge_response, judge_error = _call_with_retries(
                 partial(judge_client.generate, judge_prompt_text),
                 stage=f"judging (task {task_id or idx})",
                 max_retries=max(max_retries, 0),
                 retry_delay=retry_delay,
             )
+            judge_time = time.time() - judge_start
             if judge_error:
                 record_errors["judge"] = judge_error
             if judge_response is not None:
@@ -277,11 +323,29 @@ def run_evaluation(
                 "judge_verdict": judge_payload.get("verdict"),
                 "citation_metrics": citation_metrics,
                 "model_label": model_label,
+                "timing": {
+                    "generation_seconds": generation_time,
+                    "judge_seconds": judge_time,
+                    "total_seconds": generation_time + judge_time,
+                },
                 **({"errors": record_errors} if record_errors else {}),
             }
         )
 
+        # Progress reporting every 10 examples or at milestones
+        if idx % 10 == 0 or idx == total_examples:
+            error_count = sum(1 for row in score_rows if row.get("errors"))
+            print(
+                f"[info] Progress: {idx}/{total_examples} examples evaluated "
+                f"({error_count} with errors)",
+                file=sys.stderr,
+            )
+
     summary = summarise_scores(score_rows)
+
+    # Compute timing statistics
+    timing_stats = _compute_timing_stats(score_rows)
+
     summary.update(
         {
             "model_label": model_label,
@@ -290,10 +354,31 @@ def run_evaluation(
             "judge_name": judge_prompt.name,
             "judge_model": judge_inference_cfg.model,
             "examples_with_errors": sum(1 for row in score_rows if row.get("errors")),
+            "examples_with_empty_responses": sum(
+                1
+                for row in score_rows
+                if not str(row.get("model_answer", "")).strip()
+                and (not row.get("errors") or "generation" not in row.get("errors", {}))
+            ),
+            "error_rate": (
+                sum(1 for row in score_rows if row.get("errors")) / len(score_rows)
+                if score_rows
+                else 0.0
+            ),
             "prompt_mode": prompt_mode,
             "evaluated_task_ids": sorted(evaluated_task_ids),
+            "timing": timing_stats,
         }
     )
+
+    # Warn if error rate is high
+    error_rate = summary.get("error_rate", 0.0)
+    if error_rate > 0.1:  # More than 10% errors
+        print(
+            f"[warn] High error rate detected: {error_rate:.1%} of examples had errors. "
+            "Consider reviewing error logs.",
+            file=sys.stderr,
+        )
 
     metrics_path: Path | None = None
     if output_path:
@@ -342,6 +427,97 @@ def run_evaluation(
         details_path=details_path_resolved,
         metadata_path=metadata_path,
     )
+
+
+def _validate_dataset_structure(
+    dataset_path: Path, prompt_mode: str, *, limit: int | None = None
+) -> None:
+    """Validate that dataset has required fields for the given prompt_mode."""
+    issues: list[str] = []
+    sample_count = 0
+
+    for idx, example in enumerate(_iter_dataset(dataset_path, limit=limit), start=1):
+        sample_count += 1
+        task_id = example.get("task_id", f"line_{idx}")
+
+        if prompt_mode == "instruction":
+            if not example.get("instruction"):
+                issues.append(
+                    f"Example {task_id} missing 'instruction' field (required for instruction mode)"
+                )
+        else:  # prompt_mode == "rag"
+            rag = example.get("rag", {})
+            if not rag.get("prompt") and not example.get("rag_prompt"):
+                issues.append(
+                    f"Example {task_id} missing 'rag.prompt' or 'rag_prompt' field (required for RAG mode)"
+                )
+
+    if issues:
+        error_msg = f"Dataset validation failed for {prompt_mode} mode:\n" + "\n".join(issues[:10])
+        if len(issues) > 10:
+            error_msg += f"\n... and {len(issues) - 10} more issues"
+        raise ValueError(error_msg)
+
+    if sample_count == 0:
+        raise ValueError(f"Dataset {dataset_path} appears to be empty")
+
+
+def _compute_timing_stats(score_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Compute timing statistics from score rows."""
+    generation_times: list[float] = []
+    judge_times: list[float] = []
+    total_times: list[float] = []
+
+    for row in score_rows:
+        timing = row.get("timing", {})
+        if isinstance(timing, dict):
+            gen_time = timing.get("generation_seconds")
+            judge_time = timing.get("judge_seconds")
+            total_time = timing.get("total_seconds")
+
+            if isinstance(gen_time, int | float):
+                generation_times.append(float(gen_time))
+            if isinstance(judge_time, int | float):
+                judge_times.append(float(judge_time))
+            if isinstance(total_time, int | float):
+                total_times.append(float(total_time))
+
+    stats: dict[str, Any] = {}
+    if generation_times:
+        stats["generation"] = {
+            "mean_seconds": mean(generation_times),
+            "min_seconds": min(generation_times),
+            "max_seconds": max(generation_times),
+            "total_seconds": sum(generation_times),
+        }
+    if judge_times:
+        stats["judge"] = {
+            "mean_seconds": mean(judge_times),
+            "min_seconds": min(judge_times),
+            "max_seconds": max(judge_times),
+            "total_seconds": sum(judge_times),
+        }
+    if total_times:
+        stats["total"] = {
+            "mean_seconds": mean(total_times),
+            "min_seconds": min(total_times),
+            "max_seconds": max(total_times),
+            "total_seconds": sum(total_times),
+        }
+
+    return stats
+
+
+def _count_dataset_examples(dataset_path: Path, *, limit: int | None = None) -> int:
+    """Count total examples in dataset (for progress reporting)."""
+    count = 0
+    with dataset_path.open("r", encoding="utf-8") as handle:
+        for idx, line in enumerate(handle):
+            if limit is not None and idx >= limit:
+                break
+            if line.strip():
+                count += 1
+    return count
 
 
 def _iter_dataset(path: Path, limit: int | None = None) -> Iterable[dict[str, Any]]:

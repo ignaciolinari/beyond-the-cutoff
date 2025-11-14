@@ -76,15 +76,23 @@ def append_experiment_record(
         },
         "project_config": {
             "path": str(config_path),
+            "sha256": compute_file_sha256(config_path) if config_path.exists() else None,
             "snapshot": _serialise_project_config(project_config),
         },
         "inference": {
             "config_path": str(model_config_path) if model_config_path else None,
+            "config_sha256": compute_file_sha256(model_config_path)
+            if model_config_path and model_config_path.exists()
+            else None,
             "parameters": _serialise_inference_config(model_config),
         },
         "judge": {
             "prompt_path": str(judge_prompt_path),
+            "prompt_sha256": compute_file_sha256(judge_prompt_path),
             "inference_path": str(judge_inference_path) if judge_inference_path else None,
+            "inference_sha256": compute_file_sha256(judge_inference_path)
+            if judge_inference_path and judge_inference_path.exists()
+            else None,
             "parameters": _serialise_inference_config(judge_config),
         },
     }
