@@ -49,8 +49,8 @@ except ImportError:
     sys.exit(1)
 
 try:
-    import plotly.graph_objects as go  # type: ignore[import-not-found] # noqa: F401
-    from plotly.subplots import make_subplots  # type: ignore[import-not-found] # noqa: F401
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
 
     PLOTLY_AVAILABLE = True
 except ImportError:
