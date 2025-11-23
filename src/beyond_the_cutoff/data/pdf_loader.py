@@ -12,6 +12,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+from .extraction_quality import ExtractionQualityAnalyzer
+
 
 @dataclass
 class PDFIngestor:
@@ -62,8 +64,20 @@ class PDFIngestor:
             out_path = (self.target_dir / rel).with_suffix(".txt")
             out_path.parent.mkdir(parents=True, exist_ok=True)
             pages = extract_pages_from_pdf(pdf_path)
+
+            # Compute quality metrics
+            quality_metrics = ExtractionQualityAnalyzer.analyze_pages(pages)
+
             text = "\n\n".join(p for p in pages if p)
             out_path.write_text(text, encoding="utf-8")
+
+            # Write quality metrics sidecar
+            quality_path = out_path.with_suffix(".quality.json")
+            quality_path.write_text(
+                json.dumps(quality_metrics.to_dict(), indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
             if self.write_sidecars:
                 # Write sidecar JSONL with per-page texts for downstream page-aware indexing
                 pages_path = out_path.with_suffix(".pages.jsonl")

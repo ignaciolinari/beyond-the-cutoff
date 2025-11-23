@@ -3,6 +3,8 @@
 
 This document provides a step-by-step guide with all commands needed to run the complete pipeline from initial setup through final evaluation and visualization.
 
+Note: The offline dataset generation system has been refactored into a modular architecture with separate components for improved maintainability. All existing commands and interfaces remain backward compatible.
+
 ## Table of Contents
 
 1. [Initial Setup](#1-initial-setup)
@@ -122,6 +124,11 @@ cat data/raw/arxiv_2025/manifest.json | jq '.document_count'
 python scripts/ingest_and_index.py \
   --config configs/default.yaml
 
+# Note: PDF conversion now includes automatic extraction quality analysis.
+# Each converted text file will have an accompanying .quality.json file
+# with metrics like extraction success rate, content volume, structural
+# integrity, and a confidence score (0.0-1.0).
+
 # Optional: Specify custom source directory
 python scripts/ingest_and_index.py \
   --config configs/default.yaml \
@@ -165,6 +172,8 @@ python scripts/build_metadata_catalog.py \
 ---
 
 ## 4. Offline Dataset Generation
+
+The offline dataset generation system uses a modular architecture with separate components for parsing, validation, citation enforcement, and document metadata management. All existing commands remain backward compatible.
 
 ### 4.1 Generate Offline Tasks and Dataset
 

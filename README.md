@@ -31,8 +31,8 @@ The benchmark focuses on recent (2025) peer-reviewed papers that are certainly o
 
 - Curate a 2025 corpus with at least 100 arXiv papers post-training-cutoff (see `docs/data_sourcing_plan.md` for category mix and scheduling).
 - Extract metadata (title, abstract, authors, categories) automatically via the arXiv export API.
-- Convert downloaded PDFs to clean text and JSONL format for fine-tuning and retrieval pipelines.
-- Track manifest entries so downstream experiments can version the dataset alongside model checkpoints. A consolidated `manifest.json` plus metadata catalog exports (`metadata_catalog.csv` / `.parquet` and `corpus.jsonl`) are produced during ingestion so every run captures the exact document set.
+- Convert downloaded PDFs to clean text and JSONL format for fine-tuning and retrieval pipelines. PDF extraction includes automatic quality analysis with 17 metrics covering parse success rate, content volume, structural integrity, text composition, and overall confidence scores.
+- Track manifest entries so downstream experiments can version the dataset alongside model checkpoints. A consolidated `manifest.json` plus metadata catalog exports (`metadata_catalog.csv` / `.parquet` and `corpus.jsonl`) are produced during ingestion so every run captures the exact document set. Extraction quality metrics are saved as `.quality.json` sidecars alongside each converted text file.
 
 #### arXiv Harvest Quickstart
 
@@ -105,7 +105,7 @@ The default configuration connects to the Ollama daemon at `http://localhost:114
 ## Pipeline Workflow
 
 - **Ingestion/indexing**: run `python scripts/ingest_and_index.py --config configs/default.yaml` to turn the downloaded PDFs into text chunks and rebuild the FAISS index under `data/external/index`. Each run refreshes `data/processed/manifest.json` and writes metadata catalog exports under `data/processed/metadata_catalog*` for downstream analysis/versioning.
-- **Offline tasks**: once the index exists, call `python scripts/generate_offline_dataset.py --config configs/default.yaml` so the `qwen2.5:7b-instruct-q4_K_M` generator can produce QA/summaries/citation tasks backed by those chunks.
+- **Offline tasks**: once the index exists, call `python scripts/generate_offline_dataset.py --config configs/default.yaml` so the `qwen2.5:7b-instruct-q4_K_M` generator can produce QA/summaries/citation tasks backed by those chunks. The offline dataset generation system uses a modular architecture with separate components for parsing, validation, citation enforcement, and document metadata management.
 - **Fine-tuning**: take the resulting JSONL into Colab/Kaggle notebooks (`notebooks/finetuning/`). For the 6-condition experiment, train TWO models: (1) `lora_science_v1_instruction_only.ipynb` trains WITHOUT RAG contexts, (2) `lora_science_v1.ipynb` trains WITH RAG contexts. Export adapter/full weights and keep the safetensors checkpoints.
 - **Deployment**: convert tuned checkpoints to GGUF (e.g., `llama.cpp convert` + `quantize`) and, if desired, register custom Ollama aliases; the default pipeline now calls the stock Qwen2.5 tags directly.
 - **Evaluation**: reuse `python scripts/ingest_and_index.py` results plus the evaluation datasets with the 7B judge (`qwen2.5:7b-instruct-q4_K_M`) or a cloud grader by flipping the provider/model in the config.
