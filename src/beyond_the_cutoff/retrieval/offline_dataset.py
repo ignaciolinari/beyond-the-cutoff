@@ -224,7 +224,8 @@ class OfflineDatasetGenerator:
         keys.add(str(absolute_path))
         try:
             resolved = absolute_path.resolve()
-        except Exception:  # pragma: no cover - resolution failure unusual
+        except (OSError, RuntimeError) as exc:  # pragma: no cover - resolution failure unusual
+            logger.debug("Failed to resolve path %s: %s", absolute_path, exc)
             resolved = absolute_path
         keys.add(str(resolved))
 
@@ -318,7 +319,8 @@ class OfflineDatasetGenerator:
         keys.add(str(absolute_path))
         try:
             resolved = absolute_path.resolve()
-        except Exception:  # pragma: no cover - resolution failure unusual
+        except (OSError, RuntimeError) as exc:  # pragma: no cover - resolution failure unusual
+            logger.debug("Failed to resolve path %s: %s", absolute_path, exc)
             resolved = absolute_path
         keys.add(str(resolved))
 
@@ -352,7 +354,8 @@ class OfflineDatasetGenerator:
                     pass
             except ValueError:
                 pass
-        except Exception:
+        except (OSError, RuntimeError) as exc:
+            logger.debug("Failed to resolve path during metadata lookup: %s", exc)
             resolved = None
 
         for key in list(candidates):
@@ -550,7 +553,8 @@ class OfflineDatasetGenerator:
                     pass
             except ValueError:
                 pass
-        except Exception:
+        except (OSError, RuntimeError) as exc:
+            logger.debug("Failed to resolve path during stats lookup: %s", exc)
             resolved = None
 
         for key in list(candidates):

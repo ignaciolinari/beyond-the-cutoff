@@ -19,6 +19,7 @@ import yaml
 from beyond_the_cutoff.config import InferenceConfig, ProjectConfig
 from beyond_the_cutoff.evaluation.metrics import evaluate_citations, normalize_contexts
 from beyond_the_cutoff.models import LLMClient, build_generation_client
+from beyond_the_cutoff.types import ModelType
 from beyond_the_cutoff.utils.experiment_logging import append_experiment_record
 from beyond_the_cutoff.utils.validation import (
     print_validation_result,
@@ -90,7 +91,7 @@ def _detect_model_type(
     model_cfg: InferenceConfig | None = None,
     *,
     warn_on_inference: bool = True,
-) -> str:
+) -> ModelType:
     """Detect model type from config path or model name.
 
     Args:
@@ -100,13 +101,13 @@ def _detect_model_type(
         warn_on_inference: If True, warn when model_type is inferred rather than explicit
 
     Returns:
-        'instruction_only', 'rag_trained', or 'base'
+        ModelType enum: INSTRUCTION_ONLY, RAG_TRAINED, or BASE
 
     Detection priority:
     1. Explicit model_type in InferenceConfig (most reliable)
     2. Config file name
     3. Model name/Ollama tag
-    4. Default to 'base'
+    4. Default to BASE
     """
     # First, check explicit model_type in config (most reliable)
     if model_cfg and model_cfg.model_type:
@@ -129,21 +130,21 @@ def _detect_model_type(
         config_name = model_config_path.name.lower()
         # Check for RAG-trained indicators (must come before instruction_only check)
         if "rag_trained" in config_name or "rag-trained" in config_name:
-            return "rag_trained"
+            return ModelType.RAG_TRAINED
         # Check for instruction-only indicators
         if "instruction_only" in config_name or "instruction-only" in config_name:
-            return "instruction_only"
+            return ModelType.INSTRUCTION_ONLY
         # Check for hybrid configs (these use RAG-trained models)
         if "hybrid" in config_name and "instruction" not in config_name:
             # Hybrid configs typically use RAG-trained models unless explicitly instruction-only
-            return "rag_trained"
+            return ModelType.RAG_TRAINED
 
     # Second, check model name/Ollama tag
     model_lower = model_name.lower()
 
     # Check for explicit instruction-only indicators in model name
     if "instruction_only" in model_lower or "instruction-only" in model_lower:
-        return "instruction_only"
+        return ModelType.INSTRUCTION_ONLY
 
     # Check for RAG-trained indicators (but exclude instruction-only variants)
     # Common patterns: "lora_science_0p5" (without instruction_only suffix) = RAG-trained
@@ -151,10 +152,10 @@ def _detect_model_type(
     if "lora_science" in model_lower:
         # If it contains "lora_science" but NOT "instruction_only", it's likely RAG-trained
         if "instruction" not in model_lower:
-            return "rag_trained"
+            return ModelType.RAG_TRAINED
         # If it has both, check which comes first or is more specific
         if "instruction_only" in model_lower:
-            return "instruction_only"
+            return ModelType.INSTRUCTION_ONLY
 
     # Check for base model indicators
     if any(
@@ -163,17 +164,17 @@ def _detect_model_type(
     ):
         # Base models from Ollama (not fine-tuned)
         if "lora" not in model_lower and "science" not in model_lower:
-            return "base"
+            return ModelType.BASE
 
     # Default to base model if we can't determine
     # This is conservative - better to treat as base than misclassify
-    return "base"
+    return ModelType.BASE
 
 
 def _build_instruction_only_prompt(
     instruction: str,
     *,
-    model_type: str | None = None,
+    model_type: ModelType | None = None,
     model_config_path: Path | None = None,
     model_name: str = "",
     model_cfg: InferenceConfig | None = None,
@@ -182,7 +183,7 @@ def _build_instruction_only_prompt(
 
     Args:
         instruction: The instruction/question text
-        model_type: Model type ('instruction_only', 'rag_trained', or 'base').
+        model_type: Model type (INSTRUCTION_ONLY, RAG_TRAINED, or BASE).
                     If None, will be inferred from model_config_path and model_name.
         model_config_path: Optional path to model config file for type detection
         model_name: Optional model name for type detection
@@ -212,7 +213,7 @@ def _build_instruction_only_prompt(
     # Match training format exactly for instruction-only models
     # For RAG-trained models evaluated without contexts (Condition 5), use a format that
     # acknowledges the mismatch: model was trained WITH contexts, evaluated WITHOUT.
-    if model_type == "rag_trained":
+    if model_type == ModelType.RAG_TRAINED:
         # RAG-trained model has system message about citations, so we need to explicitly
         # tell it not to cite sources since no contexts are provided. The model was trained
         # with RAG prompts, but when evaluated without contexts (Condition 5), we use a format
@@ -225,7 +226,7 @@ def _build_instruction_only_prompt(
             "Provide a clear and concise response.\n\n"
             f"Question: {instruction_text}\n\nAnswer:"
         )
-    elif model_type == "instruction_only":
+    elif model_type == ModelType.INSTRUCTION_ONLY:
         # Instruction-only trained model: Modelfile provides system message, user content is just question/answer
         return f"Question: {instruction_text}\n\nAnswer:"
     else:

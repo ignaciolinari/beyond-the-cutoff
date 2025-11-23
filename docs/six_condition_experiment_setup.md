@@ -136,9 +136,9 @@ Based on training/evaluation alignment:
 ### Configuration Files
 
 All configs are in `configs/`:
-- `rag_baseline_ollama.yaml` ✅ (exists)
-- `lora_science_v1_instruction_only_ollama.yaml` ✅ (exists)
-- `lora_science_v1_rag_trained_ollama.yaml` ✅ (created)
+- `rag_baseline_ollama.yaml`
+- `lora_science_v1_instruction_only_ollama.yaml`
+- `lora_science_v1_rag_trained_ollama.yaml`
 - `hybrid_science_v1_ollama.yaml` (legacy, moved to `vintage/configs/` - not used in current experiment)
 
 ### Comparison Plan

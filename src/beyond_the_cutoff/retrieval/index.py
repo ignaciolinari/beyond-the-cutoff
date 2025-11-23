@@ -25,7 +25,12 @@ else:  # pragma: no cover - optional dependency
         faiss = import_module("faiss")
     except ModuleNotFoundError:  # pragma: no cover - optional dependency
         faiss = faiss_stub
-    except Exception:
+    except (ImportError, AttributeError) as exc:
+        # Handle other import-related failures gracefully
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.debug("Failed to import faiss, using stub: %s", exc)
         faiss = faiss_stub
 import numpy as np
 import numpy.typing as npt

@@ -12,6 +12,8 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
     OmegaConf = None
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from .types import ModelType
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "configs" / "default.yaml"
 
@@ -150,14 +152,14 @@ class InferenceConfig(BaseModel):
     model: str = Field(default="qwen2.5:0.5b-instruct")
     # Explicit model type: "base", "instruction_only", or "rag_trained"
     # If not specified, will be inferred from config file name or model name
-    model_type: str | None = Field(
+    model_type: ModelType | None = Field(
         default=None,
         description="Explicit model type: 'base', 'instruction_only', or 'rag_trained'. "
         "If None, will be inferred from config filename or model name.",
     )
     host: str = Field(default="http://localhost")
     port: int | None = Field(default=11434)
-    timeout: float = Field(default=480.0, gt=0.0)
+    timeout: float = Field(default=120.0, gt=0.0)  # Reduced from 480s for better responsiveness
     device: str = Field(default="auto")
     torch_dtype: str | None = Field(default="auto")
     max_new_tokens: int = Field(default=512, ge=1)
@@ -168,15 +170,18 @@ class InferenceConfig(BaseModel):
 
     @field_validator("model_type", mode="before")
     @classmethod
-    def _validate_model_type(cls, value: Any) -> str | None:
+    def _validate_model_type(cls, value: Any) -> ModelType | None:
         if value is None:
             return None
+        if isinstance(value, ModelType):
+            return value
         value_str = str(value).strip().lower()
-        if value_str in ("base", "instruction_only", "rag_trained"):
-            return value_str
-        raise ValueError(
-            f"model_type must be 'base', 'instruction_only', or 'rag_trained', got {value!r}"
-        )
+        try:
+            return ModelType(value_str)
+        except ValueError:
+            raise ValueError(
+                f"model_type must be 'base', 'instruction_only', or 'rag_trained', got {value!r}"
+            ) from None
 
     def base_url(self) -> str:
         """Return the full base URL for the inference endpoint."""

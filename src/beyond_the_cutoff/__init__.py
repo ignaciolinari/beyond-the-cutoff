@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 from .config import ProjectConfig, load_config
 from .models import LLMClient, OllamaClient, TransformersClient, build_generation_client
+from .types import ModelType, PromptMode
 
 if TYPE_CHECKING:  # pragma: no cover - typing helpers only
     from .retrieval.index import DocumentIndexer as _DocumentIndexer
@@ -24,6 +25,8 @@ __all__ = [
     "build_generation_client",
     "RAGPipeline",
     "DocumentIndexer",
+    "ModelType",
+    "PromptMode",
     "__version__",
 ]
 

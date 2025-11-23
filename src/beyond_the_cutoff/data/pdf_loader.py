@@ -92,12 +92,21 @@ def extract_pages_from_pdf(path: Path) -> list[str]:
                 if not isinstance(text, str):
                     text = ""
                 pages.append(text.strip())
-            except Exception:
+            except (RuntimeError, ValueError) as exc:
+                # PyMuPDF can fail on corrupt pages
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.debug("Failed to extract text from page in %s: %s", path, exc)
                 pages.append("")
         doc.close()
         return pages
-    except Exception:
-        pass
+    except (ImportError, ModuleNotFoundError, OSError, RuntimeError) as exc:
+        # Fallback to pypdf if PyMuPDF not available or file can't be opened
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.debug("PyMuPDF extraction failed for %s: %s, falling back to pypdf", path, exc)
 
     # Fallback to pypdf
     from pypdf import PdfReader
@@ -107,7 +116,15 @@ def extract_pages_from_pdf(path: Path) -> list[str]:
     for page in reader.pages:
         try:
             content = page.extract_text() or ""
-        except Exception:  # pragma: no cover - pypdf can raise on corrupt pages
+        except (
+            RuntimeError,
+            ValueError,
+            AttributeError,
+        ) as exc:  # pragma: no cover - pypdf can raise on corrupt pages
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.debug("Failed to extract text from page: %s", exc)
             content = ""
         parts.append(content.strip())
     return parts
