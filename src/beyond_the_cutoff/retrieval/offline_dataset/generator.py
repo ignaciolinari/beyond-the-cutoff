@@ -23,6 +23,18 @@ from .validator import PayloadValidator
 logger = logging.getLogger(__name__)
 
 
+def _normalize_instruction(text: str) -> str:
+    """Normalize instruction text for deduplication comparison."""
+    # Lowercase, collapse whitespace, remove punctuation variations
+    import re
+
+    normalized = text.lower().strip()
+    normalized = re.sub(r"\s+", " ", normalized)
+    # Remove trailing punctuation for comparison
+    normalized = re.sub(r"[?.!]+$", "", normalized)
+    return normalized
+
+
 class OfflineDatasetGenerator:
     """Generate offline prompts and gold responses for downstream fine-tuning/eval."""
 
@@ -51,6 +63,9 @@ class OfflineDatasetGenerator:
         self.validator = PayloadValidator(self.parser)
         self.metadata_manager = DocumentMetadataManager(config)
         self.citation_enforcer = CitationEnforcer(self._generator, config, self._pipeline)
+
+        # Cross-document deduplication: tracks (task_type, normalized_instruction) tuples
+        self._global_instruction_hashes: set[tuple[str, str]] = set()
 
     @property
     def pipeline(self) -> RAGPipeline:
@@ -95,8 +110,17 @@ class OfflineDatasetGenerator:
 
         if resume:
             processed_documents = self._load_processed_documents(tasks_path)
+            # Load existing instructions for cross-document deduplication
+            self._global_instruction_hashes = self._load_existing_instructions(dataset_path)
+            logger.info(
+                "Resume mode: loaded %d existing instructions for deduplication",
+                len(self._global_instruction_hashes),
+            )
             dataset_mode = "a"
             tasks_mode = "a"
+        else:
+            # Reset global deduplication set for fresh runs
+            self._global_instruction_hashes = set()
 
         effective_parse_retries = (
             dataset_cfg.parse_retries if parse_retries is None else max(0, parse_retries)
@@ -463,7 +487,10 @@ class OfflineDatasetGenerator:
                 examples.append(example)
 
         examples, output_issues = self.validator.validate_output_examples(
-            examples, self._pipeline, dataset_cfg.min_citation_coverage
+            examples,
+            self._pipeline,
+            dataset_cfg.min_citation_coverage,
+            global_seen=self._global_instruction_hashes,
         )
         if output_issues:
             validation_notes.extend(output_issues)
@@ -593,6 +620,11 @@ class OfflineDatasetGenerator:
             metadata=metadata,
         )
 
+    @staticmethod
+    def _estimate_tokens(text: str) -> int:
+        """Rough token estimate: ~1.3 tokens per whitespace-delimited word for English."""
+        return int(len(text.split()) * 1.3)
+
     def _build_generator_prompt(
         self,
         *,
@@ -600,7 +632,7 @@ class OfflineDatasetGenerator:
         rows: Sequence[MappingRow],
         cfg: Any,
     ) -> str:
-        """Build prompt for generator LLM."""
+        """Build prompt for generator LLM with token limit enforcement."""
 
         def _range_phrase(noun: str, minimum: int, maximum: int) -> str:
             if maximum <= 0:
@@ -678,7 +710,26 @@ class OfflineDatasetGenerator:
             "}\n"
             "In your own output, ensure every [#] marker refers to an existing excerpt number from this document, and only add markers when the claim is explicitly supported. Never include citation markers inside questions or instructions."
         )
-        context_lines = []
+
+        # Build base prompt without context to measure overhead
+        base_prompt = (
+            f"{preamble}\n{instructions}\n{schema}\n\n"
+            f"{few_shot_examples}\n\n"
+            f"Document: {source_path}\n"
+            "Context Excerpts:\n"
+        )
+        suffix = "\n\nReturn the JSON now."
+        base_tokens = self._estimate_tokens(base_prompt + suffix)
+
+        # Calculate available tokens for context
+        max_input_tokens = getattr(cfg, "max_generator_input_tokens", 6000)
+        available_context_tokens = max(500, max_input_tokens - base_tokens)
+
+        # Build context lines with token budget enforcement
+        context_lines: list[str] = []
+        current_context_tokens = 0
+        truncated_count = 0
+
         for idx, row in enumerate(rows, start=1):
             meta_bits: list[str] = []
             if row.section_title:
@@ -688,16 +739,56 @@ class OfflineDatasetGenerator:
             entry_header = f"[{idx}]"
             if meta_bits:
                 entry_header = f"{entry_header} {' | '.join(meta_bits)}"
-            context_lines.append(f"{entry_header}\n{row.trimmed_text(cfg.max_chars_per_chunk)}")
+
+            # Get chunk text with configured char limit
+            chunk_text = row.trimmed_text(cfg.max_chars_per_chunk)
+            full_entry = f"{entry_header}\n{chunk_text}"
+            entry_tokens = self._estimate_tokens(full_entry)
+
+            # Check if adding this entry would exceed budget
+            if current_context_tokens + entry_tokens > available_context_tokens:
+                # Try to fit a truncated version if we have no context yet
+                if not context_lines:
+                    # Must include at least one chunk - truncate aggressively
+                    remaining_tokens = available_context_tokens - current_context_tokens
+                    # Rough char estimate: ~4 chars per token
+                    max_chars = max(200, int(remaining_tokens * 3))
+                    truncated_text = row.trimmed_text(max_chars)
+                    full_entry = f"{entry_header}\n{truncated_text}"
+                    context_lines.append(full_entry)
+                    truncated_count += 1
+                    logger.debug(
+                        "Truncated chunk %d to fit token budget (target: %d tokens)",
+                        idx,
+                        remaining_tokens,
+                    )
+                else:
+                    # We have some context; stop adding more
+                    truncated_count += len(rows) - idx
+                    logger.debug(
+                        "Stopping context at chunk %d/%d due to token budget "
+                        "(used: %d, available: %d)",
+                        idx,
+                        len(rows),
+                        current_context_tokens,
+                        available_context_tokens,
+                    )
+                    break
+            else:
+                context_lines.append(full_entry)
+                current_context_tokens += entry_tokens
+
+        if truncated_count > 0:
+            logger.info(
+                "Token budget enforced: included %d/%d chunks (%.0f%% of context)",
+                len(context_lines),
+                len(rows),
+                100 * len(context_lines) / len(rows) if rows else 0,
+            )
+
         context_block = "\n".join(context_lines)
 
-        return (
-            f"{preamble}\n{instructions}\n{schema}\n\n"
-            f"{few_shot_examples}\n\n"
-            f"Document: {source_path}\n"
-            f"Context Excerpts:\n{context_block}\n\n"
-            "Return the JSON now."
-        )
+        return f"{base_prompt}{context_block}{suffix}"
 
     def _select_rows(
         self,
@@ -789,6 +880,27 @@ class OfflineDatasetGenerator:
                         continue
                     processed.add(document)
         return processed
+
+    @staticmethod
+    def _load_existing_instructions(dataset_path: Path) -> set[tuple[str, str]]:
+        """Load existing instruction hashes from dataset file for deduplication."""
+        instruction_hashes: set[tuple[str, str]] = set()
+        if not dataset_path.exists():
+            return instruction_hashes
+        with dataset_path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                task_type = payload.get("task_type")
+                instruction = payload.get("instruction")
+                if isinstance(task_type, str) and isinstance(instruction, str):
+                    normalized = _normalize_instruction(instruction)
+                    instruction_hashes.add((task_type, normalized))
+        return instruction_hashes
 
     @staticmethod
     def _build_context_map(retrieved_records: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:

@@ -1,5 +1,10 @@
 """Evaluation modules for model comparison and ranking."""
 
+from beyond_the_cutoff.evaluation.dataset_judge import (
+    DatasetQualityJudge,
+    DatasetQualityResult,
+    ExampleVerdict,
+)
 from beyond_the_cutoff.evaluation.elo_ranking import (
     ELOCalculator,
     ELORating,
@@ -36,6 +41,10 @@ from beyond_the_cutoff.evaluation.pairwise_judge import (
 )
 
 __all__ = [
+    # Dataset quality judge
+    "DatasetQualityJudge",
+    "DatasetQualityResult",
+    "ExampleVerdict",
     # ELO ranking
     "PairwiseComparison",
     "ELORating",

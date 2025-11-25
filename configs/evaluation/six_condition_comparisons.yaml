@@ -1,0 +1,321 @@
+# Six-Condition Experiment: Scientifically Valid Comparisons
+# ===========================================================
+#
+# This file defines all comparisons that are scientifically valid for the
+# 6-condition experiment (2x2 matrix + 2 baselines).
+#
+# CRITICAL: Cross-group comparisons (instruction vs RAG evaluation) must only
+# use RAW dimension scores (factuality, completeness, communication), NOT
+# weighted totals, because the weighting schemes differ between judges.
+#
+# Conditions:
+#   1. base_baseline       - Base model, no RAG (instruction mode)
+#   2. rag_baseline        - Base model + RAG
+#   3. ft_only_instruction - Instruction-trained FT, no RAG
+#   4. ft_rag_instruction  - Instruction-trained FT + RAG
+#   5. ft_only_rag_trained - RAG-trained FT, no RAG
+#   6. ft_rag_trained      - RAG-trained FT + RAG
+
+# =============================================================================
+# Model Definitions (labels -> result directories)
+# =============================================================================
+models:
+  # Condition 1: Base Baseline (instruction mode, no RAG)
+  base_baseline:
+    result_dir: evaluation/results/base_baseline_0p5b
+    eval_mode: instruction
+    training_mode: none
+    description: "Base qwen2.5:0.5b without fine-tuning or RAG"
+
+  # Condition 2: RAG Baseline
+  rag_baseline:
+    result_dir: evaluation/results/rag_baseline_0p5b
+    eval_mode: rag
+    training_mode: none
+    description: "Base qwen2.5:0.5b with RAG contexts"
+
+  # Condition 3: FT Only (instruction-trained)
+  ft_only_instruction:
+    result_dir: evaluation/results/lora_science_0p5b_ft_only
+    eval_mode: instruction
+    training_mode: instruction
+    description: "Instruction-trained model without RAG"
+
+  # Condition 4: FT+RAG (instruction-trained)
+  ft_rag_instruction:
+    result_dir: evaluation/results/hybrid_science_0p5b_instruction_only
+    eval_mode: rag
+    training_mode: instruction
+    description: "Instruction-trained model with RAG (transfer learning test)"
+
+  # Condition 5: FT Only (RAG-trained)
+  ft_only_rag_trained:
+    result_dir: evaluation/results/lora_science_0p5b_rag_trained_ft_only
+    eval_mode: instruction
+    training_mode: rag
+    description: "RAG-trained model without RAG (degradation test)"
+
+  # Condition 6: FT+RAG (RAG-trained)
+  ft_rag_trained:
+    result_dir: evaluation/results/hybrid_science_0p5b_rag_trained
+    eval_mode: rag
+    training_mode: rag
+    description: "RAG-trained model with RAG (optimal matched condition)"
+
+# =============================================================================
+# Judge Configuration
+# =============================================================================
+judges:
+  pairwise:
+    - configs/judges/pairwise_qwen7b.yaml
+    - configs/judges/pairwise_qwen3_8b.yaml
+    - configs/judges/pairwise_llama31_8b.yaml
+
+  scoring:
+    instruction: configs/judges/scientific_default_instruction.yaml
+    rag: configs/judges/scientific_default_rag.yaml
+
+# =============================================================================
+# WITHIN-GROUP COMPARISONS (Fully Valid - Same Judge)
+# =============================================================================
+# These comparisons use the same evaluation mode and judge, so all metrics
+# including weighted totals are directly comparable.
+
+within_group_comparisons:
+  # -------------------------------------------------------------------------
+  # Instruction Group (Conditions 1, 3, 5) - No RAG at evaluation
+  # All use scientific_default_instruction.yaml judge
+  # -------------------------------------------------------------------------
+  instruction_group:
+    conditions: [base_baseline, ft_only_instruction, ft_only_rag_trained]
+    judge: instruction
+    comparable_metrics:
+      - factuality
+      - completeness
+      - communication
+      - weighted_total  # Valid within this group
+
+    comparisons:
+      # Q1: Does instruction-only fine-tuning help vs base model?
+      - name: "ft_instruction_vs_base"
+        model_a: base_baseline
+        model_b: ft_only_instruction
+        research_question: "Does instruction-only fine-tuning improve performance over base model (no RAG)?"
+        expected: "ft_only_instruction > base_baseline (FT should memorize some knowledge)"
+
+      # Q2: Does RAG-trained fine-tuning help vs base model (without RAG)?
+      - name: "ft_rag_trained_vs_base_no_rag"
+        model_a: base_baseline
+        model_b: ft_only_rag_trained
+        research_question: "Does RAG-trained model perform better than base when RAG is unavailable?"
+        expected: "ft_only_rag_trained > base_baseline (some knowledge retained)"
+
+      # Q3: Which training mode is better when RAG is unavailable?
+      - name: "instruction_vs_rag_training_no_rag"
+        model_a: ft_only_instruction
+        model_b: ft_only_rag_trained
+        research_question: "Does training mode matter when RAG is unavailable at inference?"
+        expected: "ft_only_instruction >= ft_only_rag_trained (instruction training may be better matched)"
+
+  # -------------------------------------------------------------------------
+  # RAG Group (Conditions 2, 4, 6) - RAG at evaluation
+  # All use scientific_default_rag.yaml judge
+  # -------------------------------------------------------------------------
+  rag_group:
+    conditions: [rag_baseline, ft_rag_instruction, ft_rag_trained]
+    judge: rag
+    comparable_metrics:
+      - factuality
+      - completeness
+      - communication
+      - grounding  # Only valid in RAG group
+      - weighted_total  # Valid within this group
+
+    comparisons:
+      # Q4: Does instruction-only fine-tuning help RAG performance?
+      - name: "ft_instruction_rag_vs_rag_baseline"
+        model_a: rag_baseline
+        model_b: ft_rag_instruction
+        research_question: "Does instruction-only fine-tuning improve RAG performance?"
+        expected: "Unclear - model wasn't trained with contexts"
+
+      # Q5: Does RAG-trained fine-tuning help RAG performance?
+      - name: "ft_rag_trained_vs_rag_baseline"
+        model_a: rag_baseline
+        model_b: ft_rag_trained
+        research_question: "Does RAG-trained fine-tuning improve RAG performance?"
+        expected: "ft_rag_trained > rag_baseline (training aligned with evaluation)"
+
+      # Q6: Which training mode is better for RAG inference?
+      - name: "instruction_vs_rag_training_with_rag"
+        model_a: ft_rag_instruction
+        model_b: ft_rag_trained
+        research_question: "Does training WITH contexts improve RAG performance vs training WITHOUT?"
+        expected: "ft_rag_trained > ft_rag_instruction (matched training helps)"
+
+# =============================================================================
+# CROSS-GROUP COMPARISONS (Restricted Validity)
+# =============================================================================
+# These comparisons cross evaluation modes (instruction vs RAG).
+# ONLY raw dimension scores are valid, NOT weighted totals.
+
+cross_group_comparisons:
+  comparable_metrics:
+    - factuality
+    - completeness
+    - communication
+
+  NOT_comparable:
+    - grounding  # Only exists for RAG conditions
+    - weighted_total  # Different weighting schemes make this invalid
+
+  comparisons:
+    # -------------------------------------------------------------------------
+    # Key Cross-Group Questions
+    # -------------------------------------------------------------------------
+
+    # Q7: RAG vs Fine-tuning (base models)
+    - name: "rag_vs_ft_baseline"
+      model_a: rag_baseline       # Condition 2, RAG mode
+      model_b: ft_only_instruction # Condition 3, instruction mode
+      research_question: "Which is more effective: RAG or fine-tuning alone?"
+      metrics_to_compare: [factuality, completeness, communication]
+      warning: "Do NOT compare weighted totals - different judge weights"
+      expected: "RAG likely wins on factuality (has source); FT may win on fluency"
+
+    # Q8: Does adding RAG to instruction-trained model help?
+    - name: "ft_instruction_with_vs_without_rag"
+      model_a: ft_only_instruction  # Condition 3, instruction mode
+      model_b: ft_rag_instruction   # Condition 4, RAG mode
+      research_question: "Can instruction-trained model benefit from RAG at inference? (Transfer learning)"
+      metrics_to_compare: [factuality, completeness, communication]
+      warning: "Do NOT compare weighted totals - different judge weights"
+      expected: "ft_rag_instruction >= ft_only_instruction on factuality (RAG provides source)"
+
+    # Q9: Does adding RAG to RAG-trained model help?
+    - name: "ft_rag_trained_with_vs_without_rag"
+      model_a: ft_only_rag_trained  # Condition 5, instruction mode
+      model_b: ft_rag_trained       # Condition 6, RAG mode
+      research_question: "How much does RAG help a model trained to use it?"
+      metrics_to_compare: [factuality, completeness, communication]
+      warning: "Do NOT compare weighted totals - different judge weights"
+      expected: "ft_rag_trained >> ft_only_rag_trained (model depends on contexts)"
+
+    # Q10: Best overall - RAG-trained+RAG vs instruction-trained alone
+    - name: "best_vs_simplest_ft"
+      model_a: ft_only_instruction  # Condition 3, instruction mode (simplest FT)
+      model_b: ft_rag_trained       # Condition 6, RAG mode (best expected)
+      research_question: "How much better is the optimal setup vs simplest fine-tuning?"
+      metrics_to_compare: [factuality, completeness, communication]
+      warning: "Do NOT compare weighted totals - different judge weights"
+      expected: "ft_rag_trained > ft_only_instruction"
+
+    # Q11: Does fine-tuning add value over just RAG?
+    - name: "ft_rag_trained_vs_rag_alone"
+      model_a: rag_baseline    # Condition 2, RAG mode
+      model_b: ft_rag_trained  # Condition 6, RAG mode (SAME mode - valid!)
+      research_question: "Does fine-tuning provide additional value when RAG is available?"
+      metrics_to_compare: [factuality, completeness, communication, grounding, weighted_total]
+      warning: null  # Same eval mode - all metrics valid!
+      expected: "ft_rag_trained > rag_baseline (FT improves context usage)"
+
+# =============================================================================
+# PAIRWISE (ELO) EVALUATION CONFIGURATION
+# =============================================================================
+# For ELO rankings, pairwise judges evaluate responses head-to-head.
+# The pairwise judge sees BOTH responses and picks a winner, so this
+# naturally controls for cross-group differences.
+
+pairwise_evaluation:
+  # All models participate in ELO tournament
+  participants:
+    - base_baseline
+    - rag_baseline
+    - ft_only_instruction
+    - ft_rag_instruction
+    - ft_only_rag_trained
+    - ft_rag_trained
+
+  # Tournament configuration
+  comparisons_per_pair: 50
+  seed: 42
+
+  # ELO parameters
+  k_factor: 32
+  initial_rating: 1500
+  bootstrap_samples: 1000
+
+  # Judge rotation (use multiple judges for robustness)
+  judges:
+    - configs/judges/pairwise_qwen7b.yaml
+    - configs/judges/pairwise_qwen3_8b.yaml
+    - configs/judges/pairwise_llama31_8b.yaml
+
+  # Output
+  output_dir: evaluation/results/elo_rankings
+
+  # Expected ranking (hypothesis to test)
+  expected_ranking:
+    1: ft_rag_trained         # Best: matched training + RAG
+    2: ft_rag_instruction     # Good: transfer learning works somewhat
+    3: rag_baseline           # RAG helps base model significantly
+    4: ft_only_instruction    # FT alone provides some benefit
+    5: ft_only_rag_trained    # RAG-trained without RAG may struggle
+    6: base_baseline          # Worst: no FT, no RAG
+
+# =============================================================================
+# RAW METRICS EXTRACTION CONFIGURATION
+# =============================================================================
+# For automated reporting, extract these metrics from result files
+
+metrics_extraction:
+  # Per-condition metrics file
+  metrics_file: metrics.json
+
+  # Fields to extract for analysis
+  instruction_mode_fields:
+    - factuality
+    - completeness
+    - communication
+    - overall  # Note: only compare within instruction group
+
+  rag_mode_fields:
+    - factuality
+    - completeness
+    - communication
+    - grounding
+    - overall  # Note: only compare within RAG group
+
+  # Cross-group comparison fields (the only valid ones)
+  cross_group_fields:
+    - factuality
+    - completeness
+    - communication
+
+# =============================================================================
+# ANALYSIS OUTPUT FORMAT
+# =============================================================================
+analysis_output:
+  # Tables to generate
+  tables:
+    - name: "within_instruction_group"
+      description: "Comparison of conditions 1, 3, 5 (no RAG at evaluation)"
+      format: markdown
+
+    - name: "within_rag_group"
+      description: "Comparison of conditions 2, 4, 6 (RAG at evaluation)"
+      format: markdown
+
+    - name: "cross_group_raw_metrics"
+      description: "Cross-group comparison using only raw dimension scores"
+      format: markdown
+
+    - name: "elo_leaderboard"
+      description: "ELO rankings from pairwise comparisons"
+      format: markdown
+
+  # Statistical tests
+  statistical_tests:
+    - paired_t_test
+    - wilcoxon_signed_rank
+    - bootstrap_ci

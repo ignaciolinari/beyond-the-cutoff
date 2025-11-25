@@ -167,3 +167,9 @@ The Microsoft paper likely used:
 - **Condition 4 (FT+RAG instruction-only)**: Trained WITHOUT contexts, evaluated WITH contexts - Tests transfer learning (can a model trained without contexts benefit from RAG?)
 
 This creates a complete 2×2 matrix that allows us to isolate the effects of training mode vs evaluation mode, providing more comprehensive insights than the Microsoft paper's setup.
+
+## Related Documentation
+
+- **[Experiment Analysis Guide](experiment_analysis_guide.md)**: Detailed guide for interpreting results, understanding which metrics are comparable across conditions, and expected findings
+- **[Pipeline Plan](pipeline_plan.md)**: Step-by-step pipeline for running the experiment, including dataset splitting
+- **[ELO Ranking](elo_ranking_and_human_evaluation.md)**: Pairwise comparison methodology

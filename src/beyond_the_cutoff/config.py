@@ -76,6 +76,9 @@ class RetrievalConfig(BaseModel):
     chunking_strategy: str = Field(default="words")
     # Optional cross-encoder reranker model name (empty disables reranking)
     reranker_model: str = Field(default="BAAI/bge-reranker-v2-m3")
+    # Minimum extraction quality confidence (0.0-1.0) to include a document in the index
+    # Documents with lower confidence scores will be skipped during ingestion
+    min_extraction_confidence: float = Field(default=0.3, ge=0.0, le=1.0)
 
 
 class FineTuningConfig(BaseModel):
@@ -248,6 +251,8 @@ class DatasetGenerationConfig(BaseModel):
     parse_retries: int = Field(default=2, ge=0)
     citation_rewrite_attempts: int = Field(default=1, ge=0)
     min_citation_coverage: float = Field(default=0.2, ge=0.0, le=1.0)
+    # Maximum tokens for generator input prompt (including context). Prevents context overflow.
+    max_generator_input_tokens: int = Field(default=6000, ge=1000)
 
     @field_validator("output_dataset_path", "raw_tasks_path", mode="before")
     @classmethod

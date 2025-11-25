@@ -182,6 +182,69 @@ The script orchestrates three steps:
 
 Tune behaviour via `configs/default.yaml` → `dataset_generation` (counts per document, chunk limits, RNG seed, generator backend). Override paths or document caps with CLI flags like `--index-dir`, `--max-docs`, or `--output` when experimenting.
 
+### Dataset Quality Validation
+
+**Before fine-tuning**, validate the generated dataset using an LLM judge to catch semantic issues that structural validation cannot detect:
+
+```bash
+# Quick quality check on a sample of 50 examples
+python scripts/evaluate_dataset_quality.py \
+  --dataset evaluation/datasets/offline_dataset.jsonl \
+  --sample-size 50
+
+# Full evaluation with detailed output
+python scripts/evaluate_dataset_quality.py \
+  --dataset evaluation/datasets/offline_dataset.jsonl \
+  --output evaluation/quality_report.json \
+  --include-verdicts
+
+# Filter to specific task types
+python scripts/evaluate_dataset_quality.py \
+  --dataset evaluation/datasets/offline_dataset.jsonl \
+  --task-type qa \
+  --task-type citations \
+  --sample-size 30
+```
+
+The quality judge evaluates four criteria:
+- **Answerability**: Can the question be answered from the provided contexts?
+- **Correctness**: Is the gold answer factually accurate given the contexts?
+- **Clarity**: Is the instruction clear and unambiguous?
+- **Coherence**: Does the expected response appropriately address the instruction?
+
+**Important**: The judge model (default: Qwen 3 8B) is intentionally different from the generator model (Qwen 2.5 7B) to avoid self-preference bias where a model rates its own outputs more favorably.
+
+Pass criteria: All scores ≥ 0.6 AND (answerability + correctness) ≥ 1.4. Target pass rate: ≥75% before proceeding to fine-tuning.
+
+### Train/Eval Split
+
+**After quality validation**, split the dataset into training and evaluation sets to prevent data leakage:
+
+```bash
+# Split: 70% train, 30% eval (question-level holdout)
+python scripts/split_dataset.py \
+  --input evaluation/datasets/offline_dataset.jsonl \
+  --train-output evaluation/datasets/train_dataset.jsonl \
+  --eval-output evaluation/datasets/eval_dataset.jsonl
+
+# Preview split statistics without writing files
+python scripts/split_dataset.py \
+  --input evaluation/datasets/offline_dataset.jsonl \
+  --train-output evaluation/datasets/train_dataset.jsonl \
+  --eval-output evaluation/datasets/eval_dataset.jsonl \
+  --dry-run
+```
+
+The split uses **question-level holdout**: questions from each paper are distributed across train and eval sets. This means:
+- Fine-tuned models see paper content (via training questions) but NOT the exact eval questions
+- Tests whether models learned underlying knowledge vs. memorized specific Q&A pairs
+- All 6 experimental conditions use the SAME eval questions for fair comparison
+
+| File | Purpose | Used By |
+|------|---------|---------|
+| `train_dataset.jsonl` | Fine-tuning training data | Colab/Kaggle notebooks |
+| `eval_dataset.jsonl` | Final experiment evaluation | `evaluate_models.py` |
+
 ### Offline Task Viewer
 
 Launch a Streamlit app to inspect the generated tasks next to their source documents. It reads both the curated dataset and the raw generator output so status/errors are visible while spot-checking.

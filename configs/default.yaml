@@ -14,6 +14,9 @@ retrieval:
   max_context_chars: 6000
   chunking_strategy: sentences
   reranker_model: BAAI/bge-reranker-v2-m3
+  # Minimum extraction quality confidence (0.0-1.0) to include a document in the index.
+  # PDFs with lower confidence scores will be skipped during ingestion.
+  min_extraction_confidence: 0.3
 fine_tuning:
   base_model: Qwen/Qwen2.5-0.5B-Instruct
   adapter_output_dir: ../outputs/adapters
@@ -61,6 +64,8 @@ dataset_generation:
   parse_retries: 2
   citation_rewrite_attempts: 1
   min_citation_coverage: 0.2
+  # Maximum tokens for generator input prompt (prevents context overflow)
+  max_generator_input_tokens: 6000
   output_dataset_path: ../evaluation/datasets/offline_dataset.jsonl
   raw_tasks_path: ../evaluation/datasets/offline_tasks.jsonl
 inference:

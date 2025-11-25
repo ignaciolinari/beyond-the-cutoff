@@ -273,6 +273,8 @@ def _collect_papers(
         desired_per_category += 1
 
     canonical_map: dict[str, ArxivPaper] = {}
+    skipped_categories: list[str] = []
+
     for category in categories:
         limit = min(per_query_limit, int(desired_per_category * oversample))
         limit = max(desired_per_category, limit)
@@ -280,19 +282,42 @@ def _collect_papers(
         query = build_category_query([category], submitted_after=start_dt, submitted_before=end_dt)
         result = client.search(search_query=query, max_results=limit)
         papers_for_category = result.papers
+
         if not papers_for_category:
-            typer.echo(
-                f"No results for category {category} using submittedDate filter; retrying without date filter"
+            # Do NOT fall back to queries without date filters - this would defeat
+            # the purpose of fetching "beyond the cutoff" papers from 2025.
+            # Instead, skip the category and warn the user.
+            typer.secho(
+                f"Warning: No papers found for {category} in date range "
+                f"{start_dt.strftime('%Y-%m-%d')} to {end_dt.strftime('%Y-%m-%d')}. "
+                f"Skipping category (no fallback to avoid pulling older papers).",
+                fg="yellow",
             )
-            query = build_category_query([category], submitted_after=None, submitted_before=None)
-            result = client.search(search_query=query, max_results=limit)
-            papers_for_category = result.papers
-        if not papers_for_category:
-            typer.echo(f"No results for category {category}")
+            skipped_categories.append(category)
+            continue
+
+        # Filter papers by publication date (belt-and-suspenders with API filter)
+        in_range_count = 0
         for paper in papers_for_category:
             if paper.published < start_dt or paper.published > end_dt:
                 continue
             canonical_map.setdefault(paper.canonical_id, paper)
+            in_range_count += 1
+
+        typer.echo(f"  Found {in_range_count} papers in date range from {category}")
+
+    if skipped_categories:
+        typer.secho(
+            f"\nNote: {len(skipped_categories)} categories skipped due to no papers in date range: "
+            f"{', '.join(skipped_categories)}",
+            fg="yellow",
+        )
+
+    papers = list(canonical_map.values())
+    papers.sort(key=lambda p: p.published, reverse=True)
+    if len(papers) > total:
+        papers = papers[:total]
+    return papers
 
     papers = list(canonical_map.values())
     papers.sort(key=lambda p: p.published, reverse=True)

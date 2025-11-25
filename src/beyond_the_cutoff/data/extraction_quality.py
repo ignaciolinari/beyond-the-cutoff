@@ -37,7 +37,7 @@ class ExtractionQualityMetrics:
     # Confidence score (0.0 to 1.0)
     confidence_score: float
 
-    def to_dict(self) -> dict[str, float | int | bool]:
+    def to_dict(self) -> dict[str, float | int | bool | str]:
         """Convert metrics to dictionary."""
         return {
             "char_count": self.char_count,

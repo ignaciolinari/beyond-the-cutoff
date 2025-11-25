@@ -216,7 +216,97 @@ head -n 1 evaluation/datasets/offline_dataset.jsonl | jq '.'
 head -n 1 evaluation/datasets/offline_tasks.jsonl | jq '.'
 ```
 
-### 4.3 Inspect Offline Tasks (Optional)
+### 4.3 Quality Validation with LLM Judge
+
+**Before proceeding to fine-tuning**, validate dataset quality using an LLM judge. This catches semantic issues that structural validation cannot detect:
+
+```bash
+# Quick quality check on a sample of 50 examples
+python scripts/evaluate_dataset_quality.py \
+  --dataset evaluation/datasets/offline_dataset.jsonl \
+  --sample-size 50
+
+# Full evaluation with detailed output
+python scripts/evaluate_dataset_quality.py \
+  --dataset evaluation/datasets/offline_dataset.jsonl \
+  --output evaluation/quality_report.json \
+  --include-verdicts
+
+# Filter to specific task types (e.g., focus on citations)
+python scripts/evaluate_dataset_quality.py \
+  --dataset evaluation/datasets/offline_dataset.jsonl \
+  --task-type citations \
+  --sample-size 30
+```
+
+**Quality criteria evaluated:**
+| Criterion | Description |
+|-----------|-------------|
+| Answerability | Can the question be answered from the provided contexts? |
+| Correctness | Is the gold answer factually accurate given the contexts? |
+| Clarity | Is the instruction clear and unambiguous? |
+| Coherence | Does the expected response appropriately address the instruction? |
+
+**Pass criteria:** All scores ≥ 0.6 AND (answerability + correctness) ≥ 1.4
+
+**Target pass rate:** ≥75% before proceeding to fine-tuning.
+
+**Important:** The judge model (Qwen 3 8B) is intentionally different from the generator model (Qwen 2.5 7B) to avoid self-preference bias.
+
+If the pass rate is below 75%, review `quality_report.json` for common issues and consider:
+- Adjusting generator prompts
+- Increasing citation coverage thresholds
+- Re-generating problematic examples
+
+### 4.4 Split Dataset for Train/Eval Holdout
+
+**Critical step:** Split the dataset into training and evaluation sets before fine-tuning. This creates a **question-level holdout** where:
+- Questions from each paper are distributed across train and eval
+- Fine-tuned models see paper content but NOT the exact eval questions
+- Prevents data leakage while testing true knowledge generalization
+
+```bash
+# Default split: 70% train, 30% eval
+python scripts/split_dataset.py \
+  --input evaluation/datasets/offline_dataset.jsonl \
+  --train-output evaluation/datasets/train_dataset.jsonl \
+  --eval-output evaluation/datasets/eval_dataset.jsonl
+
+# Custom split with 25% eval
+python scripts/split_dataset.py \
+  --input evaluation/datasets/offline_dataset.jsonl \
+  --train-output evaluation/datasets/train_dataset.jsonl \
+  --eval-output evaluation/datasets/eval_dataset.jsonl \
+  --eval-ratio 0.25
+
+# Ensure at least 2 eval examples per paper
+python scripts/split_dataset.py \
+  --input evaluation/datasets/offline_dataset.jsonl \
+  --train-output evaluation/datasets/train_dataset.jsonl \
+  --eval-output evaluation/datasets/eval_dataset.jsonl \
+  --min-eval-per-paper 2
+
+# Preview split without writing files
+python scripts/split_dataset.py \
+  --input evaluation/datasets/offline_dataset.jsonl \
+  --train-output evaluation/datasets/train_dataset.jsonl \
+  --eval-output evaluation/datasets/eval_dataset.jsonl \
+  --dry-run
+```
+
+**Output files:**
+| File | Purpose | Used By |
+|------|---------|---------|
+| `train_dataset.jsonl` | Fine-tuning training data | Colab/Kaggle notebooks |
+| `eval_dataset.jsonl` | Final experiment evaluation | `evaluate_models.py` |
+
+**Why question-level holdout?**
+- Models see paper content (via training questions) but not exact eval questions
+- Tests whether models learned underlying knowledge vs. memorized Q&A pairs
+- All 6 conditions use the SAME eval questions → valid comparison
+- RAG models retrieve from same papers, non-RAG models rely on learned knowledge
+
+### 4.5 Inspect Offline Tasks (Optional)
 
 ```bash
 # Launch Streamlit viewer for offline tasks
@@ -234,14 +324,18 @@ python scripts/utility/inspect_offline_tasks.py \
 
 ### 5.1 Prepare Fine-Tuning Data
 
-The offline dataset (`evaluation/datasets/offline_dataset.jsonl`) is already in the correct format for fine-tuning. Ensure it's accessible from your Colab/Kaggle environment (upload to Drive or download directly).
+Use the **training split** (`evaluation/datasets/train_dataset.jsonl`) created in step 4.4. This ensures models don't see eval questions during training.
+
+**Important:** Upload `train_dataset.jsonl` (not `offline_dataset.jsonl`) to your Colab/Kaggle environment.
+
+**Note:** The notebooks will perform their own internal train/val/test split from this file for training purposes. This is separate from the train/eval holdout — the internal split is for training validation, while the external `eval_dataset.jsonl` is for final experiment evaluation.
 
 ### 5.2 Train Instruction-Only Model (Condition 3-4)
 
 **In Google Colab or Kaggle:**
 
 1. Upload `notebooks/finetuning/lora_science_v1_instruction_only.ipynb`
-2. Upload `evaluation/datasets/offline_dataset.jsonl`
+2. Upload `evaluation/datasets/train_dataset.jsonl` ← Use training split!
 3. Upload `configs/lora_science_v1_instruction_only_ollama.yaml` (for reference)
 4. Run the notebook to train WITHOUT RAG contexts
 5. Export adapter weights and merged checkpoint
@@ -255,7 +349,7 @@ The offline dataset (`evaluation/datasets/offline_dataset.jsonl`) is already in 
 **In Google Colab or Kaggle:**
 
 1. Upload `notebooks/finetuning/lora_science_v1.ipynb`
-2. Upload `evaluation/datasets/offline_dataset.jsonl`
+2. Upload `evaluation/datasets/train_dataset.jsonl` ← Use training split!
 3. Upload `configs/lora_science_v1_rag_trained_ollama.yaml` (for reference)
 4. Run the notebook to train WITH RAG contexts
 5. Export adapter weights and merged checkpoint
@@ -350,6 +444,8 @@ print(f'Model: {config.inference.model}')
 
 ## 7. Evaluation
 
+**Important:** Use `eval_dataset.jsonl` (the held-out evaluation set) for all final evaluations. This ensures fair comparison across all 6 conditions with no data leakage from training.
+
 ### 7.1 Validate Experiment Setup
 
 ```bash
@@ -360,9 +456,9 @@ python scripts/validate_experiment.py \
   --judge-config configs/judges/scientific_default_rag.yaml \
   --prompt-mode rag
 
-# Validate dataset versioning
+# Validate eval dataset versioning (use eval_dataset.jsonl!)
 python scripts/validate_experiment.py \
-  --dataset evaluation/datasets/offline_dataset.jsonl \
+  --dataset evaluation/datasets/eval_dataset.jsonl \
   --dataset evaluation/results/rag_baseline_0p5b/details.jsonl
 
 # Validate experiment metadata (after first run)
@@ -372,10 +468,13 @@ python scripts/validate_experiment.py \
 
 ### 7.2 Run Single Model Evaluation
 
+**Note:** All commands use `--dataset evaluation/datasets/eval_dataset.jsonl` to evaluate on held-out questions.
+
 ```bash
 # Evaluate base baseline (condition 1)
 python scripts/evaluate_models.py \
   --config configs/default.yaml \
+  --dataset evaluation/datasets/eval_dataset.jsonl \
   --model-config configs/rag_baseline_ollama.yaml \
   --judge-config configs/judges/scientific_default_instruction.yaml \
   --prompt-mode instruction \
@@ -384,6 +483,7 @@ python scripts/evaluate_models.py \
 # Evaluate RAG baseline (condition 2)
 python scripts/evaluate_models.py \
   --config configs/default.yaml \
+  --dataset evaluation/datasets/eval_dataset.jsonl \
   --model-config configs/rag_baseline_ollama.yaml \
   --judge-config configs/judges/scientific_default_rag.yaml \
   --prompt-mode rag \
@@ -392,6 +492,7 @@ python scripts/evaluate_models.py \
 # Evaluate instruction-only FT-only (condition 3)
 python scripts/evaluate_models.py \
   --config configs/default.yaml \
+  --dataset evaluation/datasets/eval_dataset.jsonl \
   --model-config configs/lora_science_v1_instruction_only_ollama.yaml \
   --judge-config configs/judges/scientific_default_instruction.yaml \
   --prompt-mode instruction \
@@ -400,6 +501,7 @@ python scripts/evaluate_models.py \
 # Evaluate instruction-only FT+RAG (condition 4)
 python scripts/evaluate_models.py \
   --config configs/default.yaml \
+  --dataset evaluation/datasets/eval_dataset.jsonl \
   --model-config configs/lora_science_v1_instruction_only_ollama.yaml \
   --judge-config configs/judges/scientific_default_rag.yaml \
   --prompt-mode rag \
@@ -408,6 +510,7 @@ python scripts/evaluate_models.py \
 # Evaluate RAG-trained FT-only (condition 5)
 python scripts/evaluate_models.py \
   --config configs/default.yaml \
+  --dataset evaluation/datasets/eval_dataset.jsonl \
   --model-config configs/lora_science_v1_rag_trained_ollama.yaml \
   --judge-config configs/judges/scientific_default_instruction.yaml \
   --prompt-mode instruction \
@@ -416,6 +519,7 @@ python scripts/evaluate_models.py \
 # Evaluate RAG-trained FT+RAG (condition 6)
 python scripts/evaluate_models.py \
   --config configs/default.yaml \
+  --dataset evaluation/datasets/eval_dataset.jsonl \
   --model-config configs/lora_science_v1_rag_trained_ollama.yaml \
   --judge-config configs/judges/scientific_default_rag.yaml \
   --prompt-mode rag \
@@ -425,10 +529,11 @@ python scripts/evaluate_models.py \
 ### 7.3 Run Complete 6-Condition Comparison
 
 ```bash
-# Run all 6 conditions automatically
+# Run all 6 conditions automatically (uses eval_dataset.jsonl)
 python scripts/compare_models.py \
   --config configs/default.yaml \
-  --plan configs/evaluation/compare_0p5b_experiments.yaml
+  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+  --dataset evaluation/datasets/eval_dataset.jsonl
 
 # This generates:
 # - evaluation/results/comparison_report.json
@@ -438,16 +543,16 @@ python scripts/compare_models.py \
 ### 7.4 Compute Automatic Metrics
 
 ```bash
-# Compute metrics for a single model's predictions
+# Compute metrics for a single model's predictions (use eval_dataset.jsonl!)
 python scripts/evaluation_harness.py \
-  --dataset evaluation/datasets/offline_dataset.jsonl \
+  --dataset evaluation/datasets/eval_dataset.jsonl \
   --predictions evaluation/results/rag_baseline_0p5b/details.jsonl \
   --output evaluation/results/rag_baseline_0p5b/automatic_metrics.json \
   --details-output evaluation/results/rag_baseline_0p5b/automatic_metrics_details.jsonl
 
 # Or use Makefile shortcut
 make score \
-  SCORE_DATASET=evaluation/datasets/offline_dataset.jsonl \
+  SCORE_DATASET=evaluation/datasets/eval_dataset.jsonl \
   SCORE_PREDICTIONS=evaluation/results/rag_baseline_0p5b/details.jsonl \
   SCORE_OUTPUT=evaluation/results/rag_baseline_0p5b/automatic_metrics.json \
   SCORE_DETAILS=evaluation/results/rag_baseline_0p5b/automatic_metrics_details.jsonl

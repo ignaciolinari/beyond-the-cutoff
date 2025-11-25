@@ -1,0 +1,32 @@
+# Dataset Quality Judge Configuration
+#
+# This judge evaluates the quality of generated training examples.
+# Use this to validate dataset examples BEFORE training to catch:
+# - Unanswerable questions
+# - Incorrect gold answers
+# - Unclear instructions
+# - Mismatched instruction/response pairs
+#
+# IMPORTANT: The judge model should be DIFFERENT from the generator model
+# to avoid self-preference bias. The generator uses Qwen 2.5 7B, so we use
+# Qwen 3 8B here (different architecture, different reasoning patterns).
+#
+# Usage:
+#   python scripts/evaluate_dataset_quality.py \
+#       --dataset evaluation/datasets/offline_dataset.jsonl \
+#       --judge-inference configs/judges/dataset_quality_judge.yaml \
+#       --sample-size 50
+
+# Inference settings for the judge model
+# Using Qwen 3 8B - different model family than the Qwen 2.5 7B generator
+# This avoids self-evaluation bias where a model rates its own outputs favorably
+provider: ollama
+model: qwen3:8b  # Different from generator (qwen2.5:7b-instruct-q4_K_M)
+host: http://localhost
+port: 11434
+timeout: 180.0  # Slightly longer for larger model
+max_new_tokens: 512
+temperature: 0.0  # Deterministic for consistent judging
+top_p: 1.0
+repetition_penalty: 1.0
+stop_sequences: ["/no_think"]  # Qwen 3 thinking mode control

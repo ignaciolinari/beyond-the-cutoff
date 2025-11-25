@@ -92,11 +92,21 @@ class PayloadValidator:
         examples: Sequence[OfflineExample],
         pipeline: Any,  # RAGPipeline - avoid circular import
         min_citation_coverage: float,
+        global_seen: set[tuple[str, str]] | None = None,
     ) -> tuple[list[OfflineExample], list[dict[str, Any]]]:
-        """Validate final output examples with citation checks."""
+        """Validate final output examples with citation checks.
+
+        Args:
+            examples: Examples to validate.
+            pipeline: RAGPipeline for citation verification.
+            min_citation_coverage: Minimum citation coverage threshold.
+            global_seen: Optional set of (task_type, normalized_instruction) tuples
+                for cross-document deduplication. Will be updated in-place.
+        """
         filtered: list[OfflineExample] = []
         issues: list[dict[str, Any]] = []
-        seen: set[tuple[str, str]] = set()
+        # Local seen set for within-document deduplication
+        local_seen: set[tuple[str, str]] = set()
 
         for example in examples:
             instruction_text = example.instruction.strip()
@@ -113,11 +123,25 @@ class PayloadValidator:
                 continue
 
             key = (example.task_type, instruction_text.lower())
-            if key in seen:
+
+            # Check local (within-document) duplicates
+            if key in local_seen:
                 issues.append(
                     {
                         "field": example.task_type,
                         "kind": "duplicate_instruction",
+                        "fatal": False,
+                        "instruction": self._truncate(example.instruction),
+                    }
+                )
+                continue
+
+            # Check global (cross-document) duplicates if tracking enabled
+            if global_seen is not None and key in global_seen:
+                issues.append(
+                    {
+                        "field": example.task_type,
+                        "kind": "cross_document_duplicate",
                         "fatal": False,
                         "instruction": self._truncate(example.instruction),
                     }
@@ -134,7 +158,10 @@ class PayloadValidator:
                         continue
 
             filtered.append(example)
-            seen.add(key)
+            local_seen.add(key)
+            # Update global tracking if enabled
+            if global_seen is not None:
+                global_seen.add(key)
 
         return filtered, issues
 

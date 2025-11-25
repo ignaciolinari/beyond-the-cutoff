@@ -8,6 +8,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 from beyond_the_cutoff.config import load_config
@@ -16,6 +17,9 @@ from beyond_the_cutoff.data.manifest import build_processed_manifest
 from beyond_the_cutoff.data.pdf_loader import PDFIngestor
 from beyond_the_cutoff.retrieval.index import DocumentIndexer
 from beyond_the_cutoff.utils.data_quality import validate_index_artifacts
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
@@ -28,6 +32,13 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip writing per-page JSONL sidecars during ingestion",
     )
+    p.add_argument(
+        "--min-confidence",
+        type=float,
+        default=None,
+        help="Override minimum extraction confidence threshold (0.0-1.0). "
+        "PDFs with lower confidence scores will be skipped.",
+    )
     return p.parse_args()
 
 
@@ -38,15 +49,25 @@ def main() -> None:
     processed_dir = cfg.paths.processed_data
     index_out = Path(args.out) if args.out else (cfg.paths.external_data / "index")
 
+    # Determine min extraction confidence
+    min_confidence = args.min_confidence
+    if min_confidence is None:
+        min_confidence = getattr(cfg.retrieval, "min_extraction_confidence", 0.0)
+
+    logger.info("Starting PDF ingestion from %s", raw_dir)
+    if min_confidence > 0.0:
+        logger.info("Extraction quality threshold: %.2f", min_confidence)
+
     # 1) Convert PDFs to text
     ingestor = PDFIngestor(
         source_dir=raw_dir,
         target_dir=processed_dir,
         write_sidecars=not args.no_page_sidecars,
+        min_extraction_confidence=min_confidence,
     )
     outputs = ingestor.convert_all()
     if not outputs:
-        print(f"No PDFs found under {raw_dir}. Skipping index build.")
+        print(f"No PDFs found (or all skipped) under {raw_dir}. Skipping index build.")
         return
     print(f"Converted {len(outputs)} PDFs to text under {processed_dir}")
 
