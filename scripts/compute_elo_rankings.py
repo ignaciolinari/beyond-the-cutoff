@@ -3,12 +3,22 @@
 
 This script supports:
 - Loading comparisons from JSONL files (judge evaluations or human annotations)
+- Combining multiple comparison files (e.g., from sequential judge runs)
 - Computing ELO ratings with bootstrap confidence intervals
 - Generating head-to-head matrices
 - Exporting leaderboards to JSON
 
 Usage:
+    # Single comparison file
     python scripts/compute_elo_rankings.py --comparisons results/comparisons.jsonl --output results/leaderboard.json
+
+    # Multiple comparison files (e.g., from different judges run sequentially)
+    python scripts/compute_elo_rankings.py \
+        --comparisons evaluation/results/judge1/all_comparisons.jsonl \
+        --comparisons evaluation/results/judge2/all_comparisons.jsonl \
+        --output evaluation/results/combined_leaderboard.json
+
+    # From human annotations
     python scripts/compute_elo_rankings.py --annotations-dir evaluation/human_annotations --output results/human_leaderboard.json
 """
 
@@ -40,12 +50,14 @@ from beyond_the_cutoff.evaluation.human_evaluation import (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Compute ELO rankings from pairwise comparisons")
 
-    # Input sources (mutually exclusive group)
+    # Input sources (mutually exclusive groups)
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument(
         "--comparisons",
         type=Path,
-        help="Path to JSONL file with pairwise comparisons",
+        action="append",
+        dest="comparison_files",
+        help="Path to JSONL file with pairwise comparisons. Can be specified multiple times to combine results from different judges.",
     )
     input_group.add_argument(
         "--annotations-dir",
@@ -241,10 +253,17 @@ def main() -> None:
     args = parse_args()
 
     # Load comparisons based on input source
-    if args.comparisons:
-        if args.verbose:
-            print(f"Loading comparisons from {args.comparisons}")
-        comparisons = load_comparisons_from_jsonl(args.comparisons)
+    if args.comparison_files:
+        comparisons = []
+        for comp_file in args.comparison_files:
+            if args.verbose:
+                print(f"Loading comparisons from {comp_file}")
+            file_comparisons = load_comparisons_from_jsonl(comp_file)
+            comparisons.extend(file_comparisons)
+            if args.verbose:
+                print(f"  -> Loaded {len(file_comparisons)} comparisons")
+        if args.verbose and len(args.comparison_files) > 1:
+            print(f"Total combined comparisons: {len(comparisons)}")
 
     elif args.annotations_dir:
         if args.verbose:

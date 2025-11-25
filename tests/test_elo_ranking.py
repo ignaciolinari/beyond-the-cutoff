@@ -298,6 +298,54 @@ class TestFileIO:
         finally:
             path.unlink()
 
+    def test_combine_multiple_jsonl_files(self) -> None:
+        """Test combining comparisons from multiple JSONL files (sequential judge workflow)."""
+        # Simulate comparisons from judge 1
+        judge1_comparisons = [
+            PairwiseComparison(
+                model_a="A", model_b="B", outcome="win_a", task_id="t1", annotator="qwen3_8b"
+            ),
+            PairwiseComparison(
+                model_a="A", model_b="B", outcome="win_b", task_id="t2", annotator="qwen3_8b"
+            ),
+        ]
+
+        # Simulate comparisons from judge 2
+        judge2_comparisons = [
+            PairwiseComparison(
+                model_a="A", model_b="B", outcome="win_a", task_id="t1", annotator="llama31_8b"
+            ),
+            PairwiseComparison(
+                model_a="A", model_b="B", outcome="win_a", task_id="t2", annotator="llama31_8b"
+            ),
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path1 = Path(tmpdir) / "judge1.jsonl"
+            path2 = Path(tmpdir) / "judge2.jsonl"
+
+            save_comparisons_to_jsonl(judge1_comparisons, path1)
+            save_comparisons_to_jsonl(judge2_comparisons, path2)
+
+            # Load and combine (simulating what compute_elo_rankings.py does)
+            combined = []
+            combined.extend(load_comparisons_from_jsonl(path1))
+            combined.extend(load_comparisons_from_jsonl(path2))
+
+            assert len(combined) == 4
+
+            # Check that both judges are represented
+            annotators = {c.annotator for c in combined}
+            assert annotators == {"qwen3_8b", "llama31_8b"}
+
+            # Compute ELO with combined data
+            leaderboard, metadata = compute_elo_rankings(combined)
+            assert metadata["n_comparisons"] == 4
+
+            # Model A should have higher rating (won 3 out of 4)
+            ratings = {r.model: r.rating for r in leaderboard}
+            assert ratings["A"] > ratings["B"]
+
     def test_save_leaderboard(self) -> None:
         leaderboard = [
             ELORating(

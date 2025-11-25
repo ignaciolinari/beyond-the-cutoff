@@ -155,6 +155,43 @@ python scripts/run_pairwise_evaluation.py \
     --output evaluation/results/pairwise_rankings
 ```
 
+#### Sequential Judge Evaluation (RAM Optimized)
+
+When running locally with limited RAM, you can run judges sequentially instead of
+loading both 8B models simultaneously. This workflow runs one judge at a time
+and then combines the comparison results:
+
+```bash
+# Step 1: Run first judge (Qwen 3 8B)
+python scripts/run_pairwise_evaluation.py \
+    --plan configs/evaluation/pairwise_evaluation_plan.yaml \
+    --judge configs/judges/pairwise_qwen3_8b.yaml \
+    --output evaluation/results/elo_qwen3
+
+# Step 2: Unload Qwen3, load Llama 3.1 (via ollama rm / ollama run)
+ollama rm qwen3:8b  # Optional: free VRAM
+ollama run llama3.1:8b  # Pre-load model
+
+# Step 3: Run second judge (Llama 3.1 8B)
+python scripts/run_pairwise_evaluation.py \
+    --plan configs/evaluation/pairwise_evaluation_plan.yaml \
+    --judge configs/judges/pairwise_llama31_8b.yaml \
+    --output evaluation/results/elo_llama31
+
+# Step 4: Combine comparisons and compute final ELO rankings
+python scripts/compute_elo_rankings.py \
+    --comparisons evaluation/results/elo_qwen3/all_comparisons.jsonl \
+    --comparisons evaluation/results/elo_llama31/all_comparisons.jsonl \
+    --output evaluation/results/combined_leaderboard.json \
+    --head-to-head evaluation/results/head_to_head_matrix.json \
+    --verbose
+```
+
+This approach:
+- **Uses ~5GB VRAM** per judge instead of ~10GB for both
+- **Preserves multi-judge consensus** by combining comparisons before ELO computation
+- **Produces identical rankings** to parallel execution
+
 #### From Python
 
 ```python
