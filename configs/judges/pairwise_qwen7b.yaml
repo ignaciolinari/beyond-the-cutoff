@@ -1,7 +1,21 @@
+# DEPRECATED / EXCLUDED FROM MAIN EXPERIMENT
+#
+# This config exists for completeness but should NOT be used as a judge
+# because Qwen 2.5 7B is also used for dataset generation, which would
+# cause self-preference bias (models rating their own family's outputs favorably).
+#
+# For pairwise evaluation, use instead:
+#   - configs/judges/pairwise_qwen3_8b.yaml (recommended - different model family)
+#   - configs/judges/pairwise_llama31_8b.yaml (alternative - different model family)
+#
 name: pairwise_qwen7b
 description: >-
-  Pairwise comparison judge using Qwen 7B for head-to-head model evaluation.
-  Used for automated ELO ranking.
+  [EXCLUDED] Pairwise comparison using Qwen 2.5 7B. Not used in main experiment
+  to avoid self-preference bias with the Qwen 2.5 7B dataset generator.
+
+# Qwen 2.5 Template Info:
+# - Uses ChatML format with <|im_start|> and <|im_end|> tokens
+# - See: https://ollama.com/library/qwen2.5:7b-instruct-q4_K_M
 
 inference:
   provider: ollama
@@ -10,6 +24,10 @@ inference:
   temperature: 0.1
   max_tokens: 1024
   timeout: 120
+  # Qwen 2.5 ChatML stop tokens
+  stop_sequences:
+    - "<|im_start|>"
+    - "<|im_end|>"
 
 max_retries: 3
 retry_delay: 2.0

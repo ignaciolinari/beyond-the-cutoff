@@ -114,18 +114,23 @@ def load_inference_config(path: Path | None) -> InferenceConfig:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
         return InferenceConfig.model_validate(data)
 
-    # Default: Qwen 3 8B via Ollama
+    # Default: Qwen 3 8B via Ollama with thinking mode enabled
     # IMPORTANT: Use a DIFFERENT model than the generator (Qwen 2.5 7B) to avoid
     # self-preference bias where a model rates its own outputs more favorably.
+    #
+    # Qwen3 Thinking Mode:
+    # - Enabled when temperature > 0 (we use 0.6)
+    # - Model outputs <think>...</think> reasoning before the answer
+    # - Improves judgment quality through chain-of-thought reasoning
     return InferenceConfig(
         provider="ollama",
         model="qwen3:8b",  # Different from generator (qwen2.5:7b-instruct-q4_K_M)
         host="http://localhost",
         port=11434,
         timeout=180.0,
-        max_new_tokens=512,
-        temperature=0.0,  # Deterministic for judging
-        stop_sequences=["/no_think"],  # Qwen 3 thinking mode control
+        max_new_tokens=1024,  # Increased for thinking + response
+        temperature=0.6,  # Enable thinking mode (requires temp > 0)
+        stop_sequences=["<|im_start|>", "<|im_end|>"],  # Qwen3 ChatML stop tokens
     )
 
 

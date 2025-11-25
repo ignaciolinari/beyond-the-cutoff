@@ -2,16 +2,29 @@ name: pairwise_qwen3_8b
 description: >-
   Pairwise comparison judge using Qwen3 8B for head-to-head model evaluation.
   Latest generation model with enhanced reasoning, superior at creative tasks
-  and instruction following. Apache 2.0 licensed.
+  and instruction following. Uses thinking mode for better judgment quality.
+  Apache 2.0 licensed.
+
+# Qwen3 Thinking Mode:
+# - Qwen3 has a "thinking" mode that enables chain-of-thought reasoning
+# - By default (temperature > 0), thinking is enabled
+# - The model outputs <think>...</think> tags with its reasoning
+# - We use temperature 0.1 to enable thinking while keeping outputs focused
+# - Stop sequences include </think> markers for proper parsing
+# - See: https://ollama.com/library/qwen3:8b
 
 inference:
   provider: ollama
   model: qwen3:8b
   base_url: http://localhost:11434
-  temperature: 0.1
-  max_tokens: 1024
-  timeout: 120
+  temperature: 0.6  # Enable thinking mode (requires temp > 0)
+  max_tokens: 2048  # Increased for thinking + response
+  timeout: 180  # Longer timeout for thinking
+  # Qwen3 ChatML stop tokens
+  stop_sequences:
+    - "<|im_start|>"
+    - "<|im_end|>"
 
 max_retries: 3
 retry_delay: 2.0
-timeout: 120.0
+timeout: 180.0

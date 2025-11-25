@@ -1,5 +1,19 @@
+# Qwen 2.5 7B Configuration
+#
+# WARNING: This config is for DATASET GENERATION, not for judging!
+# Do NOT use this as judge_inference - it would cause self-preference bias
+# since this is the same model family used for generating the dataset.
+#
+# For evaluation judges, use:
+#   - configs/judges/dataset_quality_judge.yaml (Qwen3 8B - recommended)
+#   - configs/judges/pairwise_qwen3_8b.yaml (Qwen3 8B with thinking)
+#   - configs/judges/pairwise_llama31_8b.yaml (Llama 3.1 8B)
+#
+# Uses ChatML format with <|im_start|> and <|im_end|> tokens
+# See: https://ollama.com/library/qwen2.5:7b-instruct-q4_K_M
+
 provider: ollama
-# Quantized 7B judge model published via Ollama.
+# Quantized 7B model for dataset generation
 model: qwen2.5:7b-instruct-q4_K_M
 host: http://localhost
 port: 11434
@@ -10,4 +24,7 @@ max_new_tokens: 512
 temperature: 0.0
 top_p: 0.9
 repetition_penalty: 1.05
-stop_sequences: []
+# Qwen 2.5 ChatML stop tokens
+stop_sequences:
+  - "<|im_start|>"
+  - "<|im_end|>"

@@ -1,7 +1,9 @@
 defaults:
   dataset: ../../evaluation/datasets/offline_dataset.jsonl
   judge_config: ../judges/scientific_default_rag.yaml  # Default for RAG conditions
-  judge_inference: ../judges/ollama_qwen7b.yaml
+  # IMPORTANT: Use Qwen3 8B as judge (different model family than Qwen 2.5 7B generator)
+  # to avoid self-preference bias where models rate their own family's outputs favorably
+  judge_inference: ../judges/dataset_quality_judge.yaml
   output_dir: ../../evaluation/results
   metrics_filename: metrics.json
   details_filename: details.jsonl

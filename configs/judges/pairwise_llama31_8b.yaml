@@ -4,6 +4,11 @@ description: >-
   State-of-the-art model from Meta with 128K context, strong reasoning and
   multilingual capabilities. Competitive with GPT-4 class models on benchmarks.
 
+# Llama 3.1 Template Info:
+# - Uses Llama 3 instruct format with special header tokens
+# - Stop tokens: <|start_header_id|>, <|end_header_id|>, <|eot_id|>
+# - See: https://ollama.com/library/llama3.1:8b
+
 inference:
   provider: ollama
   model: llama3.1:8b
@@ -11,6 +16,11 @@ inference:
   temperature: 0.1
   max_tokens: 1024
   timeout: 120
+  # Llama 3.1 instruct format stop tokens
+  stop_sequences:
+    - "<|start_header_id|>"
+    - "<|end_header_id|>"
+    - "<|eot_id|>"
 
 max_retries: 3
 retry_delay: 2.0

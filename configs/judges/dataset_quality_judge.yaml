@@ -11,6 +11,13 @@
 # to avoid self-preference bias. The generator uses Qwen 2.5 7B, so we use
 # Qwen 3 8B here (different architecture, different reasoning patterns).
 #
+# Qwen3 Thinking Mode:
+# - Qwen3 supports "thinking" mode for chain-of-thought reasoning
+# - Enabled when temperature > 0 (we use 0.6 for focused thinking)
+# - Model outputs <think>...</think> tags with reasoning before the answer
+# - This improves judgment quality by allowing the model to reason step-by-step
+# - See: https://ollama.com/library/qwen3:8b
+#
 # Usage:
 #   python scripts/evaluate_dataset_quality.py \
 #       --dataset evaluation/datasets/offline_dataset.jsonl \
@@ -24,9 +31,12 @@ provider: ollama
 model: qwen3:8b  # Different from generator (qwen2.5:7b-instruct-q4_K_M)
 host: http://localhost
 port: 11434
-timeout: 180.0  # Slightly longer for larger model
-max_new_tokens: 512
-temperature: 0.0  # Deterministic for consistent judging
-top_p: 1.0
+timeout: 180.0  # Longer timeout for thinking mode
+max_new_tokens: 1024  # Increased for thinking + response
+temperature: 0.6  # Enable thinking mode (requires temp > 0)
+top_p: 0.95
 repetition_penalty: 1.0
-stop_sequences: ["/no_think"]  # Qwen 3 thinking mode control
+# Qwen3 ChatML stop tokens
+stop_sequences:
+  - "<|im_start|>"
+  - "<|im_end|>"
