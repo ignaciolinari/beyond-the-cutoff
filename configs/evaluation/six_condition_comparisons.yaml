@@ -65,9 +65,10 @@ models:
 # =============================================================================
 # Judge Configuration
 # =============================================================================
+# Note: Using only 8B-class judges (Qwen3-8B, Llama-3.1-8B) to avoid model family
+# self-preference bias since the dataset generator is Qwen 2.5 7B.
 judges:
   pairwise:
-    - configs/judges/pairwise_qwen7b.yaml
     - configs/judges/pairwise_qwen3_8b.yaml
     - configs/judges/pairwise_llama31_8b.yaml
 
@@ -246,8 +247,9 @@ pairwise_evaluation:
   bootstrap_samples: 1000
 
   # Judge rotation (use multiple judges for robustness)
+  # Note: Qwen 2.5 7B excluded to avoid model family self-preference bias
+  # (the dataset generator is Qwen 2.5 7B)
   judges:
-    - configs/judges/pairwise_qwen7b.yaml
     - configs/judges/pairwise_qwen3_8b.yaml
     - configs/judges/pairwise_llama31_8b.yaml
 

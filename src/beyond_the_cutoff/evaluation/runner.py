@@ -244,18 +244,32 @@ def _build_rag_prompt_for_instruction_only_model(
     """Build a RAG prompt for instruction-only models evaluated with RAG contexts.
 
     This is used for Condition 4 (FT+RAG instruction-only) where an instruction-only
-    trained model is evaluated WITH RAG contexts. The Modelfile provides the system
-    message, so user content should not duplicate it. User content includes contexts
-    and citation instructions.
+    trained model is evaluated WITH RAG contexts.
+
+    IMPORTANT DESIGN DECISION:
+    We use the SAME prompt format as other RAG conditions (2 and 6) rather than a
+    hybrid format. This ensures that Condition 4 tests ONLY the transfer learning
+    question ("can a model trained without contexts benefit from RAG?") without
+    introducing a prompt-format confound.
+
+    The model will experience distribution shift because:
+    - It was trained on: "Question: X\\n\\nAnswer:"
+    - It now sees: "Instructions... Context:... Question: X\\nAnswer:"
+
+    This is the INTENDED test - we want to see if the model can adapt to using
+    contexts it wasn't trained with. The prompt FORMAT is standardized across
+    all RAG evaluation conditions (2, 4, 6) for valid comparison.
+
+    Note: Condition 5 uses INSTRUCTION mode (no RAG), not RAG mode.
 
     Args:
         instruction: The instruction/question text
         contexts: List of numbered context strings (e.g., "[1] context text")
-        model_config_path: Optional path to model config file for type detection
-        model_name: Optional model name for type detection
+        model_config_path: Optional path to model config file (unused, kept for API consistency)
+        model_name: Optional model name (unused, kept for API consistency)
 
     Returns:
-        Formatted prompt string that matches instruction-only training format but includes contexts
+        Formatted prompt string matching standard RAG format
     """
     instruction_text = instruction.strip()
     if not instruction_text:
@@ -267,15 +281,24 @@ def _build_rag_prompt_for_instruction_only_model(
     # Build context block from numbered contexts
     context_block = "\n\n".join(contexts)
 
-    # Hybrid format: Preserves training instruction structure ("Question: ... Answer:")
-    # while adding RAG context requirements. This bridges the training format with RAG needs.
-    # Training format: "Question: X\n\nAnswer:" (system message provided separately)
-    # This hybrid format ensures the model sees familiar instruction patterns while learning to use contexts.
+    # Use STANDARD RAG format (same as Conditions 2 and 6) for fair comparison.
+    # The transfer learning test (Condition 4) should test whether an instruction-only
+    # trained model can benefit from RAG contexts - NOT whether it can handle a
+    # different prompt structure. Using the same format as other RAG evaluation
+    # conditions (2, 4, 6) isolates the variable we care about: training mode.
+    # Note: Condition 5 is in the instruction group (evaluated WITHOUT contexts).
+    #
+    # Format matches RAGPipeline._build_prompt() in retrieval/query.py:
+    #   Instructions -> Context -> Question -> Answer
+    #
+    # The distribution shift is intentional (model wasn't trained with contexts),
+    # but the prompt FORMAT should match other RAG conditions for valid comparison.
     prompt = (
-        f"Question: {instruction_text}\n\n"
-        f"Context:\n{context_block}\n\n"
-        "Answer using the provided context. Cite sources inline as [#] based on the order of the snippets. "
+        "Answer the question using the provided context. "
+        "Cite the sources inline as [#] based on the order of the snippets. "
         "If the answer is not in the context, say you don't know.\n\n"
+        f"Context:\n{context_block}\n\n"
+        f"Question: {instruction_text}\n"
         "Answer:"
     )
 
@@ -836,8 +859,8 @@ def run_evaluation(
         print(f"[info] Detected model type: {detected_model_type_for_logging}", file=sys.stderr)
         if detected_model_type_for_logging == "instruction_only":
             print(
-                "[info] Using hybrid RAG prompt format for instruction-only model (Condition 4). "
-                "Prompt format matches training while including RAG contexts.",
+                "[info] Using standard RAG prompt format for instruction-only model (Condition 4). "
+                "Model will experience distribution shift (trained on simple format, evaluated with RAG format).",
                 file=sys.stderr,
             )
     print("-" * 80, file=sys.stderr)
@@ -898,7 +921,7 @@ def run_evaluation(
 
             if detected_model_type == "instruction_only":
                 # Condition 4: Instruction-only model evaluated WITH RAG contexts
-                # Use hybrid format that matches training format while including contexts
+                # Use STANDARD RAG format (same as Conditions 2, 6) for fair comparison
                 if not instruction:
                     raise KeyError(f"Example {task_id} missing instruction field for RAG mode")
                 if not contexts_raw:

@@ -39,10 +39,11 @@ runs:
   # Tests transfer learning - model trained without contexts, evaluated with contexts
   # Note: This may underperform because model wasn't trained to use contexts
   # Uses RAG judge (checks citations and grounding)
-  # IMPORTANT: The evaluation runner automatically uses a hybrid prompt format that
-  # matches the instruction-only training format ("Question: ... Answer:") while including
-  # RAG contexts. This ensures prompt format consistency and avoids distribution shift
-  # from format mismatch.
+  # IMPORTANT: Uses STANDARD RAG prompt format (same as Conditions 2 and 6) for fair
+  # comparison. The model experiences distribution shift (trained on simple format,
+  # evaluated with full RAG format), which is the intended transfer learning test.
+  # Note: Condition 5 is in the instruction group (evaluated WITHOUT contexts).
+  # See: src/beyond_the_cutoff/evaluation/runner.py::_build_rag_prompt_for_instruction_only_model()
   - label: hybrid_science_0p5b_instruction_only
     model_config: ../lora_science_v1_instruction_only_ollama.yaml
     prompt_mode: rag

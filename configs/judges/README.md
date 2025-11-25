@@ -45,11 +45,14 @@ python scripts/evaluate_dataset_quality.py \
 ### Pairwise Comparison Judges
 
 For automated model ranking via pairwise comparison:
-- `pairwise_qwen7b.yaml` — Qwen 2.5 7B judge
 - `pairwise_qwen3_8b.yaml` — Qwen 3 8B judge
 - `pairwise_llama31_8b.yaml` — Llama 3.1 8B judge
 
-Multi-judge consensus uses all three for position-debiased majority voting.
+**Design Decision:** We exclude Qwen 2.5 7B from pairwise judging to avoid model family
+self-preference bias, since the dataset generator is Qwen 2.5 7B. Using judges from different
+model families (Qwen 3 and Llama 3.1) provides more objective assessment.
+
+Multi-judge consensus uses both judges for position-debiased majority voting.
 
 ## File Naming
 - `scientific_default_rag.yaml` — rubric for RAG-augmented answers (with contexts)

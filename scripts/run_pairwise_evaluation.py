@@ -6,16 +6,16 @@ one or more judge models, then computes ELO rankings with confidence intervals.
 
 Usage:
     # Compare models using result directories
-    python scripts/run_pairwise_evaluation.py \
-        --results base_baseline=evaluation/results/base_baseline_0p5b \
-        --results rag_baseline=evaluation/results/rag_baseline_0p5b \
-        --results ft_only=evaluation/results/lora_science_0p5b_ft_only \
-        --judge configs/judges/pairwise_qwen7b.yaml \
-        --judge configs/judges/pairwise_qwen3b.yaml \
+    python scripts/run_pairwise_evaluation.py \\
+        --results base_baseline=evaluation/results/base_baseline_0p5b \\
+        --results rag_baseline=evaluation/results/rag_baseline_0p5b \\
+        --results ft_only=evaluation/results/lora_science_0p5b_ft_only \\
+        --judge configs/judges/pairwise_qwen3_8b.yaml \\
+        --judge configs/judges/pairwise_llama31_8b.yaml \\
         --output evaluation/results/elo_rankings
 
     # Use a comparison plan YAML
-    python scripts/run_pairwise_evaluation.py \
+    python scripts/run_pairwise_evaluation.py \\
         --plan configs/evaluation/pairwise_evaluation_plan.yaml
 """
 
@@ -166,8 +166,8 @@ def main() -> None:
         sys.exit(1)
 
     if not judge_configs:
-        # Default to Qwen 7B judge
-        default_judge = Path("configs/judges/pairwise_qwen7b.yaml")
+        # Default to Qwen3 8B judge (Qwen 7B excluded to avoid self-preference bias with generator)
+        default_judge = Path("configs/judges/pairwise_qwen3_8b.yaml")
         if default_judge.exists():
             judge_configs = [default_judge]
             logger.info(f"Using default judge: {default_judge}")

@@ -13,8 +13,9 @@ models:
 # Judge models for pairwise comparison
 # Using multiple judges improves reliability via consensus
 # Both 8B models provide strong reasoning while being locally runnable
+# Note: Qwen 2.5 7B excluded to avoid model family self-preference bias
+# (the dataset generator is Qwen 2.5 7B)
 judges:
-  - configs/judges/pairwise_qwen7b.yaml
   - configs/judges/pairwise_qwen3_8b.yaml
   - configs/judges/pairwise_llama31_8b.yaml
 

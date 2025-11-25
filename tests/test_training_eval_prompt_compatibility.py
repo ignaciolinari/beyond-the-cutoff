@@ -78,10 +78,25 @@ class TestInstructionOnlyPromptCompatibility:
 
 
 class TestCondition4HybridPrompt:
-    """Test Condition 4: Instruction-only model evaluated WITH RAG contexts."""
+    """Test Condition 4: Instruction-only model evaluated WITH RAG contexts.
 
-    def test_hybrid_prompt_matches_training_format(self) -> None:
-        """Test that hybrid prompt matches instruction-only training format."""
+    DESIGN DECISION: Condition 4 uses the STANDARD RAG prompt format (same as
+    Conditions 2 and 6) rather than a hybrid format that preserves training structure.
+
+    Note: Condition 5 uses INSTRUCTION mode (no RAG contexts), not RAG mode.
+    Only Conditions 2, 4, 6 use RAG evaluation mode.
+
+    Rationale: The transfer learning test should isolate whether an instruction-only
+    trained model can benefit from RAG contexts - NOT whether it can handle a unique
+    prompt format. Using the same format as other RAG conditions ensures valid
+    comparison across the RAG condition group (2, 4, 6).
+
+    The model WILL experience distribution shift (it was trained on "Question: X\\nAnswer:"
+    but now sees the full RAG format), which is the intended test.
+    """
+
+    def test_condition4_uses_standard_rag_format(self) -> None:
+        """Test that Condition 4 uses the standard RAG format for fair comparison."""
         instruction = "What are the key findings?"
         contexts = [
             "[1] Section: Introduction\nThis paper presents a novel approach...",
@@ -96,7 +111,14 @@ class TestCondition4HybridPrompt:
         # System message is separate, user content should not duplicate it
         assert "You are a research paper assistant" not in prompt
 
-        # Must include question first (matching training format)
+        # Must use STANDARD RAG format: Instructions -> Context -> Question -> Answer
+        # This matches the format used for RAG evaluation conditions (2, 4, 6)
+        # Note: Condition 5 is in the instruction group (evaluated WITHOUT contexts)
+        assert prompt.strip().startswith(
+            "Answer the question using the provided context"
+        ), "Condition 4 should use standard RAG format (same as Conditions 2 and 6)"
+
+        # Must include question
         assert "Question:" in prompt
         assert instruction in prompt
 
@@ -104,14 +126,18 @@ class TestCondition4HybridPrompt:
         assert "Context:" in prompt
         assert contexts[0] in prompt
         assert contexts[1] in prompt
-        assert "using the provided context" in prompt.lower()
-        assert "Cite sources inline as [#]" in prompt
+        assert "Cite the sources inline as [#]" in prompt
 
-        # Must include answer marker at the end (matching training format)
+        # Must include answer marker at the end
         assert "Answer:" in prompt
+        assert prompt.strip().endswith("Answer:")
 
-    def test_hybrid_prompt_preserves_training_instruction_style(self) -> None:
-        """Test that hybrid prompt preserves the training instruction style."""
+    def test_condition4_format_matches_other_rag_conditions(self) -> None:
+        """Test that Condition 4 format matches standard RAG format (Conditions 2 and 6).
+
+        RAG evaluation conditions: 2, 4, 6 (evaluated WITH contexts)
+        Instruction evaluation conditions: 1, 3, 5 (evaluated WITHOUT contexts)
+        """
         instruction = "Summarize the methodology."
         contexts = ["[1] The method uses gradient descent..."]
 
@@ -120,20 +146,23 @@ class TestCondition4HybridPrompt:
             contexts,
         )
 
-        # System message is separate, user content should not duplicate it
-        # Should start with Question: (matching training format)
-        assert prompt.strip().startswith(
-            "Question:"
-        ), "Hybrid prompt should start with 'Question:' to match training format"
+        # Should use standard RAG format (not hybrid format)
+        # Standard format: "Answer the question using the provided context..."
+        assert prompt.strip().startswith("Answer the question"), (
+            "Condition 4 should use standard RAG format for fair comparison "
+            "with other RAG evaluation conditions (2 and 6)"
+        )
 
-        # Should include context usage instructions
-        assert "using the provided context" in prompt.lower()
+        # Should follow standard format: Instructions -> Context -> Question -> Answer
+        # NOT the old hybrid format: Question -> Context -> Instructions -> Answer
+        instructions_idx = prompt.find("Answer the question")
+        context_idx = prompt.find("Context:")
+        question_idx = prompt.find("Question:")
+        answer_idx = prompt.rfind("Answer:")
 
-        # Should preserve training structure: Question: ... Answer:
-        # (not the standard RAG format that starts with "Answer the question")
-        assert not prompt.strip().startswith("Answer the question"), (
-            "Hybrid prompt should preserve training structure (Question: ... Answer:), "
-            "not use standard RAG format that starts with 'Answer the question'"
+        assert instructions_idx < context_idx < question_idx < answer_idx, (
+            "Format should be: Instructions -> Context -> Question -> Answer "
+            "(matching standard RAG format)"
         )
 
     def test_hybrid_prompt_requires_contexts(self) -> None:
@@ -240,10 +269,17 @@ class TestModelTypeDetection:
 class TestPromptFormatConsistency:
     """Integration tests for prompt format consistency across the pipeline."""
 
-    def test_condition_4_uses_hybrid_format(self) -> None:
-        """Test that Condition 4 (instruction-only + RAG) uses hybrid format.
+    def test_condition_4_uses_standard_rag_format(self) -> None:
+        """Test that Condition 4 (instruction-only + RAG) uses standard RAG format.
 
-        This is the critical test that ensures the bug we fixed doesn't regress.
+        DESIGN DECISION: Condition 4 uses the SAME prompt format as other RAG evaluation
+        conditions (2 and 6) rather than a hybrid format. This ensures valid comparison
+        across the RAG condition group (2, 4, 6) by isolating the training mode variable.
+
+        Note: Condition 5 uses INSTRUCTION mode (no RAG), not RAG mode.
+
+        The model experiences distribution shift (trained on "Question: X\\nAnswer:" but
+        now sees full RAG format), which is the intended transfer learning test.
         """
         instruction = "What is the main contribution?"
         contexts = [
@@ -260,10 +296,13 @@ class TestPromptFormatConsistency:
         # Verify it doesn't duplicate system message
         assert "You are a research paper assistant" not in prompt
 
-        # Verify it includes RAG elements
-        assert "using the provided context" in prompt.lower()
-        assert "Cite sources inline" in prompt
+        # Verify it uses STANDARD RAG format (same as Conditions 2 and 6)
+        # RAG evaluation conditions: 2, 4, 6 | Instruction conditions: 1, 3, 5
+        assert prompt.strip().startswith("Answer the question using the provided context")
+        assert "Cite the sources inline as [#]" in prompt
         assert "Context:" in prompt
+        assert "Question:" in prompt
+        assert instruction in prompt
 
     def test_instruction_only_evaluation_matches_training(self) -> None:
         """Test that instruction-only evaluation format exactly matches training format."""

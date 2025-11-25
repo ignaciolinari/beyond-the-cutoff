@@ -143,7 +143,6 @@ python scripts/run_pairwise_evaluation.py \
 python scripts/run_pairwise_evaluation.py \
     --results base=evaluation/results/base_baseline_0p5b \
     --results rag=evaluation/results/rag_baseline_0p5b \
-    --judge configs/judges/pairwise_qwen7b.yaml \
     --judge configs/judges/pairwise_qwen3_8b.yaml \
     --judge configs/judges/pairwise_llama31_8b.yaml \
     --output evaluation/results/pairwise_rankings
@@ -152,7 +151,7 @@ python scripts/run_pairwise_evaluation.py \
 python scripts/run_pairwise_evaluation.py \
     --results baseline=evaluation/results/base_baseline_0p5b \
     --results finetuned=evaluation/results/lora_science_0p5b_ft_only \
-    --judge configs/judges/pairwise_qwen7b.yaml \
+    --judge configs/judges/pairwise_qwen3_8b.yaml \
     --output evaluation/results/pairwise_rankings
 ```
 
@@ -180,8 +179,8 @@ result = judge.compare(
 print(f"Verdict: {result.verdict}, Confidence: {result.confidence}")
 
 # Multi-judge evaluation with consensus
+# Note: Using 8B judges only to avoid self-preference bias with Qwen 2.5 7B generator
 evaluator = MultiJudgeEvaluator.from_yaml_files([
-    Path("configs/judges/pairwise_qwen7b.yaml"),
     Path("configs/judges/pairwise_qwen3_8b.yaml"),
     Path("configs/judges/pairwise_llama31_8b.yaml"),
 ])
@@ -375,9 +374,9 @@ cat evaluation/results/final_leaderboard.json
 | `apps/human_annotation.py` | Streamlit UI for human annotators |
 | `scripts/compute_elo_rankings.py` | CLI for computing rankings |
 | `scripts/run_pairwise_evaluation.py` | CLI for automated pairwise evaluation |
-| `configs/judges/pairwise_qwen7b.yaml` | Qwen 2.5 7B judge configuration |
 | `configs/judges/pairwise_qwen3_8b.yaml` | Qwen3 8B judge configuration |
 | `configs/judges/pairwise_llama31_8b.yaml` | Llama 3.1 8B judge configuration |
+| `configs/judges/pairwise_qwen7b.yaml` | Qwen 2.5 7B judge (excluded from main experiment to avoid self-preference bias) |
 | `configs/evaluation/pairwise_evaluation_plan.yaml` | Full evaluation plan with all model pairs |
 | `tests/test_elo_ranking.py` | Tests for ELO system |
 | `tests/test_pairwise_judge.py` | Tests for pairwise judge system |

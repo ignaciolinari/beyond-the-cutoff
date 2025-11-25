@@ -46,7 +46,7 @@ This experiment compares **six conditions** to understand the interaction betwee
 - **Label**: `hybrid_science_0p5b_instruction_only`
 - **What it tests**: Can a model trained without contexts benefit from RAG at inference? (Transfer learning)
 - **Note**: This may underperform because the model wasn't trained to use contexts
-- **Prompt Format**: Uses a hybrid prompt format that preserves the training structure (`"Question: ... Answer:"`) while adding RAG contexts between them. This intentional distribution shift tests whether the model can adapt to contexts at inference time despite being trained without them. The evaluation runner automatically detects instruction-only models and applies this hybrid format (see `src/beyond_the_cutoff/evaluation/runner.py::_build_rag_prompt_for_instruction_only_model()`).
+- **Prompt Format**: Uses the **standard RAG prompt format** (same as Conditions 2 and 6—the other RAG evaluation conditions) to ensure fair comparison. The model experiences distribution shift because it was trained on simple `"Question: ... Answer:"` format but now receives the full RAG prompt with contexts. This is the intended test—we isolate the training mode variable (with/without contexts) while keeping prompt format constant across all RAG evaluation conditions (2, 4, 6). Note: Condition 5 uses instruction mode (no RAG contexts). See `src/beyond_the_cutoff/evaluation/runner.py::_build_rag_prompt_for_instruction_only_model()`.
 
 ### Condition 5: RAG-trained FT Only
 - **Model**: `lora_science_0p5` (RAG-trained)
@@ -120,6 +120,31 @@ Based on training/evaluation alignment:
 - **FT Only (instruction-only)** vs **FT+RAG (instruction-only)**: Adding contexts to model trained without them
 - **RAG-trained FT Only** vs **RAG-trained FT+RAG**: Adding contexts to model trained with them (should help more)
 - **FT Only (instruction-only)** vs **RAG-trained FT Only**: Does training with contexts hurt performance without contexts?
+
+## Design Choices
+
+### Question-Level Holdout (Not Document-Level)
+
+This experiment uses **question-level holdout**, meaning:
+- The same papers appear in both training and evaluation splits
+- Different *questions* about those papers are held out for evaluation
+- Models see paper content (via training questions) but not the exact eval questions
+
+**Rationale:**
+1. **Tests knowledge acquisition, not memorization**: We want to know if models learned the underlying concepts vs. just memorized Q&A pairs
+2. **Realistic deployment scenario**: In practice, users ask new questions about known information—this mirrors real-world usage where a RAG system or fine-tuned model must generalize to novel queries
+3. **Fairer RAG comparison**: RAG models retrieve from the same papers during evaluation; if we used document-level holdout, RAG would be tested on completely unseen documents while fine-tuned models would be tested on their trained knowledge—an apples-to-oranges comparison
+4. **Valid cross-condition comparison**: All 6 conditions use the SAME eval questions, ensuring differences reflect model capabilities rather than dataset artifacts
+
+**Trade-off acknowledged:**
+- This design does NOT test "Can the model handle completely new documents?"—that would require document-level holdout
+- For document-level generalization testing, a separate evaluation with unseen papers would be needed
+
+**Alternative design (not used):**
+- Document-level holdout would test a different question: "Can the model handle entirely unseen content?"
+- This tests retrieval and knowledge transfer to new domains rather than question generalization on known content
+
+The question-level holdout is implemented in `scripts/split_dataset.py` via stratified sampling that maintains paper representation across splits.
 
 ## Setup Requirements
 

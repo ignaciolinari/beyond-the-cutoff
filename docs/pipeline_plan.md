@@ -619,15 +619,16 @@ cat evaluation/results/comparison_report.json | \
 Use judge models to automatically compare model outputs head-to-head and compute ELO rankings with confidence intervals.
 
 ```bash
-# Run pairwise evaluation using 7B and 3B judges for consensus
+# Run pairwise evaluation using 8B judges for consensus
+# Note: Qwen 7B excluded to avoid self-preference bias with the generator
 python scripts/run_pairwise_evaluation.py \
   --results base_baseline=evaluation/results/base_baseline_0p5b \
   --results rag_baseline=evaluation/results/rag_baseline_0p5b \
   --results ft_only=evaluation/results/lora_science_0p5b_ft_only \
   --results ft_rag=evaluation/results/hybrid_science_0p5b_instruction_only \
   --results ft_rag_trained=evaluation/results/hybrid_science_0p5b_rag_trained \
-  --judge configs/judges/pairwise_qwen7b.yaml \
-  --judge configs/judges/pairwise_qwen3b.yaml \
+  --judge configs/judges/pairwise_qwen3_8b.yaml \
+  --judge configs/judges/pairwise_llama31_8b.yaml \
   --comparisons-per-pair 50 \
   --output evaluation/results/elo_rankings
 

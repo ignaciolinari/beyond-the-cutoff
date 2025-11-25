@@ -382,7 +382,6 @@ python scripts/run_pairwise_evaluation.py \
 python scripts/run_pairwise_evaluation.py \
     --results base=evaluation/results/base_baseline_0p5b \
     --results rag=evaluation/results/rag_baseline_0p5b \
-    --judge configs/judges/pairwise_qwen7b.yaml \
     --judge configs/judges/pairwise_qwen3_8b.yaml \
     --judge configs/judges/pairwise_llama31_8b.yaml \
     --output evaluation/results/pairwise_rankings
@@ -391,17 +390,17 @@ python scripts/run_pairwise_evaluation.py \
 python scripts/run_pairwise_evaluation.py \
     --results baseline=evaluation/results/base_baseline_0p5b \
     --results finetuned=evaluation/results/lora_science_0p5b_ft_only \
-    --judge configs/judges/pairwise_qwen7b.yaml \
+    --judge configs/judges/pairwise_qwen3_8b.yaml \
     --output evaluation/results/pairwise_rankings
 ```
 
 Features:
-- **Multi-judge consensus**: Uses multiple judge models (Qwen 2.5 7B, Qwen3 8B, Llama 3.1 8B) with majority voting
+- **Multi-judge consensus**: Uses multiple judge models (Qwen3 8B, Llama 3.1 8B) with majority voting
 - **Position debiasing**: Automatically swaps response positions to avoid order bias
 - **Structured output**: JSON-based judge responses with fallback keyword detection
 - **Configurable retries**: Handles transient API failures gracefully
 
-Judge configurations are stored in `configs/judges/` (e.g., `pairwise_qwen7b.yaml`, `pairwise_qwen3_8b.yaml`, `pairwise_llama31_8b.yaml`).
+Judge configurations are stored in `configs/judges/` (e.g., `pairwise_qwen3_8b.yaml`, `pairwise_llama31_8b.yaml`). Note: `pairwise_qwen7b.yaml` exists but is excluded from the main experiment to avoid model family self-preference bias with the Qwen 2.5 7B dataset generator.
 
 ### Human Evaluation (Optional)
 
