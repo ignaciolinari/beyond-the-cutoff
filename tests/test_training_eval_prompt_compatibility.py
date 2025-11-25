@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from beyond_the_cutoff.config import ModelType
 from beyond_the_cutoff.evaluation.runner import (
     _build_instruction_only_prompt,
     _build_rag_prompt_for_instruction_only_model,
@@ -27,7 +28,7 @@ class TestInstructionOnlyPromptCompatibility:
         # This should match the training format from notebooks/finetuning/lora_science_v1_instruction_only.ipynb
         prompt = _build_instruction_only_prompt(
             instruction,
-            model_type="instruction_only",
+            model_type=ModelType.INSTRUCTION_ONLY,
         )
 
         # Training format: System message is separate, user content is just question/answer
@@ -47,7 +48,7 @@ class TestInstructionOnlyPromptCompatibility:
 
         prompt = _build_instruction_only_prompt(
             instruction,
-            model_type="base",
+            model_type=ModelType.BASE,
         )
 
         # Base model: System message is separate, user content is just question/answer
@@ -62,7 +63,7 @@ class TestInstructionOnlyPromptCompatibility:
 
         prompt = _build_instruction_only_prompt(
             instruction,
-            model_type="rag_trained",
+            model_type=ModelType.RAG_TRAINED,
         )
 
         # RAG-trained model evaluated without contexts should acknowledge knowledge-based answer
@@ -274,7 +275,7 @@ class TestPromptFormatConsistency:
         # Evaluation format
         eval_prompt = _build_instruction_only_prompt(
             instruction,
-            model_type="instruction_only",
+            model_type=ModelType.INSTRUCTION_ONLY,
         )
 
         # Should match exactly (modulo whitespace)
@@ -293,7 +294,7 @@ class TestPromptFormatConsistency:
         # When evaluated without contexts (Condition 5), should use knowledge-based format
         prompt = _build_instruction_only_prompt(
             instruction,
-            model_type="rag_trained",
+            model_type=ModelType.RAG_TRAINED,
         )
 
         # Should acknowledge knowledge-based answer (doesn't contradict citation system message)
@@ -308,7 +309,7 @@ class TestEdgeCases:
     def test_empty_instruction_raises_error(self) -> None:
         """Test that empty instruction raises ValueError."""
         with pytest.raises(ValueError, match="cannot be empty"):
-            _build_instruction_only_prompt("", model_type="instruction_only")
+            _build_instruction_only_prompt("", model_type=ModelType.INSTRUCTION_ONLY)
 
     def test_hybrid_prompt_empty_instruction_raises_error(self) -> None:
         """Test that hybrid prompt with empty instruction raises ValueError."""
@@ -322,7 +323,7 @@ class TestEdgeCases:
         instruction = "   \n\t  "
 
         with pytest.raises(ValueError, match="cannot be empty"):
-            _build_instruction_only_prompt(instruction, model_type="instruction_only")
+            _build_instruction_only_prompt(instruction, model_type=ModelType.INSTRUCTION_ONLY)
 
     def test_model_type_detection_falls_back_to_base(self) -> None:
         """Test that unknown model types default to base."""

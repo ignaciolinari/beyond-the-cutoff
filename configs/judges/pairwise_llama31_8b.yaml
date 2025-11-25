@@ -1,0 +1,17 @@
+name: pairwise_llama31_8b
+description: >-
+  Pairwise comparison judge using Llama 3.1 8B for head-to-head model evaluation.
+  State-of-the-art model from Meta with 128K context, strong reasoning and
+  multilingual capabilities. Competitive with GPT-4 class models on benchmarks.
+
+inference:
+  provider: ollama
+  model: llama3.1:8b
+  base_url: http://localhost:11434
+  temperature: 0.1
+  max_tokens: 1024
+  timeout: 120
+
+max_retries: 3
+retry_delay: 2.0
+timeout: 120.0

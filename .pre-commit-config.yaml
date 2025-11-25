@@ -21,4 +21,5 @@ repos:
           - pydantic>=2.8
           - omegaconf
           - types-PyYAML
+          - pytest>=8.0
         args: ["--strict"]

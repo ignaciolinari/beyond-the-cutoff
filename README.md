@@ -285,6 +285,80 @@ The visualization tool generates:
 - **Prompt mode comparison**: RAG vs instruction-only mode performance comparison
 - **Task type breakdown**: Distribution of examples across task types
 
+### ELO Ranking System
+
+The project includes an ELO-based ranking system for comparing model performance through pairwise comparisons:
+
+```bash
+# Compute ELO rankings from pairwise comparison results
+python scripts/compute_elo_rankings.py evaluation/results/pairwise_comparisons.jsonl \
+    --output evaluation/results/elo_rankings.json \
+    --k-factor 32 \
+    --bootstrap-samples 1000
+
+# View rankings summary
+python scripts/compute_elo_rankings.py evaluation/results/pairwise_comparisons.jsonl --summary
+```
+
+Key features:
+- **Bootstrap confidence intervals**: Statistical significance testing with configurable sample sizes
+- **Configurable K-factor**: Control rating volatility (default: 32)
+- **Multiple comparison sources**: Works with human annotations or automated judge outputs
+
+### Automated Pairwise Evaluation
+
+For fully automated evaluation without human annotation, the project supports multi-judge pairwise comparison:
+
+```bash
+# Run automated pairwise evaluation using evaluation plan
+python scripts/run_pairwise_evaluation.py \
+    --plan configs/evaluation/pairwise_evaluation_plan.yaml \
+    --output evaluation/results/pairwise_rankings
+
+# Ad-hoc comparison between models using result directories
+python scripts/run_pairwise_evaluation.py \
+    --results base=evaluation/results/base_baseline_0p5b \
+    --results rag=evaluation/results/rag_baseline_0p5b \
+    --judge configs/judges/pairwise_qwen7b.yaml \
+    --judge configs/judges/pairwise_qwen3_8b.yaml \
+    --judge configs/judges/pairwise_llama31_8b.yaml \
+    --output evaluation/results/pairwise_rankings
+
+# Use specific judge configuration
+python scripts/run_pairwise_evaluation.py \
+    --results baseline=evaluation/results/base_baseline_0p5b \
+    --results finetuned=evaluation/results/lora_science_0p5b_ft_only \
+    --judge configs/judges/pairwise_qwen7b.yaml \
+    --output evaluation/results/pairwise_rankings
+```
+
+Features:
+- **Multi-judge consensus**: Uses multiple judge models (Qwen 2.5 7B, Qwen3 8B, Llama 3.1 8B) with majority voting
+- **Position debiasing**: Automatically swaps response positions to avoid order bias
+- **Structured output**: JSON-based judge responses with fallback keyword detection
+- **Configurable retries**: Handles transient API failures gracefully
+
+Judge configurations are stored in `configs/judges/` (e.g., `pairwise_qwen7b.yaml`, `pairwise_qwen3_8b.yaml`, `pairwise_llama31_8b.yaml`).
+
+### Human Evaluation (Optional)
+
+For validation studies requiring human judgment:
+
+```bash
+# Launch annotation interface
+streamlit run apps/human_annotation.py
+
+# Generate annotation tasks from evaluation results
+python -c "from beyond_the_cutoff.evaluation.human_evaluation import sample_for_annotation; ..."
+```
+
+The human evaluation module supports:
+- **Stratified sampling**: Balance tasks across categories and difficulty levels
+- **Inter-annotator agreement**: Cohen's Kappa (2 annotators) and Fleiss' Kappa (3+ annotators)
+- **Annotation batching**: Manageable task sets with progress tracking
+
+See `docs/elo_ranking_and_human_evaluation.md` for detailed documentation.
+
 ### Project Structure
 
 ```

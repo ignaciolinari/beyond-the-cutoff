@@ -1,0 +1,20 @@
+name: pairwise_qwen7b
+description: >-
+  Pairwise comparison judge using Qwen 7B for head-to-head model evaluation.
+  Used for automated ELO ranking.
+
+inference:
+  provider: ollama
+  model: qwen2.5:7b-instruct-q4_K_M
+  base_url: http://localhost:11434
+  temperature: 0.1
+  max_tokens: 1024
+  timeout: 120
+
+max_retries: 3
+retry_delay: 2.0
+timeout: 120.0
+
+# Optional: custom prompt template (uses default if not specified)
+# prompt_template: |
+#   Your custom prompt here...

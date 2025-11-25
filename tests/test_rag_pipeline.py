@@ -14,7 +14,7 @@ from beyond_the_cutoff.retrieval.query import RAGPipeline
 
 
 # pytest's decorator lacks precise typing under strict mypy, ignore the mismatch.
-@pytest.fixture(autouse=True)  # type: ignore[misc]
+@pytest.fixture(autouse=True)
 def _patch_sentence_transformer(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "beyond_the_cutoff.retrieval.index.SentenceTransformer", DummySentenceTransformer

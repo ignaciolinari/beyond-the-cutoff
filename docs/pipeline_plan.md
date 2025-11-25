@@ -15,6 +15,8 @@ Note: The offline dataset generation system has been refactored into a modular a
 6. [Model Deployment](#6-model-deployment)
 7. [Evaluation](#7-evaluation)
 8. [Results Analysis](#8-results-analysis)
+   - [8.4 ELO Rankings (Automated)](#84-compute-elo-rankings-automated)
+   - [8.5 Human Evaluation (Optional)](#85-human-evaluation-optional)
 9. [Verification & Testing](#9-verification--testing)
 
 ---
@@ -505,6 +507,75 @@ head -n 3 evaluation/results/rag_baseline_0p5b/details.jsonl | jq '.'
 # Check error rates
 cat evaluation/results/comparison_report.json | \
   jq '.runs[] | {label: .label, error_rate: .metrics.error_rate}'
+```
+
+### 8.4 Compute ELO Rankings (Automated)
+
+Use judge models to automatically compare model outputs head-to-head and compute ELO rankings with confidence intervals.
+
+```bash
+# Run pairwise evaluation using 7B and 3B judges for consensus
+python scripts/run_pairwise_evaluation.py \
+  --results base_baseline=evaluation/results/base_baseline_0p5b \
+  --results rag_baseline=evaluation/results/rag_baseline_0p5b \
+  --results ft_only=evaluation/results/lora_science_0p5b_ft_only \
+  --results ft_rag=evaluation/results/hybrid_science_0p5b_instruction_only \
+  --results ft_rag_trained=evaluation/results/hybrid_science_0p5b_rag_trained \
+  --judge configs/judges/pairwise_qwen7b.yaml \
+  --judge configs/judges/pairwise_qwen3b.yaml \
+  --comparisons-per-pair 50 \
+  --output evaluation/results/elo_rankings
+
+# Or use a predefined evaluation plan
+python scripts/run_pairwise_evaluation.py \
+  --plan configs/evaluation/pairwise_evaluation_plan.yaml
+
+# Compute ELO from existing comparison data
+python scripts/compute_elo_rankings.py \
+  --comparisons evaluation/results/elo_rankings/all_comparisons.jsonl \
+  --output evaluation/results/elo_rankings/leaderboard.json \
+  --head-to-head evaluation/results/elo_rankings/h2h_matrix.json
+```
+
+**Output files:**
+- `all_comparisons.jsonl` — All pairwise judgments
+- `leaderboard.json` — ELO ratings with confidence intervals
+- `h2h_matrix.json` — Head-to-head win rates
+
+### 8.5 Human Evaluation (Optional)
+
+For validating judge reliability or collecting additional annotations:
+
+```bash
+# Launch human annotation UI
+streamlit run apps/human_annotation.py
+
+# Compute ELO from human annotations
+python scripts/compute_elo_rankings.py \
+  --annotations-dir evaluation/human_annotations \
+  --output evaluation/results/human_leaderboard.json
+
+# Compare human vs judge agreement
+python -c "
+from beyond_the_cutoff.evaluation.human_evaluation import (
+    human_judge_correlation, load_annotation_batch
+)
+from pathlib import Path
+import json
+
+# Load human annotations
+batches = [load_annotation_batch(p) for p in Path('evaluation/human_annotations').glob('*.json')]
+human_annots = [a for b in batches for a in b.annotations]
+
+# Load judge verdicts
+with open('evaluation/results/elo_rankings/all_comparisons.jsonl') as f:
+    judge_verdicts = {json.loads(l)['task_id']: json.loads(l)['outcome'] for l in f}
+
+# Compute correlation
+stats = human_judge_correlation(human_annots, judge_verdicts)
+print(f\"Human-Judge Agreement: {stats['agreement_rate']:.1%}\")
+print(f\"Cohen's Kappa: {stats['cohens_kappa']:.3f}\")
+"
 ```
 
 ---

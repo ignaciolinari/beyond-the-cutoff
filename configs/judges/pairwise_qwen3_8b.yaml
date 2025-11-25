@@ -1,0 +1,17 @@
+name: pairwise_qwen3_8b
+description: >-
+  Pairwise comparison judge using Qwen3 8B for head-to-head model evaluation.
+  Latest generation model with enhanced reasoning, superior at creative tasks
+  and instruction following. Apache 2.0 licensed.
+
+inference:
+  provider: ollama
+  model: qwen3:8b
+  base_url: http://localhost:11434
+  temperature: 0.1
+  max_tokens: 1024
+  timeout: 120
+
+max_retries: 3
+retry_delay: 2.0
+timeout: 120.0

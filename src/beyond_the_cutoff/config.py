@@ -367,6 +367,7 @@ def load_config(path: Path | str | None = None) -> ProjectConfig:
 
 
 __all__ = [
+    "ModelType",
     "ProjectMetadata",
     "PathsConfig",
     "RetrievalConfig",

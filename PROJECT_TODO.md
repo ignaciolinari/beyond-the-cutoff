@@ -1,6 +1,6 @@
 # Beyond the Cutoff – Lightweight Project Tracker
 
-_Last updated: 2025-11-13_
+_Last updated: 2025-11-24_
 
 ## Status Legend
 - [ ] Backlog
@@ -50,7 +50,8 @@ _Last updated: 2025-11-13_
 - [x] Provide CLI/report generator for comparative analysis (`compare_models.py` aggregates JSON report)
 - [x] Add regression tests ensuring evaluation metrics run end-to-end (CLI harness smoke test)
 - [x] Scale offline dataset/evaluations to >100 tasks covering new papers
-- [ ] Integrate human evaluation protocol
+- [x] Integrate human evaluation protocol (`src/beyond_the_cutoff/evaluation/human_evaluation.py` + `apps/human_annotation.py`)
+- [x] Add ELO-based model ranking system (`src/beyond_the_cutoff/evaluation/elo_ranking.py` + `scripts/compute_elo_rankings.py`)
 
 ## Documentation & Reporting
 - [ ] Add architecture overview doc in `docs/`

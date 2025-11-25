@@ -1,0 +1,31 @@
+# Pairwise Evaluation Plan for 6-Condition Experiment
+# This plan automates ELO ranking computation using judge models
+
+# Models to compare (name -> result directory)
+models:
+  base_baseline: evaluation/results/base_baseline_0p5b
+  rag_baseline: evaluation/results/rag_baseline_0p5b
+  ft_only_instruction: evaluation/results/lora_science_0p5b_ft_only
+  ft_rag_instruction: evaluation/results/hybrid_science_0p5b_instruction_only
+  ft_only_rag_trained: evaluation/results/lora_science_0p5b_rag_trained_ft_only
+  ft_rag_trained: evaluation/results/hybrid_science_0p5b_rag_trained
+
+# Judge models for pairwise comparison
+# Using multiple judges improves reliability via consensus
+# Both 8B models provide strong reasoning while being locally runnable
+judges:
+  - configs/judges/pairwise_qwen7b.yaml
+  - configs/judges/pairwise_qwen3_8b.yaml
+  - configs/judges/pairwise_llama31_8b.yaml
+
+# Evaluation parameters
+comparisons_per_pair: 50  # Number of head-to-head comparisons per model pair
+seed: 42                  # Random seed for reproducibility
+
+# ELO parameters
+k_factor: 32              # Rating volatility (higher = more change per game)
+bootstrap_samples: 1000   # Samples for confidence intervals
+
+# Output configuration
+output_dir: evaluation/results/elo_rankings
+save_intermediate: true   # Save per-pair comparison files
