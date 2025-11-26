@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import csv
+import gc
 import json
 import logging
+import os as _os
 import random
+import time as _time
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from ...config import ProjectConfig
 from ...models import LLMClient, build_generation_client
@@ -21,6 +24,16 @@ from .types import MappingRow, OfflineExample
 from .validator import PayloadValidator
 
 logger = logging.getLogger(__name__)
+
+
+class _TaskConfig(TypedDict):
+    """Type definition for task configuration in chunked generation."""
+
+    key: str
+    count: int
+    min_count: int
+    fields: tuple[str, str]
+    require_citations: bool
 
 
 def _normalize_instruction(text: str) -> str:
@@ -166,31 +179,68 @@ class OfflineDatasetGenerator:
                     else "",
                 )
 
+            _doc_start_times: dict[int, float] = {}
+
+            # Memory cleanup frequency (configurable via env var)
+            _gc_light_interval = int(_os.environ.get("BTC_GC_LIGHT_INTERVAL", "3"))
+            _gc_force_interval = int(_os.environ.get("BTC_GC_FORCE_INTERVAL", "10"))
+
+            # Memory management: clear caches periodically
+            def _clear_memory_caches(force: bool = False) -> None:
+                """Clear PyTorch/MPS memory caches to reduce swap usage.
+
+                Args:
+                    force: If True, run gc.collect() multiple times for thorough cleanup
+                """
+                # Multiple gc.collect() calls can free cyclical references
+                gc.collect()
+                if force:
+                    gc.collect()
+                    gc.collect()
+                try:
+                    import torch
+
+                    if torch.backends.mps.is_available():
+                        torch.mps.empty_cache()
+                        # Synchronize to ensure memory is actually freed
+                        torch.mps.synchronize()
+                    elif torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                        torch.cuda.synchronize()
+                except Exception:
+                    pass  # Non-fatal if torch not available
+
             for doc_index, (source_path, rows) in enumerate(target_items):
                 if max_docs is not None and counters["documents"] >= max_docs:
                     break
 
+                _doc_start_times[doc_index] = _time.time()
                 progress_position = doc_index + 1
                 if progress_total:
-                    progress_label = f"{progress_position}/{progress_total}"
+                    progress_label = f"[{progress_position}/{progress_total}]"
                 else:
-                    progress_label = str(progress_position)
+                    progress_label = f"[{progress_position}]"
+
+                # Get just the filename for cleaner output
+                doc_name = Path(source_path).stem
 
                 if document_whitelist is not None:
                     matched_documents.add(source_path)
 
                 if resume and source_path in processed_documents:
-                    logger.info("Document %s: %s (resume)", progress_label, source_path)
+                    print(f"{progress_label} {doc_name} - SKIPPED (already processed)", flush=True)
                     continue
 
-                logger.info("Document %s: %s", progress_label, source_path)
+                print(f"{progress_label} {doc_name} - generating...", end="", flush=True)
 
                 filter_info = self.metadata_manager.should_skip_document(source_path, rows)
                 if filter_info is not None:
                     counters["documents_filtered"] += 1
                     reason_key = f"documents_filtered_{filter_info['kind']}"
                     counters[reason_key] = counters.get(reason_key, 0) + 1
-                    logger.info(
+                    elapsed = _time.time() - _doc_start_times[doc_index]
+                    print(f" SKIPPED ({filter_info['kind']}) [{elapsed:.1f}s]", flush=True)
+                    logger.debug(
                         "Document %s: %s -> skipped (%s, limit=%s, observed=%s)",
                         progress_label,
                         source_path,
@@ -218,7 +268,10 @@ class OfflineDatasetGenerator:
                     parse_retries=effective_parse_retries,
                 )
 
+                elapsed = _time.time() - _doc_start_times[doc_index]
+
                 if not examples:
+                    print(f" FAILED [{elapsed:.1f}s]", flush=True)
                     if raw_payload:
                         raw_payload.setdefault("status", "error")
                         raw_file.write(json.dumps(raw_payload, ensure_ascii=False) + "\n")
@@ -227,12 +280,32 @@ class OfflineDatasetGenerator:
                 raw_payload.setdefault("status", "success")
                 raw_file.write(json.dumps(raw_payload, ensure_ascii=False) + "\n")
 
+                # Count examples by type for this document
+                doc_counts = {"qa": 0, "summaries": 0, "citations": 0, "contextual": 0}
                 for example in examples:
                     dataset_file.write(example.to_json() + "\n")
                     counters["examples"] += 1
                     counters[example.task_type] = counters.get(example.task_type, 0) + 1
+                    if example.task_type in doc_counts:
+                        doc_counts[example.task_type] += 1
 
                 counters["documents"] += 1
+
+                # Show success with counts
+                print(
+                    f" OK: {len(examples)} examples "
+                    f"(qa={doc_counts['qa']}, sum={doc_counts['summaries']}, "
+                    f"cit={doc_counts['citations']}, ctx={doc_counts['contextual']}) "
+                    f"[{elapsed:.1f}s]",
+                    flush=True,
+                )
+
+                # Clear memory caches to prevent swap buildup
+                # Light cleanup every N docs, aggressive every M docs (configurable)
+                if _gc_force_interval > 0 and (doc_index + 1) % _gc_force_interval == 0:
+                    _clear_memory_caches(force=True)
+                elif _gc_light_interval > 0 and (doc_index + 1) % _gc_light_interval == 0:
+                    _clear_memory_caches(force=False)
 
         if document_whitelist is not None:
             missing_documents = document_whitelist - matched_documents
@@ -255,6 +328,34 @@ class OfflineDatasetGenerator:
         parse_retries: int,
     ) -> tuple[list[OfflineExample], dict[str, Any]]:
         """Generate tasks for a single document."""
+        dataset_cfg = self.config.dataset_generation
+
+        # Check if chunked generation mode is enabled
+        use_chunked = getattr(dataset_cfg, "chunked_generation", False)
+        if use_chunked:
+            return self._generate_for_document_chunked(
+                doc_index=doc_index,
+                source_path=source_path,
+                rows=rows,
+                parse_retries=parse_retries,
+            )
+
+        return self._generate_for_document_single(
+            doc_index=doc_index,
+            source_path=source_path,
+            rows=rows,
+            parse_retries=parse_retries,
+        )
+
+    def _generate_for_document_single(
+        self,
+        *,
+        doc_index: int,
+        source_path: str,
+        rows: Sequence[MappingRow],
+        parse_retries: int,
+    ) -> tuple[list[OfflineExample], dict[str, Any]]:
+        """Generate all tasks for a document in a single API call (original method)."""
         dataset_cfg = self.config.dataset_generation
         selected_rows = self._select_rows(rows, dataset_cfg.max_chunks_per_document)
         if not selected_rows:
@@ -718,7 +819,11 @@ class OfflineDatasetGenerator:
             f"Document: {source_path}\n"
             "Context Excerpts:\n"
         )
-        suffix = "\n\nReturn the JSON now."
+        suffix = (
+            '\n\nIMPORTANT: You MUST return ONLY a valid JSON object with EXACTLY these four keys: "qa", "summaries", "contextualizations", "citations". '
+            "Each key must contain an array. Do not include any other keys. Do not wrap in markdown code fences. "
+            'Start your response with {"qa":'
+        )
         base_tokens = self._estimate_tokens(base_prompt + suffix)
 
         # Calculate available tokens for context
@@ -947,6 +1052,248 @@ class OfflineDatasetGenerator:
             return int(text)
         except ValueError:
             return default
+
+    def _generate_for_document_chunked(
+        self,
+        *,
+        doc_index: int,
+        source_path: str,
+        rows: Sequence[MappingRow],
+        parse_retries: int,
+    ) -> tuple[list[OfflineExample], dict[str, Any]]:
+        """Generate tasks for a document using separate API calls per task type."""
+        dataset_cfg = self.config.dataset_generation
+        selected_rows = self._select_rows(rows, dataset_cfg.max_chunks_per_document)
+        if not selected_rows:
+            logger.debug("Skipping %s; no chunks selected", source_path)
+            return [], {}
+
+        # Build context once, reuse for all task types
+        context_block = self._build_context_block(source_path, selected_rows, dataset_cfg)
+
+        all_examples: list[OfflineExample] = []
+        raw_payload: dict[str, Any] = {
+            "document": source_path,
+            "model": getattr(self.generator, "model", "unknown"),
+            "mode": "chunked",
+            "task_results": {},
+        }
+        run_id = str(uuid.uuid4())
+
+        # Define task types and their configs
+        task_configs: list[_TaskConfig] = [
+            {
+                "key": "qa",
+                "count": dataset_cfg.questions_per_document,
+                "min_count": getattr(dataset_cfg, "min_questions_per_document", 0),
+                "fields": ("question", "answer"),
+                "require_citations": True,
+            },
+            {
+                "key": "summaries",
+                "count": dataset_cfg.summary_prompts_per_document,
+                "min_count": getattr(dataset_cfg, "min_summary_prompts_per_document", 0),
+                "fields": ("instruction", "response"),
+                "require_citations": False,
+            },
+            {
+                "key": "citations",
+                "count": dataset_cfg.citation_prompts_per_document,
+                "min_count": getattr(dataset_cfg, "min_citation_prompts_per_document", 0),
+                "fields": ("instruction", "answer"),
+                "require_citations": True,
+            },
+            {
+                "key": "contextualizations",
+                "count": dataset_cfg.contextual_prompts_per_document,
+                "min_count": getattr(dataset_cfg, "min_contextual_prompts_per_document", 0),
+                "fields": ("instruction", "response"),
+                "require_citations": True,
+            },
+        ]
+
+        for task_cfg in task_configs:
+            if task_cfg["count"] <= 0:
+                continue
+
+            prompt = self._build_single_task_prompt(
+                task_type=task_cfg["key"],
+                count=task_cfg["count"],
+                fields=task_cfg["fields"],
+                source_path=source_path,
+                context_block=context_block,
+            )
+
+            items, task_result = self._generate_single_task_type(
+                prompt=prompt,
+                task_key=task_cfg["key"],
+                fields=task_cfg["fields"],
+                parse_retries=parse_retries,
+            )
+
+            raw_payload["task_results"][task_cfg["key"]] = task_result
+
+            # Convert items to examples
+            for idx, item in enumerate(self._take(items, task_cfg["count"])):
+                if not isinstance(item, Mapping):
+                    continue
+                field1, field2 = task_cfg["fields"]
+                instruction = item.get(field1) or item.get("instruction") or item.get("question")
+                response = item.get(field2) or item.get("response") or item.get("answer")
+                if not instruction or not response:
+                    continue
+
+                example = self._build_example(
+                    task_type=task_cfg["key"],
+                    instruction=instruction,
+                    expected_response=response,
+                    require_citations=task_cfg["require_citations"],
+                    doc_index=doc_index,
+                    task_index=idx,
+                    run_id=run_id,
+                    source_path=source_path,
+                    selected_rows=selected_rows,
+                    extra_metadata=item,
+                )
+                if example:
+                    all_examples.append(example)
+
+        if not all_examples:
+            raw_payload["error"] = "no_valid_examples"
+            return [], raw_payload
+
+        raw_payload["status"] = "success"
+        return all_examples, raw_payload
+
+    def _build_context_block(
+        self,
+        source_path: str,
+        rows: Sequence[MappingRow],
+        cfg: Any,
+    ) -> str:
+        """Build the context excerpts block for prompts."""
+        context_lines: list[str] = []
+        for idx, row in enumerate(rows, start=1):
+            meta_bits: list[str] = []
+            if row.section_title:
+                meta_bits.append(f"Section: {row.section_title}")
+            if row.page is not None:
+                meta_bits.append(f"Page {row.page}")
+            entry_header = f"[{idx}]"
+            if meta_bits:
+                entry_header = f"{entry_header} {' | '.join(meta_bits)}"
+            chunk_text = row.trimmed_text(cfg.max_chars_per_chunk)
+            context_lines.append(f"{entry_header}\n{chunk_text}")
+        return "\n".join(context_lines)
+
+    def _build_single_task_prompt(
+        self,
+        *,
+        task_type: str,
+        count: int,
+        fields: tuple[str, str],
+        source_path: str,
+        context_block: str,
+    ) -> str:
+        """Build a focused prompt for a single task type."""
+        field1, field2 = fields
+
+        task_descriptions = {
+            "qa": f"Create {count} question-answer pairs about this paper. Questions should cover methods, results, limitations, and implications. Answers must cite supporting excerpts with inline [#] markers.",
+            "summaries": f"Create {count} summary instructions with responses. Cover contributions, methods, and notable limitations.",
+            "citations": f"Create {count} citation-check tasks. Each should ask to identify or verify information from the paper. Answers must cite relevant excerpts using [#] markers.",
+            "contextualizations": f"Create {count} contextualization prompts that relate the paper to broader themes. Responses must include inline [#] citations.",
+        }
+
+        description = task_descriptions.get(task_type, f"Create {count} {task_type} items.")
+
+        prompt = f"""You are creating training data for a research assistant. Given excerpts from a scientific paper, {description}
+
+Return ONLY a valid JSON array. Each item must have "{field1}" and "{field2}" keys.
+
+Example format:
+[
+  {{"{field1}": "Your {field1} here", "{field2}": "Your {field2} here with citations [1][2]"}}
+]
+
+Document: {source_path}
+
+Excerpts:
+{context_block}
+
+Return ONLY the JSON array, starting with ["""
+
+        return prompt
+
+    def _generate_single_task_type(
+        self,
+        *,
+        prompt: str,
+        task_key: str,
+        fields: tuple[str, str],
+        parse_retries: int,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Generate a single task type and return parsed items."""
+        attempts = max(0, parse_retries) + 1
+        items: list[dict[str, Any]] = []
+        result: dict[str, Any] = {"attempts": []}
+
+        for attempt in range(1, attempts + 1):
+            try:
+                response = self.generator.generate(prompt)
+            except Exception as exc:
+                logger.warning(
+                    "Generator request failed for %s (attempt %d): %s", task_key, attempt, exc
+                )
+                result["attempts"].append(
+                    {"attempt": attempt, "error": "request_failed", "exception": repr(exc)}
+                )
+                continue
+
+            raw_text = response.get("response", "").strip()
+
+            # Handle primed response (starts without [)
+            if raw_text and not raw_text.startswith("["):
+                raw_text = "[" + raw_text
+
+            # Try to parse as JSON array
+            try:
+                parsed = json.loads(raw_text)
+                if isinstance(parsed, list):
+                    # Validate items have required fields
+                    valid_items = []
+                    for item in parsed:
+                        if isinstance(item, dict):
+                            f1, f2 = fields
+                            if item.get(f1) and item.get(f2):
+                                valid_items.append(item)
+                    if valid_items:
+                        items = valid_items
+                        result["status"] = "success"
+                        result["item_count"] = len(items)
+                        break
+                    else:
+                        result["attempts"].append(
+                            {
+                                "attempt": attempt,
+                                "error": "no_valid_items",
+                                "response": raw_text[:500],
+                            }
+                        )
+                else:
+                    result["attempts"].append(
+                        {"attempt": attempt, "error": "not_array", "response": raw_text[:500]}
+                    )
+            except json.JSONDecodeError:
+                result["attempts"].append(
+                    {"attempt": attempt, "error": "json_parse_error", "response": raw_text[:500]}
+                )
+                continue
+
+        if not items:
+            result["status"] = "failed"
+
+        return items, result
 
 
 __all__ = ["OfflineDatasetGenerator"]

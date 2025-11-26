@@ -48,6 +48,13 @@ class ResponseParser:
     def parse_generator_response(self, text: str) -> dict[str, Any] | None:
         """Parse JSON response from generator LLM with error recovery."""
         candidate = self.strip_fences(text)
+
+        # Handle primed responses that start with "qa": (missing opening brace)
+        stripped_candidate = candidate.strip()
+        if stripped_candidate.startswith('"qa"') or stripped_candidate.startswith("'qa'"):
+            candidate = "{" + candidate
+            logger.debug("Prepended opening brace for primed JSON response")
+
         try:
             data = json.loads(candidate)
         except json.JSONDecodeError as exc:

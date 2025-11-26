@@ -34,6 +34,8 @@ evaluation:
   offline_tasks_path: ../evaluation/datasets/offline_tasks.jsonl
   offline_dataset_path: ../evaluation/datasets/offline_dataset.jsonl
 dataset_generation:
+  # Use chunked generation mode (separate API calls per task type) - more robust for smaller models
+  chunked_generation: true
   generator:
     provider: ollama
     model: qwen2.5:7b-instruct-q4_K_M
@@ -42,21 +44,21 @@ dataset_generation:
     timeout: 120.0
     device: auto  # retained for interface parity with transformers backend
     torch_dtype: auto
-    max_new_tokens: 768
-    temperature: 0.5
-    top_p: 0.95
+    max_new_tokens: 800
+    temperature: 0.3
+    top_p: 0.9
     repetition_penalty: 1.05
     stop_sequences: []
   questions_per_document: 8
   summary_prompts_per_document: 2
   citation_prompts_per_document: 2
-  contextual_prompts_per_document: 2
-  min_questions_per_document: 6
-  min_summary_prompts_per_document: 2
+  contextual_prompts_per_document: 0  # Disabled - causes issues with model
+  min_questions_per_document: 4
+  min_summary_prompts_per_document: 1
   min_citation_prompts_per_document: 1
-  min_contextual_prompts_per_document: 1
-  max_chunks_per_document: 8
-  max_chars_per_chunk: 1600
+  min_contextual_prompts_per_document: 0  # Disabled
+  max_chunks_per_document: 6
+  max_chars_per_chunk: 1200
   max_documents: null
   max_document_tokens: 25000
   max_document_pages: 50

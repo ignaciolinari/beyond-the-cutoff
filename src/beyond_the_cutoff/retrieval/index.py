@@ -53,6 +53,19 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
 from ..utils.chunking import chunk_text, chunk_text_sentences
 
 
+def _resolve_device(device: str | None) -> str | None:
+    """Resolve 'auto' device to actual device string for SentenceTransformer."""
+    if device is None or device.lower() != "auto":
+        return device
+    if torch is None:
+        return "cpu"
+    if torch.cuda.is_available():
+        return "cuda"
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
 @dataclass
 class DocumentIndexer:
     """Build and persist a FAISS index over text chunks."""
@@ -212,8 +225,9 @@ class DocumentIndexer:
             "convert_to_numpy": True,
             "show_progress_bar": True,
         }
-        if self.device:
-            encode_kwargs["device"] = self.device
+        resolved_device = _resolve_device(self.device)
+        if resolved_device:
+            encode_kwargs["device"] = resolved_device
 
         embeddings = model.encode(texts, **encode_kwargs)
         embeddings_array = np.asarray(embeddings, dtype="float32")

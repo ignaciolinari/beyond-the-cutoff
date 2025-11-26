@@ -88,22 +88,26 @@ def main() -> None:
     start_time = time.time()
     args = parse_args()
 
-    log_level = logging.INFO if args.verbose else logging.WARNING
-    logging.basicConfig(level=log_level, format="%(asctime)s [%(levelname)s] %(message)s")
-    logger = logging.getLogger(__name__)
+    # Always show INFO level for better visibility during long runs
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
+    )
 
-    logger.info("=" * 80)
-    logger.info("Starting offline dataset generation")
-    logger.info("=" * 80)
+    print("\n" + "=" * 70)
+    print("OFFLINE DATASET GENERATION")
+    print("=" * 70)
 
     config_load_start = time.time()
     cfg = load_config(args.config)
     config_load_time = time.time() - config_load_start
-    logger.info(f"Loaded configuration from {args.config} ({config_load_time:.2f}s)")
+    print(f"Config: {args.config} (loaded in {config_load_time:.2f}s)")
 
     index_path, mapping_path = resolve_paths(cfg, args)
-    logger.info(f"Using index: {index_path}")
-    logger.info(f"Using mapping: {mapping_path}")
+    print(f"Index: {index_path}")
+    print(f"Mapping: {mapping_path}")
 
     if not index_path.exists():
         sys.exit(f"Index file not found: {index_path}")
@@ -114,35 +118,45 @@ def main() -> None:
     if args.max_docs is not None:
         dataset_cfg = dataset_cfg.model_copy(update={"max_documents": args.max_docs})
         cfg = cfg.model_copy(update={"dataset_generation": dataset_cfg})
-        logger.info(f"Limited to {args.max_docs} documents")
+        print(f"Max documents: {args.max_docs}")
+
+    print(f"Generator model: {cfg.dataset_generation.generator.model}")
+    print(f"Timeout: {cfg.dataset_generation.generator.timeout}s")
+    print(
+        f"Tasks per doc: QA={dataset_cfg.questions_per_document}, "
+        f"Summary={dataset_cfg.summary_prompts_per_document}, "
+        f"Citation={dataset_cfg.citation_prompts_per_document}, "
+        f"Contextual={dataset_cfg.contextual_prompts_per_document}"
+    )
 
     generator_init_start = time.time()
+    print("\nInitializing generator (loading models)...", flush=True)
     generator = OfflineDatasetGenerator(
         cfg,
         index_path=index_path,
         mapping_path=mapping_path,
     )
     generator_init_time = time.time() - generator_init_start
-    logger.info(f"Initialized OfflineDatasetGenerator ({generator_init_time:.2f}s)")
-    logger.info(f"Generator model: {cfg.dataset_generation.generator.model}")
-    logger.info(
-        f"Target tasks per document: QA={dataset_cfg.questions_per_document}, "
-        f"Summaries={dataset_cfg.summary_prompts_per_document}, "
-        f"Citations={dataset_cfg.citation_prompts_per_document}, "
-        f"Contextual={dataset_cfg.contextual_prompts_per_document}"
-    )
+    print(f"Generator initialized in {generator_init_time:.1f}s")
 
     output_path = Path(args.output).resolve() if args.output else None
     raw_tasks_path = Path(args.raw_tasks).resolve() if args.raw_tasks else None
-    if output_path:
-        logger.info(f"Output dataset: {output_path}")
-    if raw_tasks_path:
-        logger.info(f"Raw tasks: {raw_tasks_path}")
-    if args.resume:
-        logger.info("Resume mode: appending to existing outputs")
 
-    logger.info("-" * 80)
-    logger.info("Starting generation...")
+    # Count documents
+    with open(mapping_path) as f:
+        doc_count = len({row.split("\t")[1] for row in f.readlines()[1:]})
+
+    print(f"\nTotal documents in corpus: {doc_count}")
+    if args.resume:
+        print("Mode: RESUME (will skip already processed documents)")
+    else:
+        print("Mode: FRESH START")
+
+    print("\n" + "-" * 70)
+    print("GENERATION IN PROGRESS")
+    print("-" * 70)
+    print("(Each document takes 1-5 minutes depending on length)\n", flush=True)
+
     generation_start = time.time()
 
     counters = generator.generate(
@@ -156,32 +170,32 @@ def main() -> None:
     generation_time = time.time() - generation_start
     total_time = time.time() - start_time
 
-    logger.info("-" * 80)
-    logger.info("Generation completed!")
-    logger.info(f"Generation time: {generation_time:.2f}s ({generation_time/60:.1f} minutes)")
-    logger.info(f"Total time: {total_time:.2f}s ({total_time/60:.1f} minutes)")
+    print("\n" + "=" * 70)
+    print("GENERATION COMPLETE!")
+    print("=" * 70)
+    print(f"Time: {generation_time/60:.1f} minutes (total: {total_time/60:.1f} min)")
+    print()
+    print(f"Documents processed: {counters.get('documents', 0)}")
+    print(f"Documents skipped:   {counters.get('documents_filtered', 0)}")
+    print()
+    print("Generated examples:")
+    print(f"  QA pairs:      {counters.get('qa', 0)}")
+    print(f"  Summaries:     {counters.get('summaries', 0)}")
+    print(f"  Citations:     {counters.get('citations', 0)}")
+    print(f"  Contextual:    {counters.get('contextual', 0)}")
+    print(f"  TOTAL:         {counters.get('examples', 0)}")
 
-    summary = (
-        f"Processed {counters.get('documents', 0)} documents | "
-        f"QA: {counters.get('qa', 0)} | Summaries: {counters.get('summaries', 0)} | "
-        f"Contextual: {counters.get('contextual', 0)} | "
-        f"Citation checks: {counters.get('citations', 0)}"
-    )
-    if counters.get("documents_filtered"):
-        summary += f" | Skipped {counters['documents_filtered']} (filters)"
-    if "documents_requested" in counters:
-        summary += (
-            f" | Requested {counters['documents_requested']}"
-            f" (found {counters['documents_found']}, missing {counters['documents_missing']})"
-        )
-
-    logger.info("=" * 80)
-    logger.info("SUMMARY")
-    logger.info("=" * 80)
-    print(summary)
     if counters.get("documents", 0) > 0:
         avg_time_per_doc = generation_time / counters.get("documents", 1)
-        logger.info(f"Average time per document: {avg_time_per_doc:.2f}s")
+        print(f"\nAverage time per document: {avg_time_per_doc:.1f}s")
+
+    # Show output file locations
+    dataset_out = output_path or cfg.dataset_generation.output_dataset_path
+    tasks_out = raw_tasks_path or cfg.dataset_generation.raw_tasks_path
+    print("\nOutput files:")
+    print(f"  Dataset: {dataset_out}")
+    print(f"  Raw tasks: {tasks_out}")
+    print("=" * 70)
 
 
 if __name__ == "__main__":

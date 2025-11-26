@@ -231,6 +231,8 @@ class DatasetGenerationConfig(BaseModel):
     For configs in `configs/`, use `../evaluation/...` to reach the repo root.
     """
 
+    # Use chunked generation (separate API calls per task type) - more robust for smaller models
+    chunked_generation: bool = Field(default=False)
     generator: InferenceConfig = Field(default_factory=_default_generator_config)
     output_dataset_path: Path = Field(default=Path("../evaluation/datasets/offline_dataset.jsonl"))
     raw_tasks_path: Path = Field(default=Path("../evaluation/datasets/offline_tasks.jsonl"))

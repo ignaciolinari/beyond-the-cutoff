@@ -42,6 +42,14 @@ else:
     CrossEncoder = getattr(_sentence_transformers, "CrossEncoder", None)
     SentenceTransformer = getattr(_sentence_transformers, "SentenceTransformer", None)
 
+try:  # pragma: no cover - optional dependency
+    import torch as _torch
+
+    _has_torch = True
+except ImportError:  # pragma: no cover - runtime guard
+    _torch = None
+    _has_torch = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -90,6 +98,10 @@ class RAGPipeline:
         self._embedder = cast(
             SentenceTransformerType, embedder_cls(self.config.retrieval.embedding_model)
         )
+        # Ensure model is in eval mode (disables dropout, etc.) for inference efficiency
+        if hasattr(self._embedder, "eval"):
+            self._embedder.eval()
+
         # Optional cross-encoder reranker
         reranker_name = (self.config.retrieval.reranker_model or "").strip()
         if reranker_name:
@@ -102,6 +114,9 @@ class RAGPipeline:
                 try:  # pragma: no cover - model download
                     reranker_cls = cast(Any, CrossEncoder)
                     self._reranker = cast(CrossEncoderType, reranker_cls(reranker_name))
+                    # Ensure reranker is in eval mode
+                    if hasattr(self._reranker, "model") and hasattr(self._reranker.model, "eval"):
+                        self._reranker.model.eval()
                 except Exception as exc:
                     self._reranker = None
                     logger.warning(
@@ -173,7 +188,12 @@ class RAGPipeline:
     def _retrieve(self, query: str, top_k: int) -> list[RetrievedChunk]:
         """Return retrieved chunk metadata ordered by relevance."""
 
-        query_embedding = self._embedder.encode([query], convert_to_numpy=True)
+        # Use inference_mode to disable gradient tracking and reduce memory
+        if _has_torch:
+            with _torch.inference_mode():
+                query_embedding = self._embedder.encode([query], convert_to_numpy=True)
+        else:
+            query_embedding = self._embedder.encode([query], convert_to_numpy=True)
         query_array = np.asarray(query_embedding, dtype="float32")
         query_nd = cast(npt.NDArray[np.float32], query_array)
         faiss.normalize_L2(query_nd)
@@ -198,7 +218,12 @@ class RAGPipeline:
         if self._reranker and results:
             pairs = [(query, chunk.text) for chunk in results]
             try:  # pragma: no cover - model inference
-                ce_scores = self._reranker.predict(pairs)
+                # Use inference_mode to disable gradient tracking and reduce memory
+                if _has_torch:
+                    with _torch.inference_mode():
+                        ce_scores = self._reranker.predict(pairs)
+                else:
+                    ce_scores = self._reranker.predict(pairs)
             except Exception as exc:
                 ce_scores = None
                 logger.warning(
