@@ -40,11 +40,6 @@ data/external/*
 data/subset20/
 evaluation/results/*
 !evaluation/results/.gitkeep
-evaluation/datasets/*.jsonl
-evaluation/datasets/*.json
-evaluation/datasets/problematic_docs.md
-configs/evaluation/datasets/*.jsonl
-configs/evaluation/datasets/*.json
 notebooks/.ipynb_checkpoints/
 
 # Logs and cache
