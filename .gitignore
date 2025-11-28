@@ -40,7 +40,13 @@ data/external/*
 data/subset20/
 evaluation/results/*
 !evaluation/results/.gitkeep
+evaluation/responses/*
+!evaluation/responses/.gitkeep
+evaluation/datasets/*
+!evaluation/datasets/.gitkeep
 notebooks/.ipynb_checkpoints/
+artifacts/
+outputs/
 
 # Logs and cache
 logs/

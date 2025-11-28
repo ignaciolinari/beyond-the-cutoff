@@ -11,6 +11,7 @@ from typing import Any
 from beyond_the_cutoff.config import ProjectConfig
 from beyond_the_cutoff.evaluation.runner import (
     EvaluationResult,
+    evaluate_pregenerated_responses,
     load_inference_from_yaml,
     run_evaluation,
 )
@@ -482,3 +483,197 @@ def _compute_artifact_paths(
     metadata_path = spec.metadata_path or output_dir / defaults.metadata_filename
 
     return metrics_path, details_path, metadata_path
+
+
+def execute_comparison_plan_with_pregenerated(
+    plan: ComparisonPlan,
+    responses_dir: Path,
+    *,
+    project_config: ProjectConfig,
+    config_path: Path,
+    limit_override: int | None = None,
+    max_retries_override: int | None = None,
+    retry_delay_override: float | None = None,
+    force: bool = False,
+    validate_same_examples: bool = True,
+) -> list[ComparisonRunResult]:
+    """Execute comparison plan using pre-generated responses (Phase 2).
+
+    This function evaluates pre-generated responses from generate_responses.py
+    using the judge, without regenerating model outputs.
+
+    Args:
+        plan: Comparison plan to execute
+        responses_dir: Directory containing pre-generated response JSONL files
+        project_config: Project configuration
+        config_path: Path to project config file
+        limit_override: Override limit for all runs
+        max_retries_override: Override max retries for judge calls
+        retry_delay_override: Override retry delay
+        force: Re-run even if results exist
+        validate_same_examples: Validate all runs use same examples
+
+    Returns:
+        List of ComparisonRunResult for each condition
+    """
+    import sys
+
+    responses_dir = responses_dir.resolve()
+    if not responses_dir.exists():
+        raise FileNotFoundError(f"Responses directory not found: {responses_dir}")
+
+    results: list[ComparisonRunResult] = []
+
+    for i, spec in enumerate(plan.runs, start=1):
+        print(f"\n[info] Run {i}/{len(plan.runs)}: {spec.label}", file=sys.stderr)
+
+        # Check for pre-generated responses
+        responses_path = responses_dir / f"{spec.label}.jsonl"
+        if not responses_path.exists():
+            print(f"[warn] Responses file not found: {responses_path}", file=sys.stderr)
+            print(f"[warn] Skipping {spec.label} - no pre-generated responses", file=sys.stderr)
+            results.append(
+                ComparisonRunResult(
+                    label=spec.label,
+                    summary={},
+                    metrics_path=None,
+                    details_path=None,
+                    metadata_path=Path("unknown"),
+                    skipped=True,
+                    skip_reason=f"No pre-generated responses at {responses_path}",
+                )
+            )
+            continue
+
+        # Compute output paths
+        metrics_path, details_path, metadata_path = _compute_artifact_paths(
+            plan.defaults, spec, ensure_dirs=True
+        )
+
+        # Check if already exists
+        if not force and metrics_path.exists():
+            print(
+                f"[info] Skipping {spec.label}: metrics already exist at {metrics_path}",
+                file=sys.stderr,
+            )
+            # Load existing summary
+            try:
+                existing_summary = json.loads(metrics_path.read_text(encoding="utf-8"))
+            except Exception:
+                existing_summary = {}
+            results.append(
+                ComparisonRunResult(
+                    label=spec.label,
+                    summary=existing_summary,
+                    metrics_path=metrics_path,
+                    details_path=details_path,
+                    metadata_path=metadata_path,
+                    skipped=True,
+                    skip_reason="Metrics already exist",
+                )
+            )
+            continue
+
+        print(f"[info] Evaluating pre-generated responses for {spec.label}...", file=sys.stderr)
+
+        # Resolve judge config
+        judge_prompt_path = spec.judge_config or plan.defaults.judge_config
+        if judge_prompt_path is None:
+            raise ValueError(f"Run '{spec.label}' is missing judge_config")
+        judge_prompt_path = judge_prompt_path.resolve()
+
+        # Resolve judge inference config
+        judge_inference_path = spec.judge_inference or plan.defaults.judge_inference
+        if judge_inference_path:
+            judge_inference_cfg = load_inference_from_yaml(judge_inference_path)
+        elif spec.model_config:
+            judge_inference_cfg = load_inference_from_yaml(spec.model_config)
+        else:
+            judge_inference_cfg = project_config.inference
+
+        # Resolve parameters
+        limit = (
+            limit_override
+            if limit_override is not None
+            else spec.limit
+            if spec.limit is not None
+            else plan.defaults.limit
+        )
+        max_retries = (
+            max_retries_override
+            if max_retries_override is not None
+            else spec.max_retries
+            if spec.max_retries is not None
+            else plan.defaults.max_retries
+        )
+        retry_delay = (
+            retry_delay_override
+            if retry_delay_override is not None
+            else spec.retry_delay
+            if spec.retry_delay is not None
+            else plan.defaults.retry_delay
+        )
+
+        # Set checkpoint path
+        checkpoint_path = metrics_path.parent / f"{metrics_path.stem}.checkpoint.json"
+
+        # Evaluate pre-generated responses
+        result: EvaluationResult = evaluate_pregenerated_responses(
+            responses_path=responses_path,
+            judge_prompt_path=judge_prompt_path,
+            judge_inference_cfg=judge_inference_cfg,
+            model_label=spec.label,
+            output_path=metrics_path,
+            details_output_path=details_path,
+            metadata_output_path=metadata_path,
+            limit=limit,
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+            checkpoint_path=checkpoint_path,
+            checkpoint_interval=10,
+            resume_from_checkpoint=True,
+        )
+
+        results.append(
+            ComparisonRunResult(
+                label=spec.label,
+                summary=result.summary,
+                metrics_path=result.metrics_path,
+                details_path=result.details_path,
+                metadata_path=result.metadata_path,
+            )
+        )
+
+    # Validate that all runs evaluated the same examples
+    if validate_same_examples and len(results) > 1:
+        task_id_sets: list[tuple[str, set[str]]] = []
+        for run_result in results:
+            if run_result.skipped:
+                continue
+            summary = run_result.summary
+            evaluated_ids = summary.get("evaluated_task_ids", [])
+            if evaluated_ids:
+                task_id_sets.append((run_result.label, set(evaluated_ids)))
+
+        if len(task_id_sets) > 1:
+            first_label, first_set = task_id_sets[0]
+            for other_label, other_set in task_id_sets[1:]:
+                if first_set != other_set:
+                    missing_in_other = first_set - other_set
+                    extra_in_other = other_set - first_set
+                    print(
+                        f"[warn] Task ID mismatch between {first_label} and {other_label}:",
+                        file=sys.stderr,
+                    )
+                    if missing_in_other:
+                        print(
+                            f"  Missing in {other_label}: {len(missing_in_other)} tasks",
+                            file=sys.stderr,
+                        )
+                    if extra_in_other:
+                        print(
+                            f"  Extra in {other_label}: {len(extra_in_other)} tasks",
+                            file=sys.stderr,
+                        )
+
+    return results

@@ -1,5 +1,5 @@
 defaults:
-  dataset: ../../evaluation/datasets/offline_dataset.jsonl
+  dataset: ../../evaluation/datasets/eval_dataset.jsonl
   judge_config: ../judges/scientific_default_rag.yaml  # Default for RAG conditions
   # IMPORTANT: Use Qwen3 8B as judge (different model family than Qwen 2.5 7B generator)
   # to avoid self-preference bias where models rate their own family's outputs favorably

@@ -1,5 +1,22 @@
 #!/usr/bin/env python3
-"""Run comparative evaluation sweeps across multiple model configurations."""
+"""Run comparative evaluation sweeps across multiple model configurations.
+
+Supports two modes:
+1. Standard mode: Generate responses and evaluate in one pass
+2. Two-phase mode: Use pre-generated responses from generate_responses.py
+
+Two-phase mode is recommended for:
+- Pairwise comparisons and ELO ranking (uses same responses)
+- Large experiments (can resume/parallelize)
+- Multiple evaluation passes with different judges
+
+Usage (two-phase):
+    # Phase 1: Generate responses
+    python scripts/generate_responses.py --plan plan.yaml --output-dir responses/
+
+    # Phase 2: Evaluate with judge
+    python scripts/compare_models.py --plan plan.yaml --responses-dir responses/
+"""
 
 from __future__ import annotations
 
@@ -14,19 +31,42 @@ from beyond_the_cutoff.evaluation.comparison import (
     build_comparison_report,
     describe_plan,
     execute_comparison_plan,
+    execute_comparison_plan_with_pregenerated,
     load_comparison_plan,
     write_report,
 )
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Compare multiple evaluation runs via a plan YAML")
+    parser = argparse.ArgumentParser(
+        description="Compare multiple evaluation runs via a plan YAML",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    # Standard mode (generate + evaluate)
+    python scripts/compare_models.py --plan configs/evaluation/compare_0p5b_experiments.yaml
+
+    # Two-phase mode (use pre-generated responses)
+    python scripts/compare_models.py --plan configs/evaluation/compare_0p5b_experiments.yaml \\
+        --responses-dir evaluation/responses/
+
+    # Dry run to see what would be executed
+    python scripts/compare_models.py --plan configs/evaluation/compare_0p5b_experiments.yaml --dry-run
+        """,
+    )
     parser.add_argument("--config", default="configs/default.yaml", help="Project config path")
     parser.add_argument("--plan", required=True, help="Comparison plan YAML path")
     parser.add_argument(
         "--output",
         default=None,
         help="Optional aggregated report JSON path (stdout always prints summary)",
+    )
+    parser.add_argument(
+        "--responses-dir",
+        type=Path,
+        default=None,
+        help="Directory with pre-generated responses (from generate_responses.py). "
+        "If provided, skips generation and only runs judge evaluation.",
     )
     parser.add_argument(
         "--limit",
@@ -107,16 +147,32 @@ def main() -> None:
     print("-" * 80, file=sys.stderr)
 
     execution_start = time.time()
-    results = execute_comparison_plan(
-        plan,
-        project_config=project_cfg,
-        config_path=config_path,
-        limit_override=args.limit,
-        max_retries_override=args.max_retries,
-        retry_delay_override=args.retry_delay,
-        force=args.force,
-        validate_same_examples=not args.no_validate_examples,
-    )
+
+    # Choose execution mode based on whether responses-dir is provided
+    if args.responses_dir:
+        print(f"[info] Using pre-generated responses from: {args.responses_dir}", file=sys.stderr)
+        results = execute_comparison_plan_with_pregenerated(
+            plan,
+            responses_dir=args.responses_dir,
+            project_config=project_cfg,
+            config_path=config_path,
+            limit_override=args.limit,
+            max_retries_override=args.max_retries,
+            retry_delay_override=args.retry_delay,
+            force=args.force,
+            validate_same_examples=not args.no_validate_examples,
+        )
+    else:
+        results = execute_comparison_plan(
+            plan,
+            project_config=project_cfg,
+            config_path=config_path,
+            limit_override=args.limit,
+            max_retries_override=args.max_retries,
+            retry_delay_override=args.retry_delay,
+            force=args.force,
+            validate_same_examples=not args.no_validate_examples,
+        )
     execution_time = time.time() - execution_start
 
     print("-" * 80, file=sys.stderr)

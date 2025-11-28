@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from beyond_the_cutoff.config import InferenceConfig, load_config
 from beyond_the_cutoff.utils.experiment_logging import compute_file_sha256
 
@@ -192,7 +194,7 @@ def validate_configuration(
         else:
             try:
                 InferenceConfig.model_validate(
-                    json.loads(model_config_path.read_text(encoding="utf-8"))
+                    yaml.safe_load(model_config_path.read_text(encoding="utf-8"))
                 )
             except Exception as exc:
                 issues.append(
@@ -216,8 +218,6 @@ def validate_configuration(
         else:
             # Check if judge config name matches prompt mode
             try:
-                import yaml
-
                 judge_data = yaml.safe_load(judge_config_path.read_text(encoding="utf-8"))
                 judge_name = str(judge_data.get("name", "")).lower()
                 is_instruction_judge = "instruction" in judge_name and "rag" not in judge_name
@@ -274,7 +274,7 @@ def validate_configuration(
         else:
             try:
                 InferenceConfig.model_validate(
-                    json.loads(judge_inference_path.read_text(encoding="utf-8"))
+                    yaml.safe_load(judge_inference_path.read_text(encoding="utf-8"))
                 )
             except Exception as exc:
                 issues.append(
