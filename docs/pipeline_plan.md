@@ -14,10 +14,16 @@ Note: The offline dataset generation system has been refactored into a modular a
 5. [Fine-Tuning](#5-fine-tuning)
 6. [Model Deployment](#6-model-deployment)
 7. [Evaluation](#7-evaluation)
+   - [7.5 Two-Phase Evaluation Pipeline](#75-two-phase-evaluation-pipeline)
+   - [7.6 Unified Pipeline Orchestrator](#76-unified-pipeline-orchestrator)
 8. [Results Analysis](#8-results-analysis)
    - [8.4 ELO Rankings (Automated)](#84-compute-elo-rankings-automated)
    - [8.5 Human Evaluation (Optional)](#85-human-evaluation-optional)
-9. [Verification & Testing](#9-verification--testing)
+9. [Post-Experiment Optimization](#9-post-experiment-optimization)
+   - [9.1 Quantization Analysis](#91-quantization-analysis)
+   - [9.2 Retrieval Optimization](#92-retrieval-optimization)
+   - [9.3 End-to-End Validation](#93-end-to-end-validation)
+10. [Verification & Testing](#10-verification--testing)
 
 ---
 
@@ -558,6 +564,94 @@ make score \
   SCORE_DETAILS=evaluation/results/rag_baseline_0p5b/automatic_metrics_details.jsonl
 ```
 
+### 7.5 Two-Phase Evaluation Pipeline
+
+For efficient evaluation of multiple conditions, the pipeline separates response generation from judging. This allows:
+- Generating all responses first (parallelizable across conditions)
+- Running expensive judging once on all responses
+- Re-running judging with different judges without regenerating responses
+
+**Phase 1: Generate Responses**
+
+```bash
+# Generate responses for all 6 conditions
+python scripts/generate_responses.py \
+  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+  --output-dir evaluation/responses/
+
+# Generate for specific conditions only
+python scripts/generate_responses.py \
+  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+  --output-dir evaluation/responses/ \
+  --conditions rag_baseline_0p5b hybrid_science_0p5b_rag_trained
+
+# Quick test with limited examples
+python scripts/generate_responses.py \
+  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+  --output-dir evaluation/responses/ \
+  --limit 5
+
+# Resume interrupted generation
+python scripts/generate_responses.py \
+  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+  --output-dir evaluation/responses/ \
+  --resume
+```
+
+**Phase 2: Evaluate Pre-generated Responses**
+
+```bash
+# Evaluate all pre-generated responses with judge
+python scripts/compare_models.py \
+  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+  --responses-dir evaluation/responses/ \
+  --output evaluation/results/comparison_results.jsonl
+
+# This runs judging on existing responses without regenerating them
+```
+
+**Benefits of two-phase approach:**
+| Aspect | Single-Phase | Two-Phase |
+|--------|--------------|-----------|
+| Time for 6 conditions | ~6x generation + judging | Generation once, then judging |
+| Resume capability | Limited | Full resume support per phase |
+| Re-judging | Must regenerate | Use existing responses |
+| Parallelization | Sequential | Can parallelize generation |
+
+### 7.6 Unified Pipeline Orchestrator
+
+For complete evaluation workflows, use the unified orchestrator script:
+
+```bash
+# Full 6-condition model comparison (generation + judging + visualization)
+python scripts/run_evaluation_pipeline.py full-comparison \
+  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+  --output-dir evaluation/results/six_condition/
+
+# Skip generation if responses already exist
+python scripts/run_evaluation_pipeline.py full-comparison \
+  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+  --output-dir evaluation/results/six_condition/ \
+  --skip-generation
+
+# Skip evaluation to only generate responses
+python scripts/run_evaluation_pipeline.py full-comparison \
+  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+  --output-dir evaluation/results/six_condition/ \
+  --skip-evaluation
+```
+
+**Available workflows:**
+
+| Workflow | Command | Purpose |
+|----------|---------|---------|
+| `full-comparison` | Model comparison | 6-condition experiment |
+| `quantization` | Q4_K_M vs F16 | Quantization impact analysis |
+| `retrieval-ablation` | Retrieval optimization | ELO tournament for retrieval configs |
+| `end-to-end` | Live retrieval validation | Full pipeline validation |
+
+See Section 9 for post-experiment optimization workflows.
+
 ---
 
 ## 8. Results Analysis
@@ -686,9 +780,164 @@ print(f\"Cohen's Kappa: {stats['cohens_kappa']:.3f}\")
 
 ---
 
-## 9. Verification & Testing
+## 9. Post-Experiment Optimization
 
-### 9.1 Run Test Suite
+After completing the 6-condition experiment and identifying the best model, proceed with these optimization stages.
+
+### 9.1 Quantization Analysis
+
+Compare Q4_K_M (current deployment) vs F16 (full precision) to determine if quantization significantly impacts quality.
+
+**Step 1: Register F16 Model with Ollama**
+
+```bash
+# Create F16 Modelfile (already created at ollama/Modelfile.rag_trained_f16)
+# Register with Ollama
+ollama create lora_science_0p5_f16 -f ollama/Modelfile.rag_trained_f16
+
+# Verify registration
+ollama list | grep lora_science
+```
+
+**Step 2: Run Quantization Comparison**
+
+```bash
+# Using unified pipeline
+python scripts/run_evaluation_pipeline.py quantization \
+  --plan configs/evaluation/quantization_comparison.yaml \
+  --output-dir evaluation/results/quantization/ \
+  --register-f16
+
+# Or manually with two-phase approach
+python scripts/generate_responses.py \
+  --plan configs/evaluation/quantization_comparison.yaml \
+  --output-dir evaluation/results/quantization/responses/
+
+python scripts/compare_models.py \
+  --plan configs/evaluation/quantization_comparison.yaml \
+  --responses-dir evaluation/results/quantization/responses/
+```
+
+**Expected outcome:** For 0.5B models, Q4_K_M typically shows minimal degradation (<2-3% on judge scores). If acceptable, prefer Q4_K_M for:
+- 2.5x smaller memory footprint
+- Faster inference on CPU
+- Fair comparison with base model quantization
+
+### 9.2 Retrieval Optimization
+
+Optimize retrieval configuration using ELO tournament with different top_k values and reranker settings.
+
+**Retrieval conditions to test:**
+
+| Condition | Retrieve K | Final K | Reranker | Description |
+|-----------|------------|---------|----------|-------------|
+| dense_top4_baseline | 4 | 4 | None | Current production config |
+| dense_top3 | 3 | 3 | None | Minimal context |
+| dense_top6 | 6 | 6 | None | More context |
+| dense_top4_rerank | 4 | 4 | BGE-v2-M3 | Same k + reranking |
+| dense_top8_rerank4 | 8 | 4 | BGE-v2-M3 | Wider net, rerank to 4 |
+| dense_top12_rerank5 | 12 | 5 | BGE-v2-M3 | Widest net, rerank to 5 |
+
+**Step 1: Run Retrieval Ablation**
+
+```bash
+# Using unified pipeline (runs all phases)
+python scripts/run_evaluation_pipeline.py retrieval-ablation \
+  --plan configs/evaluation/retrieval_ablation.yaml \
+  --output-dir evaluation/results/retrieval_ablation/
+
+# Or run generation phase separately
+python scripts/run_retrieval_ablation.py \
+  --config configs/default.yaml \
+  --plan configs/evaluation/retrieval_ablation.yaml \
+  --output-dir evaluation/results/retrieval_ablation/
+
+# Run specific conditions only
+python scripts/run_retrieval_ablation.py \
+  --config configs/default.yaml \
+  --plan configs/evaluation/retrieval_ablation.yaml \
+  --output-dir evaluation/results/retrieval_ablation/ \
+  --conditions dense_top4_baseline dense_top4_rerank
+
+# Quick test
+python scripts/run_retrieval_ablation.py \
+  --config configs/default.yaml \
+  --plan configs/evaluation/retrieval_ablation.yaml \
+  --output-dir evaluation/results/retrieval_ablation/ \
+  --limit 10
+```
+
+**Step 2: Run Pairwise Comparisons**
+
+```bash
+# Run pairwise evaluation on retrieval ablation results
+python scripts/run_pairwise_evaluation.py \
+  --results evaluation/results/retrieval_ablation/*.jsonl \
+  --judge configs/judges/pairwise_qwen3_8b.yaml \
+  --output evaluation/results/retrieval_ablation/pairwise/
+```
+
+**Step 3: Compute ELO Rankings**
+
+```bash
+# Compute ELO from pairwise comparisons
+python scripts/compute_elo_rankings.py \
+  --comparisons evaluation/results/retrieval_ablation/pairwise/pairwise_results.jsonl \
+  --output evaluation/results/retrieval_ablation/elo_rankings.json \
+  --bootstrap-samples 1000
+```
+
+**Reranker selection:**
+
+| Model | Size | Quality | Speed | Use Case |
+|-------|------|---------|-------|----------|
+| ms-marco-MiniLM-L-6-v2 | 22M | Good | Fast | Quick experiments |
+| ms-marco-MiniLM-L-12-v2 | 33M | Better | Medium | Balanced |
+| BAAI/bge-reranker-v2-m3 | 568M | Best | Slower | Production (recommended) |
+
+### 9.3 End-to-End Validation
+
+Validate the complete pipeline with live retrieval (not pre-computed contexts) using the best model and optimal retrieval configuration.
+
+```bash
+# Using unified pipeline
+python scripts/run_evaluation_pipeline.py end-to-end \
+  --plan configs/evaluation/end_to_end.yaml \
+  --output-dir evaluation/results/end_to_end/
+
+# Or run directly with custom retrieval settings
+python scripts/evaluate_end_to_end.py \
+  --config configs/default.yaml \
+  --model-config configs/lora_science_v1_rag_trained_ollama.yaml \
+  --output evaluation/results/end_to_end/
+
+# With custom retrieval parameters
+python scripts/evaluate_end_to_end.py \
+  --config configs/default.yaml \
+  --model-config configs/lora_science_v1_rag_trained_ollama.yaml \
+  --top-k 8 \
+  --reranker BAAI/bge-reranker-v2-m3 \
+  --output evaluation/results/end_to_end_optimized/
+
+# Compare with pre-computed contexts
+python scripts/evaluate_end_to_end.py \
+  --config configs/default.yaml \
+  --model-config configs/lora_science_v1_rag_trained_ollama.yaml \
+  --compare-precomputed \
+  --output evaluation/results/end_to_end/
+```
+
+**Metrics collected:**
+- Judge scores (same as offline evaluation)
+- Retrieval overlap (Jaccard similarity between live and pre-computed contexts)
+- Latency (total time including retrieval)
+- Citation metrics with live contexts
+
+---
+
+## 10. Verification & Testing
+
+### 10.1 Run Test Suite
 
 ```bash
 # Run all tests
@@ -704,7 +953,7 @@ pytest tests/test_offline_dataset.py
 pytest --cov=src/beyond_the_cutoff --cov-report=html
 ```
 
-### 9.2 Check Pipeline Status
+### 10.2 Check Pipeline Status
 
 ```bash
 # Check overall pipeline status
@@ -719,7 +968,7 @@ python scripts/validate_index_artifacts.py \
   --index-dir data/external/index
 ```
 
-### 9.3 Manual Testing
+### 10.3 Manual Testing
 
 ```bash
 # Test RAG pipeline interactively
@@ -764,15 +1013,32 @@ python scripts/generate_offline_dataset.py --config configs/default.yaml
 # 6. Model deployment (after syncing checkpoints)
 # Convert to GGUF and register with Ollama (see section 6)
 
-# 7. Evaluation
+# 7. Evaluation (two-phase for efficiency)
+python scripts/generate_responses.py \
+  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+  --output-dir evaluation/responses/
+
 python scripts/compare_models.py \
-  --config configs/default.yaml \
-  --plan configs/evaluation/compare_0p5b_experiments.yaml
+  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+  --responses-dir evaluation/responses/
 
 # 8. Visualization
 python scripts/visualize_comparison.py \
   --report evaluation/results/comparison_report.json \
   --output evaluation/results/visualizations/
+
+# 9. Post-experiment optimization (after identifying best model)
+python scripts/run_evaluation_pipeline.py quantization \
+  --plan configs/evaluation/quantization_comparison.yaml \
+  --output-dir evaluation/results/quantization/
+
+python scripts/run_evaluation_pipeline.py retrieval-ablation \
+  --plan configs/evaluation/retrieval_ablation.yaml \
+  --output-dir evaluation/results/retrieval_ablation/
+
+python scripts/run_evaluation_pipeline.py end-to-end \
+  --plan configs/evaluation/end_to_end.yaml \
+  --output-dir evaluation/results/end_to_end/
 ```
 
 ---
@@ -818,22 +1084,41 @@ beyond-the-cutoff/
 │   ├── lora_science_v1_instruction_only_ollama.yaml
 │   ├── lora_science_v1_rag_trained_ollama.yaml
 │   └── evaluation/
-│       └── compare_0p5b_experiments.yaml
+│       ├── compare_0p5b_experiments.yaml    # 6-condition experiment
+│       ├── quantization_comparison.yaml     # Q4_K_M vs F16
+│       ├── retrieval_ablation.yaml          # Retrieval optimization
+│       ├── end_to_end.yaml                  # Live retrieval validation
+│       └── lora_science_v1_rag_trained_f16_ollama.yaml
 ├── data/
 │   ├── raw/                    # Downloaded PDFs
 │   ├── processed/              # Processed text + manifests
-│   └── external/              # FAISS index
+│   └── external/               # FAISS index
 ├── evaluation/
-│   ├── datasets/              # Offline tasks and dataset
-│   └── results/               # Evaluation outputs
+│   ├── datasets/               # Offline tasks and dataset
+│   ├── responses/              # Generated responses (Phase 1)
+│   └── results/                # Evaluation outputs
 ├── outputs/                    # Fine-tuned checkpoints
 │   ├── lora_science_v1_instruction_only/
 │   └── lora_science_v1/
-├── notebooks/finetuning/       # Training notebooks
-├── scripts/                    # Pipeline scripts
-└── ollama/                     # Ollama Modelfiles
+├── scripts/
+│   ├── generate_responses.py           # Phase 1: Response generation
+│   ├── compare_models.py               # Phase 2: Evaluation with judge
+│   ├── run_evaluation_pipeline.py      # Unified pipeline orchestrator
+│   ├── run_retrieval_ablation.py       # Retrieval optimization
+│   ├── evaluate_end_to_end.py          # Live retrieval evaluation
+│   ├── run_pairwise_evaluation.py      # Pairwise comparisons
+│   ├── compute_elo_rankings.py         # ELO ranking computation
+│   └── visualize_comparison.py         # Result visualization
+├── ollama/
+│   ├── Modelfile.instruction_only
+│   ├── Modelfile.rag_trained
+│   └── Modelfile.rag_trained_f16       # F16 version for quantization study
+├── notebooks/finetuning/               # Training notebooks
+└── docs/
+    ├── pipeline_plan.md                # This document
+    └── evaluation_methodology.md       # Detailed evaluation methodology
 ```
 
 ---
 
-_Last updated: 2025-11-23_
+_Last updated: 2025-11-28_

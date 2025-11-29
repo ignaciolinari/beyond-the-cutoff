@@ -1,0 +1,91 @@
+# Retrieval Ablation Study
+# Test different retrieval configurations with the best model (fixed)
+# Used for ELO tournament to optimize retrieval parameters
+#
+# Background:
+# - Dense retrieval: FAISS + BGE-M3 embeddings (current implementation)
+# - Reranker: BGE-Reranker-v2-M3 (state-of-the-art open-source, 568M params)
+# - BM25/Hybrid: Not implemented yet, would require additional code
+#
+# Best practices for retrieval optimization:
+# 1. Compare top_k values (trade-off: more context vs. noise)
+# 2. Test with/without reranker (quality vs. latency)
+# 3. Test retrieve-more-rerank-fewer pattern (wider initial net)
+
+# Fixed model for all conditions (use winner from 6-condition experiment)
+model: lora_science_0p5
+model_config: ../lora_science_v1_rag_trained_ollama.yaml
+
+# Dataset (same as main evaluation)
+dataset: ../../evaluation/datasets/eval_dataset.jsonl
+
+# Judge configuration
+judge_config: ../judges/scientific_default_rag.yaml
+judge_inference: ../judges/dataset_quality_judge.yaml
+
+# Output directory
+output_dir: ../../evaluation/results/retrieval_ablation
+
+# Common parameters
+max_retries: 2
+retry_delay: 15.0
+limit: null
+
+# Retrieval conditions to test
+# Note: Using BAAI/bge-reranker-v2-m3 (best open-source reranker)
+# instead of ms-marco-MiniLM which is much smaller/weaker
+conditions:
+  # === BASELINE CONDITIONS (no reranker) ===
+
+  # Current production configuration
+  - label: dense_top4_baseline
+    top_k: 4
+    reranker: null
+    description: "Current config from default.yaml (top_k=4, no reranker)"
+
+  # Fewer contexts - tests if minimal high-quality context is better
+  - label: dense_top3
+    top_k: 3
+    reranker: null
+    description: "Minimal context - less noise, but might miss info"
+
+  # More contexts - tests if additional context helps
+  - label: dense_top6
+    top_k: 6
+    reranker: null
+    description: "More context - might help complex questions"
+
+  # === WITH BGE RERANKER (state-of-the-art) ===
+
+  # Same top_k but with reranking for quality
+  - label: dense_top4_rerank
+    top_k: 4
+    reranker: BAAI/bge-reranker-v2-m3
+    description: "Baseline + BGE reranker - better ranking of same docs"
+
+  # Retrieve more, rerank to fewer (recommended pattern)
+  - label: dense_top8_rerank4
+    top_k: 8
+    rerank_top_k: 4
+    reranker: BAAI/bge-reranker-v2-m3
+    description: "Wider net (8) then rerank to top 4 - best practice pattern"
+
+  # Maximum retrieval with aggressive reranking
+  - label: dense_top12_rerank5
+    top_k: 12
+    rerank_top_k: 5
+    reranker: BAAI/bge-reranker-v2-m3
+    description: "Very wide net (12) reranked to 5 - highest quality potential"
+
+# Pairwise evaluation settings for ELO tournament
+pairwise:
+  comparisons_per_pair: 50  # Questions to compare per pair of conditions
+  judge_config: ../judges/pairwise_qwen3_8b.yaml
+  k_factor: 32.0  # ELO K-factor (higher = faster convergence)
+  bootstrap_samples: 1000  # For confidence intervals
+  seed: 42
+
+# Future work (requires implementation):
+# - BM25 sparse retrieval baseline
+# - Hybrid retrieval (dense + BM25 with alpha weighting)
+# - Query expansion/rewriting

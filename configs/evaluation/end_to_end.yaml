@@ -1,0 +1,29 @@
+# End-to-End Evaluation Configuration
+# Validates full RAG pipeline with LIVE retrieval
+
+# Model to evaluate (winner from main experiment)
+model: lora_science_0p5
+model_config: ../lora_science_v1_rag_trained_ollama.yaml
+
+# Dataset (same as main evaluation)
+dataset: ../../evaluation/datasets/eval_dataset.jsonl
+
+# Judge configuration
+judge_config: ../judges/scientific_default_rag.yaml
+judge_inference: ../judges/dataset_quality_judge.yaml
+
+# Output settings
+output_dir: ../../evaluation/results/end_to_end
+
+# Retrieval configuration for live retrieval
+retrieval:
+  top_k: 5
+  reranker: null  # Optional: cross-encoder/ms-marco-MiniLM-L-6-v2
+
+# Evaluation settings
+max_retries: 2
+retry_delay: 15.0
+limit: null
+
+# Comparison with pre-computed contexts
+compare_precomputed: true  # Compare live retrieval with dataset contexts

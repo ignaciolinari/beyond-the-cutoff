@@ -402,6 +402,78 @@ Features:
 
 Judge configurations are stored in `configs/judges/` (e.g., `pairwise_qwen3_8b.yaml`, `pairwise_llama31_8b.yaml`). Note: `pairwise_qwen7b.yaml` exists but is excluded from the main experiment to avoid model family self-preference bias with the Qwen 2.5 7B dataset generator.
 
+### Two-Phase Evaluation Pipeline
+
+For efficient evaluation of multiple model conditions, the pipeline separates response generation from judging:
+
+```bash
+# Phase 1: Generate responses for all conditions (parallelizable)
+python scripts/generate_responses.py \
+    --plan configs/evaluation/compare_0p5b_experiments.yaml \
+    --output-dir evaluation/responses/
+
+# Phase 2: Evaluate pre-generated responses with judge
+python scripts/compare_models.py \
+    --plan configs/evaluation/compare_0p5b_experiments.yaml \
+    --responses-dir evaluation/responses/ \
+    --output evaluation/results/comparison_results.jsonl
+```
+
+Benefits:
+- **Efficiency**: Generate all responses first, then run expensive judging once
+- **Resumability**: Both phases support `--resume` to continue interrupted runs
+- **Flexibility**: Re-run judging with different judges without regenerating responses
+
+### Unified Evaluation Pipeline
+
+For orchestrating complete evaluation workflows, use the unified pipeline script:
+
+```bash
+# Full 6-condition model comparison
+python scripts/run_evaluation_pipeline.py full-comparison \
+    --plan configs/evaluation/compare_0p5b_experiments.yaml \
+    --output-dir evaluation/results/six_condition/
+
+# Quantization comparison (Q4_K_M vs F16)
+python scripts/run_evaluation_pipeline.py quantization \
+    --plan configs/evaluation/quantization_comparison.yaml \
+    --output-dir evaluation/results/quantization/
+
+# Retrieval ablation with ELO ranking
+python scripts/run_evaluation_pipeline.py retrieval-ablation \
+    --plan configs/evaluation/retrieval_ablation.yaml \
+    --output-dir evaluation/results/retrieval_ablation/
+
+# End-to-end validation with live retrieval
+python scripts/run_evaluation_pipeline.py end-to-end \
+    --plan configs/evaluation/end_to_end.yaml \
+    --output-dir evaluation/results/end_to_end/
+```
+
+### Retrieval Optimization
+
+Once the best model is identified, optimize retrieval configuration using the ablation study:
+
+```bash
+# Generate responses with different retrieval configs (top_k, reranker, etc.)
+python scripts/run_retrieval_ablation.py \
+    --config configs/default.yaml \
+    --plan configs/evaluation/retrieval_ablation.yaml \
+    --output-dir evaluation/results/retrieval_ablation/
+
+# Compute ELO rankings from pairwise comparisons
+python scripts/compute_elo_rankings.py \
+    --comparisons evaluation/results/retrieval_ablation/pairwise_results.jsonl \
+    --output evaluation/results/retrieval_ablation/elo_rankings.json
+```
+
+The retrieval ablation tests:
+- **Top-k variants**: 3, 4, 6, 8, 12 contexts
+- **Reranking**: With/without BGE-Reranker-v2-M3 (state-of-the-art open-source)
+- **Retrieve-more-rerank-fewer pattern**: e.g., retrieve 12, rerank to top 5
+
+See `docs/evaluation_methodology.md` for detailed methodology and `configs/evaluation/retrieval_ablation.yaml` for configuration.
+
 ### Human Evaluation (Optional)
 
 For validation studies requiring human judgment:

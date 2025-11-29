@@ -1,0 +1,31 @@
+# Quantization Comparison: Q4_K_M vs F16
+# Compare the best fine-tuned model at different quantization levels
+# This config should be used AFTER the 6-condition experiment identifies the winner
+
+defaults:
+  dataset: ../../evaluation/datasets/eval_dataset.jsonl
+  judge_config: ../judges/scientific_default_rag.yaml
+  judge_inference: ../judges/dataset_quality_judge.yaml
+  output_dir: ../../evaluation/results/quantization_comparison
+  metrics_filename: metrics.json
+  details_filename: details.jsonl
+  metadata_filename: metadata.jsonl
+  limit: null
+  max_retries: 2
+  retry_delay: 15.0
+  skip_if_exists: true
+  prompt_mode: rag
+
+runs:
+  # Q4_K_M quantized version (current deployment ~397MB)
+  - label: lora_science_0p5b_q4km
+    model_config: ../lora_science_v1_rag_trained_ollama.yaml
+    prompt_mode: rag
+    judge_config: ../judges/scientific_default_rag.yaml
+
+  # F16 full precision version (~988MB)
+  # Requires: ollama create lora_science_0p5_f16 -f ollama/Modelfile.rag_trained_f16
+  - label: lora_science_0p5b_f16
+    model_config: lora_science_v1_rag_trained_f16_ollama.yaml
+    prompt_mode: rag
+    judge_config: ../judges/scientific_default_rag.yaml
