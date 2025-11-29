@@ -1,0 +1,19 @@
+# Llama 3.1 8B Judge Configuration
+#
+# Alternative judge model for comparison with Qwen3 8B.
+# Using a different model family helps validate judge consistency.
+#
+# Llama 3.1 tends to be faster than Qwen3 with thinking mode enabled.
+
+provider: ollama
+model: llama3.1:8b
+host: http://localhost
+port: 11434
+timeout: 180.0
+max_new_tokens: 1024
+temperature: 0.0  # Deterministic for consistent evaluation
+top_p: 0.95
+repetition_penalty: 1.0
+stop_sequences:
+  - "<|eot_id|>"
+  - "<|start_header_id|>"

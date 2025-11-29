@@ -43,6 +43,7 @@ evaluation/results/*
 evaluation/responses/*
 !evaluation/responses/.gitkeep
 evaluation/datasets/*
+evaluation/*
 !evaluation/datasets/.gitkeep
 notebooks/.ipynb_checkpoints/
 artifacts/

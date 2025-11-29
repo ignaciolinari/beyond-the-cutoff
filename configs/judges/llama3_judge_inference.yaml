@@ -1,0 +1,18 @@
+# Llama 3.1 8B Judge Inference Configuration
+#
+# Use this for judge inference with Llama 3.1 8B model.
+# This is SEPARATE from the judge prompt/rubric config.
+
+provider: ollama
+model: llama3.1:8b
+host: http://localhost
+port: 11434
+timeout: 180.0
+max_new_tokens: 1024
+temperature: 0.0  # Deterministic for consistent evaluation (no thinking mode like Qwen3)
+top_p: 0.95
+repetition_penalty: 1.0
+# Llama 3.1 stop tokens
+stop_sequences:
+  - "<|eot_id|>"
+  - "<|start_header_id|>"

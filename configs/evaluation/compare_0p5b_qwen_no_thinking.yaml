@@ -1,0 +1,69 @@
+defaults:
+  dataset: ../../evaluation/datasets/eval_dataset.jsonl
+  judge_config: ../judges/scientific_default_rag.yaml  # Default for RAG conditions
+  # IMPORTANT: Use Qwen3 8B as judge (different model family than Qwen 2.5 7B generator)
+  # to avoid self-preference bias where models rate their own family's outputs favorably
+  judge_inference: ../judges/qwen3_judge_no_thinking.yaml
+  output_dir: ../../evaluation/results
+  metrics_filename: metrics.json
+  details_filename: details.jsonl
+  metadata_filename: metadata.jsonl
+  limit: null
+  max_retries: 2
+  retry_delay: 15.0
+  skip_if_exists: true
+  prompt_mode: rag  # Default, can be overridden per run
+runs:
+  # 1. Base Baseline: Base model (0.5B) WITHOUT RAG contexts
+  # Establishes baseline performance without fine-tuning or RAG
+  # Uses instruction-only judge (no citation requirements)
+  - label: base_baseline_0p5b
+    model_config: ../rag_baseline_ollama.yaml
+    prompt_mode: instruction
+    judge_config: ../judges/scientific_default_instruction.yaml
+
+  # 2. RAG Baseline: Base model (0.5B) with RAG contexts
+  # Uses RAG judge (checks citations and grounding)
+  - label: rag_baseline_0p5b
+    model_config: ../rag_baseline_ollama.yaml
+    prompt_mode: rag
+    judge_config: ../judges/scientific_default_rag.yaml
+
+  # 3. FT Only: Fine-tuned model (0.5B) WITHOUT RAG contexts
+  # Uses instruction-only trained model (trained without contexts)
+  # Uses instruction-only judge (no citation requirements)
+  - label: lora_science_0p5b_ft_only
+    model_config: ../lora_science_v1_instruction_only_ollama.yaml
+    prompt_mode: instruction
+    judge_config: ../judges/scientific_default_instruction.yaml
+
+  # 4. FT+RAG (instruction-only): Instruction-only trained model WITH RAG contexts
+  # Tests transfer learning - model trained without contexts, evaluated with contexts
+  # Note: This may underperform because model wasn't trained to use contexts
+  # Uses RAG judge (checks citations and grounding)
+  # IMPORTANT: Uses STANDARD RAG prompt format (same as Conditions 2 and 6) for fair
+  # comparison. The model experiences distribution shift (trained on simple format,
+  # evaluated with full RAG format), which is the intended transfer learning test.
+  # Note: Condition 5 is in the instruction group (evaluated WITHOUT contexts).
+  # See: src/beyond_the_cutoff/evaluation/runner.py::_build_rag_prompt_for_instruction_only_model()
+  - label: hybrid_science_0p5b_instruction_only
+    model_config: ../lora_science_v1_instruction_only_ollama.yaml
+    prompt_mode: rag
+    judge_config: ../judges/scientific_default_rag.yaml
+
+  # 5. RAG-trained FT Only: RAG-trained model WITHOUT RAG contexts
+  # Model trained WITH contexts, evaluated WITHOUT contexts
+  # Tests: Does training with contexts hurt performance when contexts aren't available?
+  # Uses instruction-only judge (no citation requirements)
+  - label: lora_science_0p5b_rag_trained_ft_only
+    model_config: ../lora_science_v1_rag_trained_ollama.yaml
+    prompt_mode: instruction
+    judge_config: ../judges/scientific_default_instruction.yaml
+
+  # 6. RAG-trained FT+RAG: RAG-trained model WITH RAG contexts
+  # Model trained WITH contexts, evaluated WITH contexts (optimal setup)
+  # Uses RAG judge (checks citations and grounding)
+  - label: hybrid_science_0p5b_rag_trained
+    model_config: ../lora_science_v1_rag_trained_ollama.yaml
+    prompt_mode: rag
+    judge_config: ../judges/scientific_default_rag.yaml

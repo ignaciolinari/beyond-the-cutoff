@@ -203,6 +203,7 @@ def generate_responses_for_condition(
                 "task_id": task_id,
                 "task_type": example.get("task_type"),
                 "instruction": instruction,
+                "expected_response": example.get("expected_response", ""),  # Ground truth for judge
                 "prompt_text": prompt_text,
                 "response": response_text,
                 "contexts": normalize_contexts(contexts_raw) if contexts_raw else [],

@@ -17,7 +17,12 @@ from typing import Any
 import yaml
 
 from beyond_the_cutoff.config import InferenceConfig, ProjectConfig
-from beyond_the_cutoff.evaluation.metrics import evaluate_citations, normalize_contexts
+from beyond_the_cutoff.evaluation.metrics import (
+    compute_bertscore,
+    compute_bleu,
+    evaluate_citations,
+    normalize_contexts,
+)
 from beyond_the_cutoff.models import LLMClient, build_generation_client
 from beyond_the_cutoff.types import ModelType
 from beyond_the_cutoff.utils.experiment_logging import append_experiment_record
@@ -73,15 +78,26 @@ def load_judge_prompt(path: Path) -> JudgePrompt:
 
 
 def render_judge_prompt(
-    template: str, question: str, contexts: Iterable[Any], answer: str, *, has_contexts: bool = True
+    template: str,
+    question: str,
+    contexts: Iterable[Any],
+    answer: str,
+    *,
+    has_contexts: bool = True,
+    expected_response: str = "",
 ) -> str:
     numbered_contexts = normalize_contexts(contexts) if has_contexts else []
     context_block = (
         "\n\n".join(numbered_contexts) if numbered_contexts else "(No contexts provided)"
     )
-    rendered = template.replace("QUESTION", question.strip())
-    rendered = rendered.replace("ASSISTANT_RESPONSE", answer.strip())
-    rendered = rendered.replace("CONTEXTS", context_block)
+    rendered = template.replace("{{QUESTION}}", question.strip())
+    rendered = rendered.replace("{{ASSISTANT_RESPONSE}}", answer.strip())
+    rendered = rendered.replace("{{CONTEXTS}}", context_block)
+    # Add expected response for ground truth verification
+    expected_block = (
+        expected_response.strip() if expected_response else "(No reference answer provided)"
+    )
+    rendered = rendered.replace("{{EXPECTED_RESPONSE}}", expected_block)
     return rendered
 
 
@@ -335,6 +351,14 @@ def summarise_scores(score_rows: list[dict[str, Any]]) -> dict[str, Any]:
     instruction_only_count = 0
     rag_count = 0
 
+    # Collect predictions and references for BLEU/BERTScore
+    predictions: list[str] = []
+    references: list[str] = []
+
+    # Collect response length statistics
+    word_counts: list[int] = []
+    char_counts: list[int] = []
+
     # Track error categories
     error_category_counts: dict[str, int] = defaultdict(int)
     error_stage_counts: dict[str, int] = defaultdict(int)
@@ -345,6 +369,23 @@ def summarise_scores(score_rows: list[dict[str, Any]]) -> dict[str, Any]:
             if isinstance(value, int | float):
                 metrics[key].append(float(value))
         citation_metrics = row.get("citation_metrics", {})
+
+        # Collect model answer and expected response for reference metrics
+        model_answer = row.get("model_answer", "")
+        expected_response = row.get("expected_response", "")
+        if model_answer and expected_response:
+            predictions.append(str(model_answer).strip())
+            references.append(str(expected_response).strip())
+
+        # Collect response length statistics
+        response_length = row.get("response_length", {})
+        if response_length:
+            word_count = response_length.get("word_count", 0)
+            char_count = response_length.get("char_count", 0)
+            if isinstance(word_count, int | float):
+                word_counts.append(int(word_count))
+            if isinstance(char_count, int | float):
+                char_counts.append(int(char_count))
 
         # Validate citation metrics mode
         citation_mode = citation_metrics.get("mode")
@@ -398,6 +439,43 @@ def summarise_scores(score_rows: list[dict[str, Any]]) -> dict[str, Any]:
         "instruction_only": instruction_only_count,
         "rag": rag_count,
     }
+
+    # Compute response length statistics
+    summary["response_length"] = {
+        "mean_word_count": mean(word_counts) if word_counts else 0.0,
+        "mean_char_count": mean(char_counts) if char_counts else 0.0,
+        "min_word_count": min(word_counts) if word_counts else 0,
+        "max_word_count": max(word_counts) if word_counts else 0,
+        "total_responses": len(word_counts),
+    }
+
+    # Compute reference-based metrics (BLEU, BERTScore)
+    if predictions and references:
+        print(
+            f"[info] Computing reference metrics for {len(predictions)} prediction-reference pairs...",
+            file=sys.stderr,
+        )
+        try:
+            bleu_score = compute_bleu(predictions, references)
+            summary["bleu"] = bleu_score
+        except Exception as exc:
+            print(f"[warn] Failed to compute BLEU score: {exc}", file=sys.stderr)
+            summary["bleu"] = None
+
+        try:
+            bertscore_results = compute_bertscore(predictions, references, lang="en")
+            summary["bertscore"] = bertscore_results
+        except Exception as exc:
+            print(f"[warn] Failed to compute BERTScore: {exc}", file=sys.stderr)
+            summary["bertscore"] = None
+    else:
+        summary["bleu"] = None
+        summary["bertscore"] = None
+        if not predictions:
+            print(
+                "[warn] No valid prediction-reference pairs found for reference metrics.",
+                file=sys.stderr,
+            )
 
     # Add error statistics
     if error_category_counts or error_stage_counts:
@@ -1037,12 +1115,16 @@ def run_evaluation(
             citation_metrics["mode"] = "rag"
             citation_metrics["validated"] = True
 
+        # Extract expected response for ground truth verification
+        expected_response = example.get("expected_response", "")
+
         judge_prompt_text = render_judge_prompt(
             judge_prompt.prompt,
             instruction,
             contexts_numbered,
             assistant_answer,
             has_contexts=has_contexts,
+            expected_response=expected_response,
         )
         judge_response = None
         judge_payload: dict[str, Any] = {}
@@ -1070,14 +1152,23 @@ def run_evaluation(
 
         judge_scores = judge_payload.get("scores") if isinstance(judge_payload, dict) else {}
 
+        # Compute response length metrics
+        response_word_count = len(assistant_answer.split()) if assistant_answer else 0
+        response_char_count = len(assistant_answer) if assistant_answer else 0
+
         row_data: dict[str, Any] = {
             "task_id": task_id,
             "task_type": example.get("task_type"),
             "model_answer": assistant_answer,
+            "expected_response": expected_response,
             "judge_scores": judge_scores if isinstance(judge_scores, dict) else {},
             "judge_verdict": judge_payload.get("verdict"),
             "citation_metrics": citation_metrics,
             "model_label": model_label,
+            "response_length": {
+                "word_count": response_word_count,
+                "char_count": response_char_count,
+            },
             "timing": {
                 "generation_seconds": generation_time,
                 "judge_seconds": judge_time,
@@ -1178,6 +1269,24 @@ def run_evaluation(
         f"[info] Average total time per example: {timing_stats.get('mean_total_seconds', 0):.2f}s",
         file=sys.stderr,
     )
+
+    # Print reference metrics summary
+    if summary.get("bleu") is not None:
+        print(f"[info] BLEU score: {summary['bleu']:.4f}", file=sys.stderr)
+    if summary.get("bertscore"):
+        bertscore = summary["bertscore"]
+        print(
+            f"[info] BERTScore: P={bertscore.get('precision', 0):.4f} "
+            f"R={bertscore.get('recall', 0):.4f} F1={bertscore.get('f1', 0):.4f}",
+            file=sys.stderr,
+        )
+    response_length = summary.get("response_length", {})
+    if response_length:
+        print(
+            f"[info] Response length: mean={response_length.get('mean_word_count', 0):.0f} words "
+            f"(range: {response_length.get('min_word_count', 0)}-{response_length.get('max_word_count', 0)})",
+            file=sys.stderr,
+        )
 
     summary.update(
         {
@@ -1573,6 +1682,7 @@ def evaluate_pregenerated_responses(
             instruction = record.get("instruction", "")
             response_text = record.get("response", "")
             contexts = record.get("contexts", [])
+            expected_response = record.get("expected_response", "")
             generation_error = record.get("error")
 
             record_errors: dict[str, str] = {}
@@ -1611,6 +1721,7 @@ def evaluate_pregenerated_responses(
                 contexts,
                 response_text,
                 has_contexts=has_contexts,
+                expected_response=expected_response,
             )
 
             judge_response = None
@@ -1636,21 +1747,33 @@ def evaluate_pregenerated_responses(
                         error_categories["judge"] = judge_error_category
 
                 if judge_response is not None:
-                    judge_payload = parse_judge_output(str(judge_response.get("response", "")))
+                    raw_judge_output = str(judge_response.get("response", ""))
+                    judge_payload = parse_judge_output(raw_judge_output)
+                    judge_payload["raw_output"] = raw_judge_output  # Preserve full reasoning
 
             judge_scores = judge_payload.get("scores") if isinstance(judge_payload, dict) else {}
 
             # Use pre-recorded generation time if available
             generation_time = record.get("generation_time_seconds", 0.0)
 
+            # Compute response length metrics
+            response_word_count = len(response_text.split()) if response_text else 0
+            response_char_count = len(response_text) if response_text else 0
+
             row_data: dict[str, Any] = {
                 "task_id": task_id,
                 "task_type": record.get("task_type"),
                 "model_answer": response_text,
+                "expected_response": expected_response,
                 "judge_scores": judge_scores if isinstance(judge_scores, dict) else {},
                 "judge_verdict": judge_payload.get("verdict"),
+                "judge_raw_output": judge_payload.get("raw_output"),  # Full reasoning preserved
                 "citation_metrics": citation_metrics,
                 "model_label": model_label,
+                "response_length": {
+                    "word_count": response_word_count,
+                    "char_count": response_char_count,
+                },
                 "timing": {
                     "generation_seconds": generation_time,
                     "judge_seconds": judge_time,

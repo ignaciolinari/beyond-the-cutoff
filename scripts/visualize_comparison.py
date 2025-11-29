@@ -487,6 +487,159 @@ def plot_timing_comparison(
     print(f"[info] Saved timing comparison to {output_path}")
 
 
+def plot_reference_metrics(
+    data: dict[str, dict[str, Any]], output_dir: Path, *, figsize: tuple[int, int] = (14, 5)
+) -> None:
+    """Create visualization for reference-based metrics (BLEU, BERTScore)."""
+    labels = list(data.keys())
+
+    bleu_scores = []
+    bertscore_f1 = []
+    bertscore_precision = []
+    bertscore_recall = []
+
+    for label in labels:
+        bleu = data[label].get("bleu")
+        bertscore = data[label].get("bertscore", {})
+
+        bleu_scores.append(float(bleu) if bleu is not None else 0.0)
+
+        if isinstance(bertscore, dict):
+            bertscore_f1.append(float(bertscore.get("f1", 0.0)))
+            bertscore_precision.append(float(bertscore.get("precision", 0.0)))
+            bertscore_recall.append(float(bertscore.get("recall", 0.0)))
+        else:
+            bertscore_f1.append(0.0)
+            bertscore_precision.append(0.0)
+            bertscore_recall.append(0.0)
+
+    # Check if we have any data
+    has_bleu = any(bleu_scores)
+    has_bertscore = any(bertscore_f1)
+
+    if not has_bleu and not has_bertscore:
+        print("[warn] No reference metrics (BLEU/BERTScore) found in data", file=sys.stderr)
+        return
+
+    fig, axes = plt.subplots(1, 2, figsize=figsize)
+
+    # BLEU Score plot
+    ax1 = axes[0]
+    colors = sns.color_palette("viridis", len(labels))
+    bars1 = ax1.bar(labels, bleu_scores, color=colors, alpha=0.8)
+    ax1.set_xlabel("Model", fontsize=11, fontweight="bold")
+    ax1.set_ylabel("BLEU Score", fontsize=11, fontweight="bold")
+    ax1.set_title("BLEU Score Comparison", fontsize=12, fontweight="bold")
+    ax1.set_xticklabels(labels, rotation=45, ha="right")
+    ax1.grid(axis="y", alpha=0.3)
+    ax1.set_ylim(0, max(max(bleu_scores) * 1.2, 0.1) if bleu_scores else 0.1)
+
+    # Add value labels
+    for bar, score in zip(bars1, bleu_scores, strict=True):
+        if score > 0:
+            ax1.text(
+                bar.get_x() + bar.get_width() / 2.0,
+                bar.get_height(),
+                f"{score:.3f}",
+                ha="center",
+                va="bottom",
+                fontsize=9,
+            )
+
+    # BERTScore plot
+    ax2 = axes[1]
+    x = np.arange(len(labels))
+    width = 0.25
+
+    ax2.bar(x - width, bertscore_precision, width, label="Precision", color="#1f77b4", alpha=0.7)
+    ax2.bar(x, bertscore_recall, width, label="Recall", color="#ff7f0e", alpha=0.7)
+    ax2.bar(x + width, bertscore_f1, width, label="F1", color="#2ca02c", alpha=0.7)
+
+    ax2.set_xlabel("Model", fontsize=11, fontweight="bold")
+    ax2.set_ylabel("Score", fontsize=11, fontweight="bold")
+    ax2.set_title("BERTScore Comparison", fontsize=12, fontweight="bold")
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(labels, rotation=45, ha="right")
+    ax2.legend(loc="best")
+    ax2.grid(axis="y", alpha=0.3)
+    ax2.set_ylim(0, 1.0)
+
+    plt.tight_layout()
+    output_path = output_dir / "reference_metrics.png"
+    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close()
+    print(f"[info] Saved reference metrics comparison to {output_path}")
+
+
+def plot_response_length(
+    data: dict[str, dict[str, Any]], output_dir: Path, *, figsize: tuple[int, int] = (12, 5)
+) -> None:
+    """Create visualization for response length statistics."""
+    labels = list(data.keys())
+
+    mean_words = []
+    min_words = []
+    max_words = []
+
+    for label in labels:
+        response_length = data[label].get("response_length", {})
+        if isinstance(response_length, dict):
+            mean_words.append(float(response_length.get("mean_word_count", 0.0)))
+            min_words.append(int(response_length.get("min_word_count", 0)))
+            max_words.append(int(response_length.get("max_word_count", 0)))
+        else:
+            mean_words.append(0.0)
+            min_words.append(0)
+            max_words.append(0)
+
+    if not any(mean_words):
+        print("[warn] No response length data found", file=sys.stderr)
+        return
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+
+    # Mean word count bar chart
+    colors = sns.color_palette("coolwarm", len(labels))
+    bars = ax1.bar(labels, mean_words, color=colors, alpha=0.8)
+    ax1.set_xlabel("Model", fontsize=11, fontweight="bold")
+    ax1.set_ylabel("Mean Word Count", fontsize=11, fontweight="bold")
+    ax1.set_title("Average Response Length", fontsize=12, fontweight="bold")
+    ax1.set_xticklabels(labels, rotation=45, ha="right")
+    ax1.grid(axis="y", alpha=0.3)
+
+    # Add value labels
+    for bar, count in zip(bars, mean_words, strict=True):
+        if count > 0:
+            ax1.text(
+                bar.get_x() + bar.get_width() / 2.0,
+                bar.get_height(),
+                f"{count:.0f}",
+                ha="center",
+                va="bottom",
+                fontsize=9,
+            )
+
+    # Min/Max range plot
+    x = np.arange(len(labels))
+    ax2.bar(x, max_words, width=0.6, label="Max", color="#d62728", alpha=0.6)
+    ax2.bar(x, mean_words, width=0.6, label="Mean", color="#2ca02c", alpha=0.8)
+    ax2.bar(x, min_words, width=0.6, label="Min", color="#1f77b4", alpha=0.6)
+
+    ax2.set_xlabel("Model", fontsize=11, fontweight="bold")
+    ax2.set_ylabel("Word Count", fontsize=11, fontweight="bold")
+    ax2.set_title("Response Length Range", fontsize=12, fontweight="bold")
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(labels, rotation=45, ha="right")
+    ax2.legend(loc="best")
+    ax2.grid(axis="y", alpha=0.3)
+
+    plt.tight_layout()
+    output_path = output_dir / "response_length.png"
+    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close()
+    print(f"[info] Saved response length comparison to {output_path}")
+
+
 def plot_prompt_mode_comparison(
     data: dict[str, dict[str, Any]], output_dir: Path, *, figsize: tuple[int, int] = (10, 6)
 ) -> None:
@@ -1165,6 +1318,8 @@ def main() -> int:
             "error-rates",
             "citations",
             "timing",
+            "reference-metrics",
+            "response-length",
             "prompt-mode",
             "task-type",
             "confusion-matrices",
@@ -1186,6 +1341,12 @@ def main() -> int:
 
     if "timing" in visualizations:
         plot_timing_comparison(data, args.output)
+
+    if "reference-metrics" in visualizations:
+        plot_reference_metrics(data, args.output)
+
+    if "response-length" in visualizations:
+        plot_response_length(data, args.output)
 
     if "prompt-mode" in visualizations:
         plot_prompt_mode_comparison(data, args.output)

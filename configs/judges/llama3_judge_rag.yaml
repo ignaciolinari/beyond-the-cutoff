@@ -1,8 +1,29 @@
-name: scientific_default_rag
+# Llama 3.1 8B Judge Configuration - RAG Mode
+#
+# Alternative judge model for comparison with Qwen3 8B.
+# Using a different model family helps validate judge consistency.
+# Llama 3.1 tends to be faster than Qwen3 with thinking mode enabled.
+
+# Model configuration
+provider: ollama
+model: llama3.1:8b
+host: http://localhost
+port: 11434
+timeout: 180.0
+max_new_tokens: 1024
+temperature: 0.0  # Deterministic for consistent evaluation
+top_p: 0.95
+repetition_penalty: 1.0
+stop_sequences:
+  - "<|eot_id|>"
+  - "<|start_header_id|>"
+
+# Judge rubric configuration
+name: llama3_judge_rag
 version: 0.2.0
 description: >-
   Judge rubric for evaluating retrieval-augmented answers (with RAG contexts) to post-cutoff scientific questions.
-  Enforces citation grounding, factual accuracy against expected response, and clarity. Use this for conditions that include RAG contexts.
+  Uses Llama 3.1 8B as judge model. Enforces citation grounding, factual accuracy against expected response, and clarity.
 prompt: |
   You are a meticulous scientific reviewer. Your task is to evaluate how well the assistant's response
   answers the question using the provided contexts, compared against the expected (correct) answer.

@@ -1,0 +1,22 @@
+# Qwen3 8B Judge Inference Configuration - NO Thinking Mode
+#
+# Same as dataset_quality_judge.yaml but with temperature=0.0
+# to disable thinking mode for faster inference.
+#
+# Comparison:
+# - temperature=0.6: Enables thinking mode (<think>...</think>), slower but more thorough
+# - temperature=0.0: Disables thinking mode, faster and deterministic
+
+provider: ollama
+model: qwen3:8b
+host: http://localhost
+port: 11434
+timeout: 180.0
+max_new_tokens: 1024
+temperature: 0.0  # DISABLED thinking mode for speed comparison
+top_p: 0.95
+repetition_penalty: 1.0
+# Qwen3 ChatML stop tokens
+stop_sequences:
+  - "<|im_start|>"
+  - "<|im_end|>"
