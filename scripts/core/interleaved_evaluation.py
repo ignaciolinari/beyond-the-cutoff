@@ -50,7 +50,12 @@ from beyond_the_cutoff.evaluation.comparison import (
     load_comparison_plan,
 )
 from beyond_the_cutoff.evaluation.metrics import (
+    citation_precision,
+    citation_recall,
+    compute_bertscore,
+    compute_bleu,
     evaluate_citations,
+    grounded_fraction,
     normalize_contexts,
 )
 from beyond_the_cutoff.evaluation.runner import (
@@ -301,6 +306,20 @@ def evaluate_single_example(
     has_contexts = prompt_mode == "rag" and len(contexts_raw) > 0
     citation_metrics = evaluate_citations(assistant_answer, contexts_numbered)
 
+    # Add citation precision and recall
+    citation_metrics["precision"] = citation_precision(citation_metrics)
+    citation_metrics["recall"] = citation_recall(
+        citation_metrics, total_contexts=citation_metrics.get("total_contexts", 0)
+    )
+
+    # Add grounded fraction (lexical overlap with contexts)
+    if has_contexts and contexts_numbered:
+        citation_metrics["grounded_fraction"] = grounded_fraction(
+            assistant_answer, contexts_numbered
+        )
+    else:
+        citation_metrics["grounded_fraction"] = 0.0
+
     if prompt_mode == "instruction":
         citation_metrics = {
             **citation_metrics,
@@ -323,6 +342,7 @@ def evaluate_single_example(
     )
 
     judge_payload: dict[str, Any] = {}
+    judge_raw_response: str = ""
     judge_time = 0.0
 
     if generation_error:
@@ -344,19 +364,62 @@ def evaluate_single_example(
                 error_categories["judge"] = judge_error_category
 
         if judge_response is not None:
-            judge_payload = parse_judge_output(str(judge_response.get("response", "")))
+            judge_raw_response = str(judge_response.get("response", ""))
+            judge_payload = parse_judge_output(judge_raw_response)
 
     judge_scores = judge_payload.get("scores") if isinstance(judge_payload, dict) else {}
 
-    # Build result
+    # Compute reference-based metrics (BLEU, BERTScore) - compare model answer to expected response
+    reference_metrics: dict[str, Any] = {}
+    if assistant_answer and expected_response:
+        try:
+            # BLEU score (single example)
+            bleu_score = compute_bleu([assistant_answer], [expected_response])
+            reference_metrics["bleu"] = bleu_score
+        except Exception as exc:
+            reference_metrics["bleu"] = None
+            reference_metrics["bleu_error"] = str(exc)
+
+        try:
+            # BERTScore (single example)
+            bertscore_result = compute_bertscore([assistant_answer], [expected_response], lang="en")
+            reference_metrics["bertscore"] = bertscore_result
+        except Exception as exc:
+            reference_metrics["bertscore"] = None
+            reference_metrics["bertscore_error"] = str(exc)
+    else:
+        reference_metrics["bleu"] = None
+        reference_metrics["bertscore"] = None
+        if not assistant_answer:
+            reference_metrics["note"] = "No model answer generated"
+        elif not expected_response:
+            reference_metrics["note"] = "No expected response available"
+
+    # Build result with ALL metrics
     result: dict[str, Any] = {
         "task_id": task_id,
         "task_type": example.get("task_type"),
+        "instruction": instruction,  # Store the original question
         "model_answer": assistant_answer,
         "expected_response": expected_response,
+        # Judge evaluation (LLM-as-judge scores)
         "judge_scores": judge_scores if isinstance(judge_scores, dict) else {},
         "judge_verdict": judge_payload.get("verdict"),
+        "judge_reasoning": judge_payload.get("reasoning")
+        if isinstance(judge_payload, dict)
+        else None,
+        "judge_missing_citations": judge_payload.get("missing_citations")
+        if isinstance(judge_payload, dict)
+        else [],
+        "judge_hallucinated_citations": judge_payload.get("hallucinated_citations")
+        if isinstance(judge_payload, dict)
+        else [],
+        "judge_raw_response": judge_raw_response,  # Full judge output for debugging
+        # Reference-based metrics (objective, automatic)
+        "reference_metrics": reference_metrics,
+        # Citation metrics (automatic analysis)
         "citation_metrics": citation_metrics,
+        # Metadata
         "model_label": spec.label,
         "prompt_mode": prompt_mode,
         "response_length": {
@@ -648,48 +711,211 @@ def run_interleaved_evaluation(
 
 
 def compute_metrics_summary(results: list[dict[str, Any]], label: str) -> dict[str, Any]:
-    """Compute summary metrics from results."""
-    from collections import defaultdict
-    from statistics import mean
+    """Compute comprehensive summary metrics from results.
 
-    metrics: dict[str, list[float]] = defaultdict(list)
-    coverage_values: list[float] = []
+    Aggregates all metrics for cross-condition comparison:
+    - Judge scores (factuality, grounding, completeness, communication)
+    - Reference metrics (BLEU, BERTScore)
+    - Citation metrics (precision, recall, coverage, grounded_fraction)
+    - Response statistics (length, verdict counts)
+    """
+    from collections import defaultdict
+    from statistics import mean, stdev
+
+    # Judge scores (LLM-as-judge)
+    judge_metrics: dict[str, list[float]] = defaultdict(list)
+
+    # Reference-based metrics
+    bleu_scores: list[float] = []
+    bertscore_f1: list[float] = []
+    bertscore_precision: list[float] = []
+    bertscore_recall: list[float] = []
+
+    # Citation metrics
+    citation_coverage: list[float] = []
+    citation_precision: list[float] = []
+    citation_recall: list[float] = []
+    grounded_fractions: list[float] = []
+
+    # Response stats
     word_counts: list[int] = []
+    char_counts: list[int] = []
+
+    # Verdict counts
+    verdict_pass = 0
+    verdict_fail = 0
+    verdict_unknown = 0
+
+    # Error tracking
     errors_count = 0
+    error_types: dict[str, int] = defaultdict(int)
+
+    # Timing
+    generation_times: list[float] = []
+    judge_times: list[float] = []
 
     for row in results:
+        # Error tracking
         if row.get("errors"):
             errors_count += 1
+            for stage, _error in row.get("errors", {}).items():
+                error_types[stage] += 1
 
+        # Judge scores
         scores = row.get("judge_scores", {})
         for key, value in scores.items():
             if isinstance(value, int | float):
-                metrics[key].append(float(value))
+                judge_metrics[key].append(float(value))
 
+        # Judge verdict
+        verdict = row.get("judge_verdict")
+        if verdict == "pass":
+            verdict_pass += 1
+        elif verdict == "fail":
+            verdict_fail += 1
+        else:
+            verdict_unknown += 1
+
+        # Reference metrics (BLEU, BERTScore)
+        ref_metrics = row.get("reference_metrics", {})
+        if ref_metrics:
+            bleu = ref_metrics.get("bleu")
+            if isinstance(bleu, int | float):
+                bleu_scores.append(float(bleu))
+
+            bertscore = ref_metrics.get("bertscore", {})
+            if isinstance(bertscore, dict):
+                if isinstance(bertscore.get("f1"), int | float):
+                    bertscore_f1.append(float(bertscore["f1"]))
+                if isinstance(bertscore.get("precision"), int | float):
+                    bertscore_precision.append(float(bertscore["precision"]))
+                if isinstance(bertscore.get("recall"), int | float):
+                    bertscore_recall.append(float(bertscore["recall"]))
+
+        # Citation metrics
         citation = row.get("citation_metrics", {})
         if citation.get("mode") == "rag":
             cov = citation.get("mean_coverage")
             if isinstance(cov, int | float):
-                coverage_values.append(float(cov))
+                citation_coverage.append(float(cov))
 
+            prec = citation.get("precision")
+            if isinstance(prec, int | float):
+                citation_precision.append(float(prec))
+
+            rec = citation.get("recall")
+            if isinstance(rec, int | float):
+                citation_recall.append(float(rec))
+
+            gf = citation.get("grounded_fraction")
+            if isinstance(gf, int | float):
+                grounded_fractions.append(float(gf))
+
+        # Response length
         response_length = row.get("response_length", {})
         wc = response_length.get("word_count", 0)
+        cc = response_length.get("char_count", 0)
         if isinstance(wc, int):
             word_counts.append(wc)
+        if isinstance(cc, int):
+            char_counts.append(cc)
 
+        # Timing
+        timing = row.get("timing", {})
+        gen_time = timing.get("generation_seconds")
+        jdg_time = timing.get("judge_seconds")
+        if isinstance(gen_time, int | float):
+            generation_times.append(float(gen_time))
+        if isinstance(jdg_time, int | float):
+            judge_times.append(float(jdg_time))
+
+    # Build comprehensive summary
     summary: dict[str, Any] = {
-        key: mean(values) if values else 0.0 for key, values in metrics.items()
+        "model_label": label,
+        "examples_evaluated": len(results),
+        "examples_with_errors": errors_count,
+        # === JUDGE SCORES (LLM-as-judge, 0-1 scale) ===
+        "judge_scores": {
+            key: {
+                "mean": mean(values) if values else 0.0,
+                "std": stdev(values) if len(values) > 1 else 0.0,
+                "min": min(values) if values else 0.0,
+                "max": max(values) if values else 0.0,
+                "n": len(values),
+            }
+            for key, values in judge_metrics.items()
+        },
+        # === JUDGE VERDICTS ===
+        "judge_verdicts": {
+            "pass": verdict_pass,
+            "fail": verdict_fail,
+            "unknown": verdict_unknown,
+            "pass_rate": verdict_pass / len(results) if results else 0.0,
+        },
+        # === REFERENCE METRICS (objective, automatic) ===
+        "reference_metrics": {
+            "bleu": {
+                "mean": mean(bleu_scores) if bleu_scores else None,
+                "std": stdev(bleu_scores) if len(bleu_scores) > 1 else 0.0,
+                "min": min(bleu_scores) if bleu_scores else None,
+                "max": max(bleu_scores) if bleu_scores else None,
+                "n": len(bleu_scores),
+            },
+            "bertscore_f1": {
+                "mean": mean(bertscore_f1) if bertscore_f1 else None,
+                "std": stdev(bertscore_f1) if len(bertscore_f1) > 1 else 0.0,
+                "n": len(bertscore_f1),
+            },
+            "bertscore_precision": {
+                "mean": mean(bertscore_precision) if bertscore_precision else None,
+                "n": len(bertscore_precision),
+            },
+            "bertscore_recall": {
+                "mean": mean(bertscore_recall) if bertscore_recall else None,
+                "n": len(bertscore_recall),
+            },
+        },
+        # === CITATION METRICS (for RAG conditions) ===
+        "citation_metrics": {
+            "mean_coverage": {
+                "mean": mean(citation_coverage) if citation_coverage else None,
+                "std": stdev(citation_coverage) if len(citation_coverage) > 1 else 0.0,
+                "n": len(citation_coverage),
+            },
+            "precision": {
+                "mean": mean(citation_precision) if citation_precision else None,
+                "n": len(citation_precision),
+            },
+            "recall": {
+                "mean": mean(citation_recall) if citation_recall else None,
+                "n": len(citation_recall),
+            },
+            "grounded_fraction": {
+                "mean": mean(grounded_fractions) if grounded_fractions else None,
+                "std": stdev(grounded_fractions) if len(grounded_fractions) > 1 else 0.0,
+                "n": len(grounded_fractions),
+            },
+        },
+        # === RESPONSE STATISTICS ===
+        "response_length": {
+            "mean_word_count": mean(word_counts) if word_counts else 0.0,
+            "std_word_count": stdev(word_counts) if len(word_counts) > 1 else 0.0,
+            "min_word_count": min(word_counts) if word_counts else 0,
+            "max_word_count": max(word_counts) if word_counts else 0,
+            "mean_char_count": mean(char_counts) if char_counts else 0.0,
+        },
+        # === TIMING STATISTICS ===
+        "timing": {
+            "mean_generation_seconds": mean(generation_times) if generation_times else 0.0,
+            "mean_judge_seconds": mean(judge_times) if judge_times else 0.0,
+            "total_generation_seconds": sum(generation_times),
+            "total_judge_seconds": sum(judge_times),
+        },
+        # === ERROR BREAKDOWN ===
+        "error_breakdown": dict(error_types) if error_types else {},
+        # === TASK IDS (for traceability) ===
+        "evaluated_task_ids": [str(r.get("task_id")) for r in results if r.get("task_id")],
     }
-    summary["citation_mean_coverage"] = mean(coverage_values) if coverage_values else 0.0
-    summary["model_label"] = label
-    summary["examples_evaluated"] = len(results)
-    summary["examples_with_errors"] = errors_count
-    summary["response_length"] = {
-        "mean_word_count": mean(word_counts) if word_counts else 0.0,
-        "min_word_count": min(word_counts) if word_counts else 0,
-        "max_word_count": max(word_counts) if word_counts else 0,
-    }
-    summary["evaluated_task_ids"] = [str(r.get("task_id")) for r in results if r.get("task_id")]
 
     return summary
 
