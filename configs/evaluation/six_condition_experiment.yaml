@@ -19,8 +19,9 @@
 defaults:
   dataset: ../../evaluation/datasets/eval_dataset.jsonl
   judge_config: ../judges/rag.yaml  # Default for RAG conditions
-  # IMPORTANT: Use Qwen3 8B as judge (different model family than Qwen 2.5 7B generator)
+  # IMPORTANT: Use Qwen3 8B as judge (different model family than Qwen 2.5 0.5B generators)
   # to avoid self-preference bias where models rate their own family's outputs favorably
+  judge_inference: ../judges/qwen3_8b_thinking.yaml  # Qwen3 8B with thinking mode (temp=0.6)
   output_dir: ../../evaluation/results
   metrics_filename: metrics.json
   details_filename: details.jsonl

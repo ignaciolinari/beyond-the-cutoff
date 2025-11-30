@@ -1,0 +1,36 @@
+# Qwen3 8B Judge Inference Configuration - WITH Thinking Mode
+# =============================================================================
+#
+# This config specifies the MODEL used to run judge prompts (instruction.yaml, rag.yaml).
+# It does NOT contain the evaluation rubric - that comes from judge_config.
+#
+# Why Qwen3 8B?
+# - Different model family from the generators (Qwen 2.5 0.5B)
+# - Avoids self-preference bias where models rate their own family favorably
+# - 8B parameters provides sufficient reasoning capacity for complex rubrics
+#
+# Thinking Mode (temperature > 0):
+# - Qwen3 outputs <think>...</think> tags with chain-of-thought reasoning
+# - Improves judgment quality through step-by-step evaluation
+# - Slower but more thorough than non-thinking mode
+#
+# Usage:
+#   Set as judge_inference in experiment plan:
+#   defaults:
+#     judge_inference: ../judges/qwen3_8b_thinking.yaml
+#
+# =============================================================================
+
+provider: ollama
+model: qwen3:8b
+host: http://localhost
+port: 11434
+timeout: 180.0
+max_new_tokens: 1024
+temperature: 0.6  # Enables thinking mode (<think>...</think>)
+top_p: 0.95
+repetition_penalty: 1.0
+# Qwen3 ChatML stop tokens
+stop_sequences:
+  - "<|im_start|>"
+  - "<|im_end|>"
