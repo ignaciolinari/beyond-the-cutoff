@@ -24,24 +24,34 @@ def normalize_contexts(contexts: Iterable[Any]) -> list[str]:
 
 
 def evaluate_citations(answer: str, contexts: Sequence[str]) -> dict[str, Any]:
-    """Compute simple citation coverage diagnostics for ``answer``."""
+    """Compute simple citation coverage diagnostics for ``answer``.
+
+    Coverage is computed as the fraction of meaningful words (>3 chars) from
+    the cited context that appear in the answer. This measures how well the
+    answer actually uses the cited source material.
+    """
     marks = [int(match) for match in _CITATION_PATTERN.findall(answer)]
     unique_marks = sorted(set(marks))
     total = len(contexts)
     missing = [i for i in range(1, total + 1) if i not in unique_marks]
     extra = [i for i in unique_marks if i < 1 or i > total]
 
-    answer_words = set(answer.lower().split())
+    # Filter answer words to meaningful tokens (>3 chars)
+    answer_filtered = [w for w in answer.lower().split() if len(w) > 3]
+    answer_words = set(answer_filtered)
+
     coverage: dict[int, float] = {}
     for idx in unique_marks:
         if idx < 1 or idx > total:
             continue
-        context_words = [w for w in contexts[idx - 1].lower().split() if len(w) > 3]
+        # Strip citation markers like "[1]" from context before word extraction
+        context_text = _CONTEXT_NUMBER_PATTERN.sub("", contexts[idx - 1])
+        context_words = [w for w in context_text.lower().split() if len(w) > 3]
         if not context_words:
             coverage[idx] = 0.0
             continue
         overlap = sum(1 for w in context_words if w in answer_words)
-        coverage[idx] = overlap / max(len(context_words), 1)
+        coverage[idx] = overlap / len(context_words)
 
     mean_coverage = mean(coverage.values()) if coverage else 0.0
     return {
@@ -50,6 +60,8 @@ def evaluate_citations(answer: str, contexts: Sequence[str]) -> dict[str, Any]:
         "extra": extra,
         "coverage": coverage,
         "mean_coverage": mean_coverage,
+        "total_contexts": total,
+        "unique_citations": len(unique_marks),
     }
 
 
@@ -93,16 +105,32 @@ def grounded_fraction(answer: str, contexts: Sequence[str], *, min_token_length:
 
 @lru_cache(maxsize=1)
 def _load_bleu_metric() -> Any:  # pragma: no cover - integration heavy
-    from evaluate import load
+    try:
+        from evaluate import load
 
-    return load("bleu")
+        return load("bleu")
+    except ImportError as e:
+        raise ImportError(
+            "The 'evaluate' library is required for BLEU computation. "
+            "Install it with: pip install evaluate"
+        ) from e
+    except Exception as e:
+        raise RuntimeError(f"Failed to load BLEU metric: {e}") from e
 
 
 @lru_cache(maxsize=1)
 def _load_bertscore_metric() -> Any:  # pragma: no cover - integration heavy
-    from evaluate import load
+    try:
+        from evaluate import load
 
-    return load("bertscore")
+        return load("bertscore")
+    except ImportError as e:
+        raise ImportError(
+            "The 'evaluate' library is required for BERTScore computation. "
+            "Install it with: pip install evaluate bert-score"
+        ) from e
+    except Exception as e:
+        raise RuntimeError(f"Failed to load BERTScore metric: {e}") from e
 
 
 def compute_bleu(predictions: Sequence[str], references: Sequence[str]) -> float:

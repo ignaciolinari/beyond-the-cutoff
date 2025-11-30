@@ -44,6 +44,60 @@ from pathlib import Path
 from typing import Any
 
 
+def validate_no_leakage(train: list[dict[str, Any]], eval_data: list[dict[str, Any]]) -> list[str]:
+    """Check for potential data leakage between train and eval splits.
+
+    Args:
+        train: Training examples
+        eval_data: Evaluation examples
+
+    Returns:
+        List of warning/error messages. Empty list means no issues detected.
+    """
+    issues: list[str] = []
+
+    # Helper to extract RAG prompt
+    def get_prompt(ex: dict[str, Any]) -> str:
+        rag = ex.get("rag", {})
+        prompt: str = rag.get("prompt", "") if isinstance(rag, dict) else ""
+        return prompt
+
+    # Check for identical prompts (exact duplicates)
+    train_prompts = {get_prompt(ex) for ex in train if get_prompt(ex)}
+    eval_prompts = {get_prompt(ex) for ex in eval_data if get_prompt(ex)}
+
+    prompt_overlap = train_prompts & eval_prompts
+    if prompt_overlap:
+        issues.append(
+            f"CRITICAL: {len(prompt_overlap)} identical RAG prompts found in both train and eval! "
+            "This is data leakage."
+        )
+
+    # Check for identical instructions
+    train_instructions = {ex.get("instruction", "") for ex in train if ex.get("instruction")}
+    eval_instructions = {ex.get("instruction", "") for ex in eval_data if ex.get("instruction")}
+
+    instruction_overlap = train_instructions & eval_instructions
+    if instruction_overlap:
+        issues.append(
+            f"WARNING: {len(instruction_overlap)} identical instructions in both splits. "
+            "This may indicate data leakage if questions are too similar."
+        )
+
+    # Check for identical task_ids (should never happen)
+    train_ids = {ex.get("task_id", "") for ex in train if ex.get("task_id")}
+    eval_ids = {ex.get("task_id", "") for ex in eval_data if ex.get("task_id")}
+
+    id_overlap = train_ids & eval_ids
+    if id_overlap:
+        issues.append(
+            f"CRITICAL: {len(id_overlap)} identical task_ids in both splits! "
+            "This should never happen and indicates a bug."
+        )
+
+    return issues
+
+
 @dataclass
 class SplitStats:
     """Statistics about the dataset split."""
@@ -173,8 +227,16 @@ def split_dataset(
         n_total = len(shuffled)
         n_eval_target = max(min_eval_per_paper, round(n_total * eval_ratio))
 
-        # Don't put ALL examples in eval - need at least 1 for training
-        n_eval = min(n_eval_target, n_total - 1) if n_total > 1 else 0
+        # Ensure sufficient training examples per paper:
+        # - Papers with <= 2 examples: all go to train (need data for training)
+        # - Papers with 3-4 examples: at most 1 for eval (keep 2+ for training)
+        # - Papers with 5+ examples: keep at least 2 for training
+        if n_total <= 2:
+            n_eval = 0  # All examples go to train for very small papers
+        elif n_total <= 4:
+            n_eval = min(n_eval_target, 1)  # At most 1 eval example for small papers
+        else:
+            n_eval = min(n_eval_target, n_total - 2)  # Keep at least 2 for training
 
         # Split: first n_eval go to eval, rest to train
         paper_eval = shuffled[:n_eval]
@@ -291,6 +353,25 @@ def main() -> int:
 
     # Print statistics
     print(stats.summary())
+
+    # Validate for data leakage
+    print("\n[info] Validating split for data leakage...", file=sys.stderr)
+    leakage_issues = validate_no_leakage(train_examples, eval_examples)
+    if leakage_issues:
+        print("\n" + "=" * 60, file=sys.stderr)
+        print("DATA LEAKAGE VALIDATION RESULTS", file=sys.stderr)
+        print("=" * 60, file=sys.stderr)
+        for issue in leakage_issues:
+            print(f"  • {issue}", file=sys.stderr)
+        print("=" * 60, file=sys.stderr)
+
+        # Check if any are critical
+        has_critical = any("CRITICAL" in issue for issue in leakage_issues)
+        if has_critical:
+            print("\n[error] Critical data leakage detected! Aborting.", file=sys.stderr)
+            return 1
+    else:
+        print("[info] ✓ No data leakage detected", file=sys.stderr)
 
     if args.dry_run:
         print("\n[info] Dry run - no files written", file=sys.stderr)

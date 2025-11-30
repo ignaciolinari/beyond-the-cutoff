@@ -4,6 +4,15 @@ from typing import TYPE_CHECKING, Any
 
 from .config import ProjectConfig, load_config
 from .models import LLMClient, OllamaClient, TransformersClient, build_generation_client
+from .prompts import (
+    RAG_INSTRUCTIONS,
+    RAG_SYSTEM_MESSAGE,
+    build_chat_messages,
+    build_instruction_only_prompt,
+    build_rag_prompt,
+    build_rag_trained_no_context_prompt,
+    normalize_contexts,
+)
 from .types import ModelType, PromptMode
 
 if TYPE_CHECKING:  # pragma: no cover - typing helpers only
@@ -27,6 +36,14 @@ __all__ = [
     "DocumentIndexer",
     "ModelType",
     "PromptMode",
+    # Prompt utilities
+    "RAG_SYSTEM_MESSAGE",
+    "RAG_INSTRUCTIONS",
+    "build_rag_prompt",
+    "build_instruction_only_prompt",
+    "build_rag_trained_no_context_prompt",
+    "build_chat_messages",
+    "normalize_contexts",
     "__version__",
 ]
 

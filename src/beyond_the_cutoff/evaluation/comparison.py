@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from beyond_the_cutoff.config import ProjectConfig
 from beyond_the_cutoff.evaluation.runner import (
     EvaluationResult,
@@ -19,6 +21,156 @@ from beyond_the_cutoff.utils.validation import (
     print_validation_result,
     validate_dataset_versioning,
 )
+
+# =============================================================================
+# Statistical Significance Functions
+# =============================================================================
+
+
+def compute_effect_size(scores_a: Sequence[float], scores_b: Sequence[float]) -> float:
+    """Compute Cohen's d effect size between two score distributions.
+
+    Cohen's d interpretation:
+    - |d| < 0.2: negligible
+    - 0.2 <= |d| < 0.5: small
+    - 0.5 <= |d| < 0.8: medium
+    - |d| >= 0.8: large
+
+    Args:
+        scores_a: First set of scores
+        scores_b: Second set of scores
+
+    Returns:
+        Cohen's d effect size (positive means a > b)
+    """
+    if not scores_a or not scores_b:
+        return 0.0
+
+    arr_a = np.array(scores_a, dtype=float)
+    arr_b = np.array(scores_b, dtype=float)
+
+    mean_diff = np.mean(arr_a) - np.mean(arr_b)
+    pooled_var = (np.var(arr_a, ddof=1) + np.var(arr_b, ddof=1)) / 2
+    pooled_std = np.sqrt(pooled_var) if pooled_var > 0 else 0.0
+
+    return float(mean_diff / pooled_std) if pooled_std > 0 else 0.0
+
+
+def compute_confidence_interval(
+    scores: Sequence[float], confidence: float = 0.95
+) -> tuple[float, float, float]:
+    """Compute confidence interval for mean using t-distribution.
+
+    Args:
+        scores: Sequence of scores
+        confidence: Confidence level (default 0.95 for 95% CI)
+
+    Returns:
+        Tuple of (mean, lower_bound, upper_bound)
+    """
+    if not scores:
+        return (0.0, 0.0, 0.0)
+
+    arr = np.array(scores, dtype=float)
+    n = len(arr)
+    mean = float(np.mean(arr))
+
+    if n < 2:
+        return (mean, mean, mean)
+
+    from scipy.stats import sem, t
+
+    se = sem(arr)
+    h = se * t.ppf((1 + confidence) / 2, n - 1)
+
+    return (mean, float(mean - h), float(mean + h))
+
+
+def compute_pairwise_significance(
+    scores_a: Sequence[float],
+    scores_b: Sequence[float],
+    *,
+    paired: bool = True,
+) -> dict[str, Any]:
+    """Compute statistical significance between two score distributions.
+
+    Args:
+        scores_a: First set of scores
+        scores_b: Second set of scores
+        paired: If True, use paired tests (same examples). If False, use unpaired.
+
+    Returns:
+        Dict with statistical test results:
+        - t_statistic, t_pvalue: Paired/unpaired t-test
+        - u_statistic, u_pvalue: Mann-Whitney U test (non-parametric)
+        - cohens_d: Effect size
+        - significant_at_05: Whether p < 0.05
+        - significant_at_01: Whether p < 0.01
+    """
+    if not scores_a or not scores_b:
+        return {
+            "t_statistic": None,
+            "t_pvalue": None,
+            "u_statistic": None,
+            "u_pvalue": None,
+            "cohens_d": 0.0,
+            "significant_at_05": False,
+            "significant_at_01": False,
+            "n_a": len(scores_a) if scores_a else 0,
+            "n_b": len(scores_b) if scores_b else 0,
+        }
+
+    arr_a = np.array(scores_a, dtype=float)
+    arr_b = np.array(scores_b, dtype=float)
+
+    from scipy.stats import mannwhitneyu, ttest_ind, ttest_rel
+
+    # T-test (paired or independent)
+    try:
+        if paired and len(arr_a) == len(arr_b):
+            t_stat, t_pval = ttest_rel(arr_a, arr_b)
+        else:
+            t_stat, t_pval = ttest_ind(arr_a, arr_b)
+        t_stat = float(t_stat)
+        t_pval = float(t_pval)
+    except Exception:
+        t_stat, t_pval = None, None
+
+    # Mann-Whitney U (non-parametric)
+    try:
+        u_stat, u_pval = mannwhitneyu(arr_a, arr_b, alternative="two-sided")
+        u_stat = float(u_stat)
+        u_pval = float(u_pval)
+    except Exception:
+        u_stat, u_pval = None, None
+
+    # Effect size
+    cohens_d = compute_effect_size(scores_a, scores_b)
+
+    # Significance checks
+    significant_05 = t_pval is not None and t_pval < 0.05
+    significant_01 = t_pval is not None and t_pval < 0.01
+
+    return {
+        "t_statistic": t_stat,
+        "t_pvalue": t_pval,
+        "u_statistic": u_stat,
+        "u_pvalue": u_pval,
+        "cohens_d": cohens_d,
+        "significant_at_05": significant_05,
+        "significant_at_01": significant_01,
+        "n_a": len(arr_a),
+        "n_b": len(arr_b),
+        "mean_a": float(np.mean(arr_a)),
+        "mean_b": float(np.mean(arr_b)),
+        "std_a": float(np.std(arr_a, ddof=1)) if len(arr_a) > 1 else 0.0,
+        "std_b": float(np.std(arr_b, ddof=1)) if len(arr_b) > 1 else 0.0,
+    }
+
+
+# =============================================================================
+# Data Classes
+# =============================================================================
 
 
 @dataclass
@@ -160,6 +312,68 @@ def load_comparison_plan(path: Path) -> ComparisonPlan:
     return ComparisonPlan(defaults=defaults, runs=run_specs, source_path=resolved_path)
 
 
+def _should_skip_run(
+    metrics_path: Path,
+    *,
+    skip_if_exists: bool,
+    force: bool,
+    requested_limit: int | None,
+) -> tuple[bool, str | None]:
+    """Determine if a run should be skipped based on existing metrics.
+
+    Returns:
+        Tuple of (should_skip, skip_reason). skip_reason is None if not skipping.
+    """
+    import json
+
+    if force:
+        return False, None
+
+    if not skip_if_exists:
+        return False, None
+
+    if not metrics_path.exists():
+        return False, None
+
+    # Metrics file exists - check if we need more examples
+    try:
+        existing_metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+        # Handle both formats: direct summary or nested under 'summary' key
+        if "summary" in existing_metrics:
+            existing_metrics = existing_metrics["summary"]
+
+        existing_count = existing_metrics.get("examples_evaluated", 0)
+        # Fallback to total_examples if examples_evaluated not present
+        if existing_count == 0:
+            existing_count = existing_metrics.get("total_examples", 0)
+
+        # If no limit requested, skip if any results exist
+        if requested_limit is None:
+            if existing_count > 0:
+                return True, f"metrics artifact already exists ({existing_count} examples)"
+            return False, None
+
+        # If requested limit > existing count, we need to resume/add more
+        if requested_limit > existing_count:
+            return False, None  # Don't skip - need more examples
+
+        # Existing count meets or exceeds requested limit
+        return (
+            True,
+            f"metrics artifact already exists ({existing_count} >= {requested_limit} requested)",
+        )
+
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        # If we can't read the metrics, don't skip (will be overwritten)
+        import sys
+
+        print(
+            f"[warn] Could not read existing metrics at {metrics_path}: {exc}. Will re-run.",
+            file=sys.stderr,
+        )
+        return False, None
+
+
 def execute_comparison_plan(
     plan: ComparisonPlan,
     *,
@@ -180,9 +394,25 @@ def execute_comparison_plan(
         resolved_paths = _compute_artifact_paths(plan.defaults, spec)
         metrics_path, details_path, metadata_path = resolved_paths
 
-        if spec.skip_if_exists and not force and metrics_path.exists():
+        # Determine the effective limit for this run
+        effective_limit = (
+            limit_override
+            if limit_override is not None
+            else spec.limit
+            if spec.limit is not None
+            else plan.defaults.limit
+        )
+
+        should_skip, skip_reason = _should_skip_run(
+            metrics_path,
+            skip_if_exists=spec.skip_if_exists,
+            force=force,
+            requested_limit=effective_limit,
+        )
+
+        if should_skip:
             print(
-                f"[info] Skipping {spec.label}: metrics already exist at {metrics_path}",
+                f"[info] Skipping {spec.label}: {skip_reason}",
                 file=sys.stderr,
             )
             results.append(
@@ -193,7 +423,7 @@ def execute_comparison_plan(
                     details_path=details_path if (details_path and details_path.exists()) else None,
                     metadata_path=metadata_path,
                     skipped=True,
-                    skip_reason="metrics artifact already exists",
+                    skip_reason=skip_reason,
                 )
             )
             continue
@@ -550,10 +780,26 @@ def execute_comparison_plan_with_pregenerated(
             plan.defaults, spec, ensure_dirs=True
         )
 
-        # Check if already exists
-        if not force and metrics_path.exists():
+        # Determine the effective limit for this run
+        effective_limit = (
+            limit_override
+            if limit_override is not None
+            else spec.limit
+            if spec.limit is not None
+            else plan.defaults.limit
+        )
+
+        # Check if already exists with enough examples
+        should_skip, skip_reason = _should_skip_run(
+            metrics_path,
+            skip_if_exists=True,  # Always check for pregenerated
+            force=force,
+            requested_limit=effective_limit,
+        )
+
+        if should_skip:
             print(
-                f"[info] Skipping {spec.label}: metrics already exist at {metrics_path}",
+                f"[info] Skipping {spec.label}: {skip_reason}",
                 file=sys.stderr,
             )
             # Load existing summary
@@ -569,7 +815,7 @@ def execute_comparison_plan_with_pregenerated(
                     details_path=details_path,
                     metadata_path=metadata_path,
                     skipped=True,
-                    skip_reason="Metrics already exist",
+                    skip_reason=skip_reason,
                 )
             )
             continue

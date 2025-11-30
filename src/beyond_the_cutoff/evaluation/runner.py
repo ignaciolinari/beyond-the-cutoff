@@ -1379,9 +1379,11 @@ def run_evaluation(
             model_label=model_label,
             dataset_path=dataset_path,
         )
-        # Clean up checkpoint file if evaluation completed successfully
-        # (keep it if there were errors so user can resume)
-        if metrics_path and metrics_path.exists() and not summary.get("error_rate", 0.0) > 0.1:
+        # Clean up checkpoint file only if ALL examples completed without ANY errors
+        # This ensures we can resume if something went wrong
+        all_completed = len(score_rows) == total_examples
+        no_errors = summary.get("error_rate", 0.0) == 0.0
+        if metrics_path and metrics_path.exists() and all_completed and no_errors:
             try:
                 checkpoint_path.unlink()
                 print(
@@ -1390,6 +1392,12 @@ def run_evaluation(
                 )
             except Exception as exc:
                 print(f"[warn] Failed to clean up checkpoint file: {exc}", file=sys.stderr)
+        elif checkpoint_path.exists():
+            print(
+                f"[info] Checkpoint file retained at {checkpoint_path} "
+                f"(completed={all_completed}, errors={not no_errors})",
+                file=sys.stderr,
+            )
 
     # Run final evaluation sanity check after writing files
     if validate:
