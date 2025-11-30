@@ -342,7 +342,7 @@ Use the **training split** (`evaluation/datasets/train_dataset.jsonl`) created i
 
 1. Upload `notebooks/finetuning/lora_science_v1_instruction_only.ipynb`
 2. Upload `evaluation/datasets/train_dataset.jsonl` ← Use training split!
-3. Upload `configs/lora_science_v1_instruction_only_ollama.yaml` (for reference)
+3. Upload `configs/models/lora_instruction_only.yaml` (for reference)
 4. Run the notebook to train WITHOUT RAG contexts
 5. Export adapter weights and merged checkpoint
 
@@ -356,7 +356,7 @@ Use the **training split** (`evaluation/datasets/train_dataset.jsonl`) created i
 
 1. Upload `notebooks/finetuning/lora_science_v1.ipynb`
 2. Upload `evaluation/datasets/train_dataset.jsonl` ← Use training split!
-3. Upload `configs/lora_science_v1_rag_trained_ollama.yaml` (for reference)
+3. Upload `configs/models/lora_rag_trained.yaml` (for reference)
 4. Run the notebook to train WITH RAG contexts
 5. Export adapter weights and merged checkpoint
 
@@ -434,14 +434,14 @@ ollama show lora_science_0p5
 # Test instruction-only config
 python -c "
 from beyond_the_cutoff import load_config
-config = load_config('configs/lora_science_v1_instruction_only_ollama.yaml')
+config = load_config('configs/models/lora_instruction_only.yaml')
 print(f'Model: {config.inference.model}')
 "
 
 # Test RAG-trained config
 python -c "
 from beyond_the_cutoff import load_config
-config = load_config('configs/lora_science_v1_rag_trained_ollama.yaml')
+config = load_config('configs/models/lora_rag_trained.yaml')
 print(f'Model: {config.inference.model}')
 "
 ```
@@ -458,8 +458,8 @@ print(f'Model: {config.inference.model}')
 # Validate configuration files
 python scripts/validate_experiment.py \
   --config configs/default.yaml \
-  --model-config configs/rag_baseline_ollama.yaml \
-  --judge-config configs/judges/scientific_default_rag.yaml \
+  --model-config configs/models/base_ollama.yaml \
+  --judge-config configs/judges/rag.yaml \
   --prompt-mode rag
 
 # Validate eval dataset versioning (use eval_dataset.jsonl!)
@@ -481,8 +481,8 @@ python scripts/validate_experiment.py \
 python scripts/evaluate_models.py \
   --config configs/default.yaml \
   --dataset evaluation/datasets/eval_dataset.jsonl \
-  --model-config configs/rag_baseline_ollama.yaml \
-  --judge-config configs/judges/scientific_default_instruction.yaml \
+  --model-config configs/models/base_ollama.yaml \
+  --judge-config configs/judges/instruction.yaml \
   --prompt-mode instruction \
   --output evaluation/results/base_baseline_0p5b/
 
@@ -490,8 +490,8 @@ python scripts/evaluate_models.py \
 python scripts/evaluate_models.py \
   --config configs/default.yaml \
   --dataset evaluation/datasets/eval_dataset.jsonl \
-  --model-config configs/rag_baseline_ollama.yaml \
-  --judge-config configs/judges/scientific_default_rag.yaml \
+  --model-config configs/models/base_ollama.yaml \
+  --judge-config configs/judges/rag.yaml \
   --prompt-mode rag \
   --output evaluation/results/rag_baseline_0p5b/
 
@@ -499,8 +499,8 @@ python scripts/evaluate_models.py \
 python scripts/evaluate_models.py \
   --config configs/default.yaml \
   --dataset evaluation/datasets/eval_dataset.jsonl \
-  --model-config configs/lora_science_v1_instruction_only_ollama.yaml \
-  --judge-config configs/judges/scientific_default_instruction.yaml \
+  --model-config configs/models/lora_instruction_only.yaml \
+  --judge-config configs/judges/instruction.yaml \
   --prompt-mode instruction \
   --output evaluation/results/lora_science_0p5b_ft_only/
 
@@ -508,8 +508,8 @@ python scripts/evaluate_models.py \
 python scripts/evaluate_models.py \
   --config configs/default.yaml \
   --dataset evaluation/datasets/eval_dataset.jsonl \
-  --model-config configs/lora_science_v1_instruction_only_ollama.yaml \
-  --judge-config configs/judges/scientific_default_rag.yaml \
+  --model-config configs/models/lora_instruction_only.yaml \
+  --judge-config configs/judges/rag.yaml \
   --prompt-mode rag \
   --output evaluation/results/hybrid_science_0p5b_instruction_only/
 
@@ -517,8 +517,8 @@ python scripts/evaluate_models.py \
 python scripts/evaluate_models.py \
   --config configs/default.yaml \
   --dataset evaluation/datasets/eval_dataset.jsonl \
-  --model-config configs/lora_science_v1_rag_trained_ollama.yaml \
-  --judge-config configs/judges/scientific_default_instruction.yaml \
+  --model-config configs/models/lora_rag_trained.yaml \
+  --judge-config configs/judges/instruction.yaml \
   --prompt-mode instruction \
   --output evaluation/results/lora_science_0p5b_rag_trained_ft_only/
 
@@ -526,8 +526,8 @@ python scripts/evaluate_models.py \
 python scripts/evaluate_models.py \
   --config configs/default.yaml \
   --dataset evaluation/datasets/eval_dataset.jsonl \
-  --model-config configs/lora_science_v1_rag_trained_ollama.yaml \
-  --judge-config configs/judges/scientific_default_rag.yaml \
+  --model-config configs/models/lora_rag_trained.yaml \
+  --judge-config configs/judges/rag.yaml \
   --prompt-mode rag \
   --output evaluation/results/hybrid_science_0p5b_rag_trained/
 ```
@@ -536,9 +536,9 @@ python scripts/evaluate_models.py \
 
 ```bash
 # Run all 6 conditions automatically (uses eval_dataset.jsonl)
-python scripts/compare_models.py \
+python scripts/core/compare_models.py \
   --config configs/default.yaml \
-  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+  --plan configs/evaluation/six_condition_experiment.yaml \
   --dataset evaluation/datasets/eval_dataset.jsonl
 
 # This generates:
@@ -575,25 +575,25 @@ For efficient evaluation of multiple conditions, the pipeline separates response
 
 ```bash
 # Generate responses for all 6 conditions
-python scripts/generate_responses.py \
-  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+python scripts/core/generate_responses.py \
+  --plan configs/evaluation/six_condition_experiment.yaml \
   --output-dir evaluation/responses/
 
 # Generate for specific conditions only
-python scripts/generate_responses.py \
-  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+python scripts/core/generate_responses.py \
+  --plan configs/evaluation/six_condition_experiment.yaml \
   --output-dir evaluation/responses/ \
   --conditions rag_baseline_0p5b hybrid_science_0p5b_rag_trained
 
 # Quick test with limited examples
-python scripts/generate_responses.py \
-  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+python scripts/core/generate_responses.py \
+  --plan configs/evaluation/six_condition_experiment.yaml \
   --output-dir evaluation/responses/ \
   --limit 5
 
 # Resume interrupted generation
-python scripts/generate_responses.py \
-  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+python scripts/core/generate_responses.py \
+  --plan configs/evaluation/six_condition_experiment.yaml \
   --output-dir evaluation/responses/ \
   --resume
 ```
@@ -602,8 +602,8 @@ python scripts/generate_responses.py \
 
 ```bash
 # Evaluate all pre-generated responses with judge
-python scripts/compare_models.py \
-  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+python scripts/core/compare_models.py \
+  --plan configs/evaluation/six_condition_experiment.yaml \
   --responses-dir evaluation/responses/ \
   --output evaluation/results/comparison_results.jsonl
 
@@ -625,18 +625,18 @@ For complete evaluation workflows, use the unified orchestrator script:
 ```bash
 # Full 6-condition model comparison (generation + judging + visualization)
 python scripts/run_evaluation_pipeline.py full-comparison \
-  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+  --plan configs/evaluation/six_condition_experiment.yaml \
   --output-dir evaluation/results/six_condition/
 
 # Skip generation if responses already exist
 python scripts/run_evaluation_pipeline.py full-comparison \
-  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+  --plan configs/evaluation/six_condition_experiment.yaml \
   --output-dir evaluation/results/six_condition/ \
   --skip-generation
 
 # Skip evaluation to only generate responses
 python scripts/run_evaluation_pipeline.py full-comparison \
-  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+  --plan configs/evaluation/six_condition_experiment.yaml \
   --output-dir evaluation/results/six_condition/ \
   --skip-evaluation
 ```
@@ -673,19 +673,19 @@ python scripts/validate_experiment_results.py \
 
 ```bash
 # Visualize from comparison report
-python scripts/visualize_comparison.py \
+python scripts/core/visualize_comparison.py \
   --report evaluation/results/comparison_report.json \
   --output evaluation/results/visualizations/
 
 # Visualize from individual metrics files
-python scripts/visualize_comparison.py \
+python scripts/core/visualize_comparison.py \
   --metrics evaluation/results/rag_baseline_0p5b/metrics.json \
   --metrics evaluation/results/lora_science_0p5b_ft_only/metrics.json \
   --metrics evaluation/results/hybrid_science_0p5b_rag_trained/metrics.json \
   --output evaluation/results/visualizations/
 
 # Generate specific visualizations only
-python scripts/visualize_comparison.py \
+python scripts/core/visualize_comparison.py \
   --report evaluation/results/comparison_report.json \
   --output evaluation/results/visualizations/ \
   --only metrics error-rates citations
@@ -809,11 +809,11 @@ python scripts/run_evaluation_pipeline.py quantization \
   --register-f16
 
 # Or manually with two-phase approach
-python scripts/generate_responses.py \
+python scripts/core/generate_responses.py \
   --plan configs/evaluation/quantization_comparison.yaml \
   --output-dir evaluation/results/quantization/responses/
 
-python scripts/compare_models.py \
+python scripts/core/compare_models.py \
   --plan configs/evaluation/quantization_comparison.yaml \
   --responses-dir evaluation/results/quantization/responses/
 ```
@@ -908,13 +908,13 @@ python scripts/run_evaluation_pipeline.py end-to-end \
 # Or run directly with custom retrieval settings
 python scripts/evaluate_end_to_end.py \
   --config configs/default.yaml \
-  --model-config configs/lora_science_v1_rag_trained_ollama.yaml \
+  --model-config configs/models/lora_rag_trained.yaml \
   --output evaluation/results/end_to_end/
 
 # With custom retrieval parameters
 python scripts/evaluate_end_to_end.py \
   --config configs/default.yaml \
-  --model-config configs/lora_science_v1_rag_trained_ollama.yaml \
+  --model-config configs/models/lora_rag_trained.yaml \
   --top-k 8 \
   --reranker BAAI/bge-reranker-v2-m3 \
   --output evaluation/results/end_to_end_optimized/
@@ -922,7 +922,7 @@ python scripts/evaluate_end_to_end.py \
 # Compare with pre-computed contexts
 python scripts/evaluate_end_to_end.py \
   --config configs/default.yaml \
-  --model-config configs/lora_science_v1_rag_trained_ollama.yaml \
+  --model-config configs/models/lora_rag_trained.yaml \
   --compare-precomputed \
   --output evaluation/results/end_to_end/
 ```
@@ -1014,16 +1014,16 @@ python scripts/generate_offline_dataset.py --config configs/default.yaml
 # Convert to GGUF and register with Ollama (see section 6)
 
 # 7. Evaluation (two-phase for efficiency)
-python scripts/generate_responses.py \
-  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+python scripts/core/generate_responses.py \
+  --plan configs/evaluation/six_condition_experiment.yaml \
   --output-dir evaluation/responses/
 
-python scripts/compare_models.py \
-  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+python scripts/core/compare_models.py \
+  --plan configs/evaluation/six_condition_experiment.yaml \
   --responses-dir evaluation/responses/
 
 # 8. Visualization
-python scripts/visualize_comparison.py \
+python scripts/core/visualize_comparison.py \
   --report evaluation/results/comparison_report.json \
   --output evaluation/results/visualizations/
 
@@ -1080,11 +1080,11 @@ After completing the pipeline:
 beyond-the-cutoff/
 ├── configs/                    # Configuration files
 │   ├── default.yaml            # Main config
-│   ├── rag_baseline_ollama.yaml
-│   ├── lora_science_v1_instruction_only_ollama.yaml
-│   ├── lora_science_v1_rag_trained_ollama.yaml
+│   ├── base_ollama.yaml
+│   ├── models/lora_instruction_only.yaml
+│   ├── models/lora_rag_trained.yaml
 │   └── evaluation/
-│       ├── compare_0p5b_experiments.yaml    # 6-condition experiment
+│       ├── six_condition_experiment.yaml    # 6-condition experiment
 │       ├── quantization_comparison.yaml     # Q4_K_M vs F16
 │       ├── retrieval_ablation.yaml          # Retrieval optimization
 │       ├── end_to_end.yaml                  # Live retrieval validation

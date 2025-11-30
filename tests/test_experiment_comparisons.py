@@ -21,7 +21,7 @@ import pytest
 import yaml
 
 # Import the module under test
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "scripts" / "validation"))
 
 from validate_experiment_comparisons import (  # type: ignore[import-not-found]
     ComparisonResult,

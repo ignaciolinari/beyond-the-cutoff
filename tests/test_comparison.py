@@ -16,7 +16,7 @@ from beyond_the_cutoff.evaluation.runner import EvaluationResult
 
 
 def test_load_comparison_plan_defaults() -> None:
-    plan_path = Path("configs/evaluation/compare_0p5b_experiments.yaml")
+    plan_path = Path("configs/evaluation/six_condition_experiment.yaml")
     plan = load_comparison_plan(plan_path)
     assert plan.defaults.metrics_filename == "metrics.json"
     assert len(plan.runs) >= 2
@@ -25,7 +25,7 @@ def test_load_comparison_plan_defaults() -> None:
 
 def test_describe_plan_includes_expected_paths() -> None:
     project_cfg = load_config()
-    plan_path = Path("configs/evaluation/compare_0p5b_experiments.yaml")
+    plan_path = Path("configs/evaluation/six_condition_experiment.yaml")
     plan = load_comparison_plan(plan_path)
     rows = describe_plan(plan, project_cfg)
     labels = {row["label"] for row in rows}
@@ -53,9 +53,9 @@ def test_execute_comparison_plan_invokes_runner(
     dataset_path = tmp_path / "dataset.jsonl"
     dataset_path.write_text('{"task_id": "t1", "instruction": "demo", "rag": {"prompt": "Q"}}\n')
 
-    judge_config_path = repo_root / "configs" / "judges" / "scientific_default_rag.yaml"
-    judge_inference_path = repo_root / "configs" / "judges" / "ollama_qwen7b.yaml"
-    model_config_path = repo_root / "configs" / "rag_baseline_ollama.yaml"
+    judge_config_path = repo_root / "configs" / "judges" / "rag.yaml"
+    judge_inference_path = repo_root / "configs" / "judges" / "archive" / "ollama_qwen7b.yaml"
+    model_config_path = repo_root / "configs" / "models" / "base_ollama.yaml"
 
     plan_content = f"""
 defaults:
@@ -118,12 +118,12 @@ runs:
 
 def test_comparison_plan_uses_dual_judge_system() -> None:
     """Verify that the comparison plan uses appropriate judge configs for each condition."""
-    plan_path = Path("configs/evaluation/compare_0p5b_experiments.yaml")
+    plan_path = Path("configs/evaluation/six_condition_experiment.yaml")
     plan = load_comparison_plan(plan_path)
 
     # Check that default judge is RAG judge
     assert plan.defaults.judge_config is not None
-    assert "scientific_default_rag.yaml" in str(plan.defaults.judge_config)
+    assert "rag.yaml" in str(plan.defaults.judge_config)
 
     # Check instruction-only conditions use instruction judge
     instruction_only_labels = {
@@ -134,7 +134,7 @@ def test_comparison_plan_uses_dual_judge_system() -> None:
     for run in plan.runs:
         if run.label in instruction_only_labels:
             assert run.judge_config is not None
-            assert "scientific_default_instruction.yaml" in str(
+            assert "instruction.yaml" in str(
                 run.judge_config
             ), f"Condition {run.label} should use instruction judge"
             assert (
@@ -150,7 +150,7 @@ def test_comparison_plan_uses_dual_judge_system() -> None:
     for run in plan.runs:
         if run.label in rag_labels:
             assert run.judge_config is not None
-            assert "scientific_default_rag.yaml" in str(
+            assert "rag.yaml" in str(
                 run.judge_config
             ), f"Condition {run.label} should use RAG judge"
             assert run.prompt_mode == "rag", f"Condition {run.label} should use RAG prompt mode"

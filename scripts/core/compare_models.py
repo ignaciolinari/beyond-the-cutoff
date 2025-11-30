@@ -44,14 +44,14 @@ def parse_args() -> argparse.Namespace:
         epilog="""
 Examples:
     # Standard mode (generate + evaluate)
-    python scripts/compare_models.py --plan configs/evaluation/compare_0p5b_experiments.yaml
+    python scripts/compare_models.py --plan configs/evaluation/six_condition_experiment.yaml
 
     # Two-phase mode (use pre-generated responses)
-    python scripts/compare_models.py --plan configs/evaluation/compare_0p5b_experiments.yaml \\
+    python scripts/compare_models.py --plan configs/evaluation/six_condition_experiment.yaml \\
         --responses-dir evaluation/responses/
 
     # Dry run to see what would be executed
-    python scripts/compare_models.py --plan configs/evaluation/compare_0p5b_experiments.yaml --dry-run
+    python scripts/compare_models.py --plan configs/evaluation/six_condition_experiment.yaml --dry-run
         """,
     )
     parser.add_argument("--config", default="configs/default.yaml", help="Project config path")

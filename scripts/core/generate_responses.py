@@ -13,7 +13,7 @@ Benefits of two-phase evaluation:
 Usage:
     python scripts/generate_responses.py \
         --config configs/default.yaml \
-        --plan configs/evaluation/compare_0p5b_experiments.yaml \
+        --plan configs/evaluation/six_condition_experiment.yaml \
         --output-dir evaluation/responses/
 
 Output structure:
@@ -433,20 +433,20 @@ Examples:
     # Generate responses for all conditions
     python scripts/generate_responses.py \\
         --config configs/default.yaml \\
-        --plan configs/evaluation/compare_0p5b_experiments.yaml \\
+        --plan configs/evaluation/six_condition_experiment.yaml \\
         --output-dir evaluation/responses/
 
     # Generate for specific conditions only
     python scripts/generate_responses.py \\
         --config configs/default.yaml \\
-        --plan configs/evaluation/compare_0p5b_experiments.yaml \\
+        --plan configs/evaluation/six_condition_experiment.yaml \\
         --output-dir evaluation/responses/ \\
         --conditions base_baseline_0p5b base_rag_0p5b
 
     # Quick test with limit
     python scripts/generate_responses.py \\
         --config configs/default.yaml \\
-        --plan configs/evaluation/compare_0p5b_experiments.yaml \\
+        --plan configs/evaluation/six_condition_experiment.yaml \\
         --output-dir evaluation/responses/ \\
         --limit 5
         """,

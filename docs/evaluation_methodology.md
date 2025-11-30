@@ -158,12 +158,12 @@ Run the same evaluation (offline with pre-computed contexts) for both quantizati
 
 ```bash
 # Generate responses for F16 model
-python scripts/generate_responses.py \
+python scripts/core/generate_responses.py \
     --plan configs/evaluation/quantization_comparison.yaml \
     --output-dir evaluation/responses_quantization/
 
 # Evaluate
-python scripts/compare_models.py \
+python scripts/core/compare_models.py \
     --plan configs/evaluation/quantization_comparison.yaml \
     --responses-dir evaluation/responses_quantization/
 ```
@@ -322,7 +322,7 @@ The `run_evaluation_pipeline.py` script orchestrates complete evaluation workflo
 ```bash
 # Full 6-condition comparison
 python scripts/run_evaluation_pipeline.py full-comparison \
-    --plan configs/evaluation/compare_0p5b_experiments.yaml \
+    --plan configs/evaluation/six_condition_experiment.yaml \
     --output-dir evaluation/results/six_condition/
 
 # Quantization comparison (Q4_K_M vs F16)
@@ -388,26 +388,26 @@ python scripts/run_evaluation_pipeline.py end-to-end \
 
 | Purpose | Path |
 |---------|------|
-| Response generation (Phase 1) | `scripts/generate_responses.py` |
-| Comparison evaluation (Phase 2) | `scripts/compare_models.py` |
+| Response generation (Phase 1) | `scripts/core/generate_responses.py` |
+| Comparison evaluation (Phase 2) | `scripts/core/compare_models.py` |
 | Unified pipeline orchestrator | `scripts/run_evaluation_pipeline.py` |
 | Retrieval ablation | `scripts/run_retrieval_ablation.py` |
 | End-to-end evaluation | `scripts/evaluate_end_to_end.py` |
 | Pairwise evaluation | `scripts/run_pairwise_evaluation.py` |
 | ELO ranking computation | `scripts/compute_elo_rankings.py` |
-| Result visualization | `scripts/visualize_comparison.py` |
+| Result visualization | `scripts/core/visualize_comparison.py` |
 
 ### Configuration Files
 
 | Purpose | Path |
 |---------|------|
-| 6-condition experiment plan | `configs/evaluation/compare_0p5b_experiments.yaml` |
+| 6-condition experiment plan | `configs/evaluation/six_condition_experiment.yaml` |
 | Quantization comparison | `configs/evaluation/quantization_comparison.yaml` |
 | Retrieval ablation | `configs/evaluation/retrieval_ablation.yaml` |
 | End-to-end evaluation | `configs/evaluation/end_to_end.yaml` |
-| RAG-trained model (Q4_K_M) | `configs/lora_science_v1_rag_trained_ollama.yaml` |
+| RAG-trained model (Q4_K_M) | `configs/models/lora_rag_trained.yaml` |
 | RAG-trained model (F16) | `configs/evaluation/lora_science_v1_rag_trained_f16_ollama.yaml` |
-| Instruction-only model | `configs/lora_science_v1_instruction_only_ollama.yaml` |
+| Instruction-only model | `configs/models/lora_instruction_only.yaml` |
 
 ### Data Files
 

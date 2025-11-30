@@ -67,12 +67,12 @@ ollama push lora_science_0p5
 
 | Evaluation Mode | Model | Modelfile | Ollama Tag | Config File |
 |----------------|-------|-----------|------------|-------------|
-| Base Baseline | Base model | N/A | `qwen2.5:0.5b-instruct` | `rag_baseline_ollama.yaml` |
-| RAG Baseline | Base model | N/A | `qwen2.5:0.5b-instruct` | `rag_baseline_ollama.yaml` |
-| FT Only | Fine-tuned (instruction-only) | `Modelfile.instruction_only` | `lora_science_0p5_instruction_only` | `lora_science_v1_instruction_only_ollama.yaml` |
-| FT+RAG (instruction-only) | Fine-tuned (instruction-only) | `Modelfile.instruction_only` | `lora_science_0p5_instruction_only` | `lora_science_v1_instruction_only_ollama.yaml` |
-| RAG-trained FT Only | Fine-tuned (RAG-trained) | `Modelfile.rag_trained` | `lora_science_0p5` | `lora_science_v1_rag_trained_ollama.yaml` |
-| RAG-trained FT+RAG | Fine-tuned (RAG-trained) | `Modelfile.rag_trained` | `lora_science_0p5` | `lora_science_v1_rag_trained_ollama.yaml` |
+| Base Baseline | Base model | N/A | `qwen2.5:0.5b-instruct` | `base_ollama.yaml` |
+| RAG Baseline | Base model | N/A | `qwen2.5:0.5b-instruct` | `base_ollama.yaml` |
+| FT Only | Fine-tuned (instruction-only) | `Modelfile.instruction_only` | `lora_science_0p5_instruction_only` | `lora_instruction_only.yaml` |
+| FT+RAG (instruction-only) | Fine-tuned (instruction-only) | `Modelfile.instruction_only` | `lora_science_0p5_instruction_only` | `lora_instruction_only.yaml` |
+| RAG-trained FT Only | Fine-tuned (RAG-trained) | `Modelfile.rag_trained` | `lora_science_0p5` | `lora_rag_trained.yaml` |
+| RAG-trained FT+RAG | Fine-tuned (RAG-trained) | `Modelfile.rag_trained` | `lora_science_0p5` | `lora_rag_trained.yaml` |
 
 **Key Point**: TWO fine-tuned models are needed for the complete 6-condition experiment:
 - Instruction-only model: Used for FT-only and FT+RAG (instruction-only)

@@ -22,8 +22,8 @@ Usage examples:
     # Validate configuration before running evaluation
     python scripts/validate_experiment.py \
         --config configs/default.yaml \
-        --model-config configs/rag_baseline_ollama.yaml \
-        --judge-config configs/judges/scientific_default_rag.yaml \
+        --model-config configs/models/base_ollama.yaml \
+        --judge-config configs/judges/rag.yaml \
         --prompt-mode rag
 """
 

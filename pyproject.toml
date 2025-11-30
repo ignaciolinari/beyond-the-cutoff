@@ -146,6 +146,12 @@ module = [
 ]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = [
+  "tests.future.*"
+]
+ignore_errors = true
+
 [tool.pytest.ini_options]
 minversion = "7.4"
 addopts = "-ra --maxfail=1 --strict-markers"

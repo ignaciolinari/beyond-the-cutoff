@@ -25,7 +25,7 @@ def _load_pipeline() -> RAGPipeline:
     mapping_path = index_dir / "mapping.tsv"
     if not index_path.exists() or not mapping_path.exists():
         raise FileNotFoundError(
-            f"Index files not found at {index_dir}. Run scripts/ingest_and_index.py first."
+            f"Index files not found at {index_dir}. Run scripts/data/ingest_and_index.py first."
         )
     return RAGPipeline(cfg, index_path=index_path, mapping_path=mapping_path)
 

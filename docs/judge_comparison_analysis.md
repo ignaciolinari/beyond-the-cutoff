@@ -249,4 +249,4 @@ max_new_tokens: 1024
 - `configs/judges/dataset_quality_judge.yaml` - Main Qwen3 judge configuration
 - `configs/judges/llama3_judge_inference.yaml` - Llama judge configuration
 - `configs/judges/qwen3_judge_no_thinking.yaml` - Qwen3 without thinking mode
-- `configs/evaluation/compare_0p5b_experiments.yaml` - Main evaluation plan
+- `configs/evaluation/six_condition_experiment.yaml` - Main evaluation plan

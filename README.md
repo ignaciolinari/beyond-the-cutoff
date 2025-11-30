@@ -275,7 +275,7 @@ Both notebooks load `evaluation/datasets/offline_dataset.jsonl`, apply LoRA/PEFT
 - For automated scoring, rely on a stronger judge model (cloud API or high-quality local checkpoint) to grade factuality, citation adherence, and summaries; log judge prompts/responses for reproducibility.
 - Complement automatic grading with targeted human spot checks, prioritising disagreements or low-confidence judge outputs.
 - Track results in `evaluation/results/` so trends over time (different checkpoints or datasets) remain auditable.
-- Automate comparative sweeps with `python scripts/compare_models.py --plan configs/evaluation/compare_0p5b_experiments.yaml` to evaluate multiple assistants and emit a consolidated JSON report.
+- Automate comparative sweeps with `python scripts/core/compare_models.py --plan configs/evaluation/six_condition_experiment.yaml` to evaluate multiple assistants and emit a consolidated JSON report.
 
 ### Automated Metrics Harness
 
@@ -298,8 +298,8 @@ Validation runs automatically during evaluation, but you can also run it indepen
 # Validate configuration before running evaluation
 python scripts/validate_experiment.py \
     --config configs/default.yaml \
-    --model-config configs/rag_baseline_ollama.yaml \
-    --judge-config configs/judges/scientific_default_rag.yaml \
+    --model-config configs/models/base_ollama.yaml \
+    --judge-config configs/judges/rag.yaml \
     --prompt-mode rag
 
 # Validate dataset versioning across runs
@@ -323,18 +323,18 @@ Generate visualizations from evaluation results to compare models:
 
 ```bash
 # Visualize from comparison report JSON
-python scripts/visualize_comparison.py \
+python scripts/core/visualize_comparison.py \
     --report evaluation/results/comparison_report.json \
     --output evaluation/results/visualizations/
 
 # Visualize from individual metrics files
-python scripts/visualize_comparison.py \
+python scripts/core/visualize_comparison.py \
     --metrics evaluation/results/rag_baseline_0p5b/metrics.json \
     --metrics evaluation/results/lora_science_0p5b_ft_only/metrics.json \
     --output evaluation/results/visualizations/
 
 # Generate specific visualizations only
-python scripts/visualize_comparison.py \
+python scripts/core/visualize_comparison.py \
     --report evaluation/results/comparison_report.json \
     --output evaluation/results/visualizations/ \
     --only metrics error-rates citations
@@ -408,13 +408,13 @@ For efficient evaluation of multiple model conditions, the pipeline separates re
 
 ```bash
 # Phase 1: Generate responses for all conditions (parallelizable)
-python scripts/generate_responses.py \
-    --plan configs/evaluation/compare_0p5b_experiments.yaml \
+python scripts/core/generate_responses.py \
+    --plan configs/evaluation/six_condition_experiment.yaml \
     --output-dir evaluation/responses/
 
 # Phase 2: Evaluate pre-generated responses with judge
-python scripts/compare_models.py \
-    --plan configs/evaluation/compare_0p5b_experiments.yaml \
+python scripts/core/compare_models.py \
+    --plan configs/evaluation/six_condition_experiment.yaml \
     --responses-dir evaluation/responses/ \
     --output evaluation/results/comparison_results.jsonl
 ```
@@ -431,7 +431,7 @@ For orchestrating complete evaluation workflows, use the unified pipeline script
 ```bash
 # Full 6-condition model comparison
 python scripts/run_evaluation_pipeline.py full-comparison \
-    --plan configs/evaluation/compare_0p5b_experiments.yaml \
+    --plan configs/evaluation/six_condition_experiment.yaml \
     --output-dir evaluation/results/six_condition/
 
 # Quantization comparison (Q4_K_M vs F16)

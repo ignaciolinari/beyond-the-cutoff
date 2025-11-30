@@ -200,7 +200,7 @@ class TestModelTypeDetection:
 
     def test_detect_instruction_only_from_config_path(self) -> None:
         """Test detection of instruction-only model from config path."""
-        config_path = Path("configs/lora_science_v1_instruction_only_ollama.yaml")
+        config_path = Path("configs/models/lora_instruction_only.yaml")
         model_name = "lora_science_0p5_instruction_only"
 
         model_type = _detect_model_type(config_path, model_name)
@@ -209,7 +209,7 @@ class TestModelTypeDetection:
 
     def test_detect_rag_trained_from_config_path(self) -> None:
         """Test detection of RAG-trained model from config path."""
-        config_path = Path("configs/lora_science_v1_rag_trained_ollama.yaml")
+        config_path = Path("configs/models/lora_rag_trained.yaml")
         model_name = "lora_science_0p5"
 
         model_type = _detect_model_type(config_path, model_name)

@@ -42,21 +42,21 @@ Use this checklist before running the 0.5B model comparison experiments to ensur
 ### 3. Configuration Files
 
 #### Model Configs
-- [ ] **`configs/rag_baseline_ollama.yaml`**: Points to `qwen2.5:0.5b-instruct` (used for base baseline and RAG baseline)
-- [ ] **`configs/lora_science_v1_instruction_only_ollama.yaml`**: Points to `lora_science_0p5_instruction_only`
-- [ ] **`configs/lora_science_v1_rag_trained_ollama.yaml`**: Points to `lora_science_0p5` (RAG-trained model)
+- [ ] **`configs/models/base_ollama.yaml`**: Points to `qwen2.5:0.5b-instruct` (used for base baseline and RAG baseline)
+- [ ] **`configs/models/lora_instruction_only.yaml`**: Points to `lora_science_0p5_instruction_only`
+- [ ] **`configs/models/lora_rag_trained.yaml`**: Points to `lora_science_0p5` (RAG-trained model)
 - [x] **`configs/hybrid_science_v1_ollama.yaml`**: Legacy config (moved to `vintage/configs/` - not used in current experiment)
 
 #### Comparison Plan
-- [ ] **`configs/evaluation/compare_0p5b_experiments.yaml`**:
+- [ ] **`configs/evaluation/six_condition_experiment.yaml`**:
   - Contains all 6 conditions (base baseline, RAG baseline, FT-only, FT+RAG instruction-only, RAG-trained FT-only, RAG-trained FT+RAG)
   - Uses correct model configs for each condition
   - Has correct `prompt_mode` settings (`rag` for conditions with RAG, `instruction` for conditions without RAG)
   - Points to correct dataset path
 
 #### Judge Config
-- [ ] **`configs/judges/scientific_default_rag.yaml`**: Exists and has proper prompt template (for RAG conditions)
-- [ ] **`configs/judges/scientific_default_instruction.yaml`**: Exists and has proper prompt template (for instruction-only conditions)
+- [ ] **`configs/judges/rag.yaml`**: Exists and has proper prompt template (for RAG conditions)
+- [ ] **`configs/judges/instruction.yaml`**: Exists and has proper prompt template (for instruction-only conditions)
 - [ ] **`configs/judges/ollama_qwen7b.yaml`**: Points to judge model
 
 ### 4. Environment & Dependencies
@@ -79,9 +79,9 @@ Test a single model before running the full comparison:
 python scripts/evaluate_models.py \
   --config configs/default.yaml \
   --dataset evaluation/datasets/offline_dataset.jsonl \
-  --model-config configs/rag_baseline_ollama.yaml \
+  --model-config configs/models/base_ollama.yaml \
   --model-label rag_baseline_0p5b_test \
-  --judge-config configs/judges/scientific_default_rag.yaml \
+  --judge-config configs/judges/rag.yaml \
   --judge-inference configs/judges/ollama_qwen7b.yaml \
   --output evaluation/results/rag_baseline_0p5b_test/metrics.json \
   --prompt-mode rag \
@@ -92,9 +92,9 @@ python scripts/evaluate_models.py \
 Once pre-checks pass, run the full comparison:
 
 ```bash
-python scripts/compare_models.py \
+python scripts/core/compare_models.py \
   --config configs/default.yaml \
-  --plan configs/evaluation/compare_0p5b_experiments.yaml \
+  --plan configs/evaluation/six_condition_experiment.yaml \
   --output evaluation/results/comparison_report.json
 ```
 

@@ -177,7 +177,7 @@ class RAGPipeline:
                     raise ValueError(
                         "Index embedding model does not match config. Found "
                         f"{idx_model!r}, expected {self.config.retrieval.embedding_model!r}. "
-                        "Rebuild the index with scripts/ingest_and_index.py."
+                        "Rebuild the index with scripts/data/ingest_and_index.py."
                     )
             except Exception:
                 # Non-fatal; proceed with best effort

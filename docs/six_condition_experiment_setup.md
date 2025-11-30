@@ -17,7 +17,7 @@ This experiment compares **six conditions** to understand the interaction betwee
 - **Model**: Base `qwen2.5:0.5b-instruct`
 - **Training**: None (base model)
 - **Evaluation**: WITHOUT RAG contexts
-- **Config**: `rag_baseline_ollama.yaml` (same model, instruction mode)
+- **Config**: `base_ollama.yaml` (same model, instruction mode)
 - **Label**: `base_baseline_0p5b`
 - **What it tests**: Baseline performance without fine-tuning or RAG (control condition)
 - **Why it's important**: Establishes the starting point to measure improvements from fine-tuning and/or RAG
@@ -26,7 +26,7 @@ This experiment compares **six conditions** to understand the interaction betwee
 - **Model**: Base `qwen2.5:0.5b-instruct`
 - **Training**: None (base model)
 - **Evaluation**: WITH RAG contexts
-- **Config**: `rag_baseline_ollama.yaml`
+- **Config**: `base_ollama.yaml`
 - **Label**: `rag_baseline_0p5b`
 - **What it tests**: Baseline RAG performance (how much does RAG help the base model?)
 
@@ -34,7 +34,7 @@ This experiment compares **six conditions** to understand the interaction betwee
 - **Model**: `lora_science_0p5_instruction_only` (instruction-only trained)
 - **Training**: WITHOUT RAG contexts
 - **Evaluation**: WITHOUT RAG contexts
-- **Config**: `lora_science_v1_instruction_only_ollama.yaml`
+- **Config**: `lora_instruction_only.yaml`
 - **Label**: `lora_science_0p5b_ft_only`
 - **What it tests**: Can fine-tuning alone memorize domain knowledge?
 
@@ -42,7 +42,7 @@ This experiment compares **six conditions** to understand the interaction betwee
 - **Model**: `lora_science_0p5_instruction_only` (same as condition 3)
 - **Training**: WITHOUT RAG contexts
 - **Evaluation**: WITH RAG contexts
-- **Config**: `lora_science_v1_instruction_only_ollama.yaml` (same model, different prompt mode)
+- **Config**: `lora_instruction_only.yaml` (same model, different prompt mode)
 - **Label**: `hybrid_science_0p5b_instruction_only`
 - **What it tests**: Can a model trained without contexts benefit from RAG at inference? (Transfer learning)
 - **Note**: This may underperform because the model wasn't trained to use contexts
@@ -52,7 +52,7 @@ This experiment compares **six conditions** to understand the interaction betwee
 - **Model**: `lora_science_0p5` (RAG-trained)
 - **Training**: WITH RAG contexts
 - **Evaluation**: WITHOUT RAG contexts
-- **Config**: `lora_science_v1_rag_trained_ollama.yaml`
+- **Config**: `lora_rag_trained.yaml`
 - **Label**: `lora_science_0p5b_rag_trained_ft_only`
 - **What it tests**: Does training with contexts hurt performance when contexts aren't available?
 - **Note**: Tests the inverse of condition #3 - training/evaluation mismatch in opposite direction
@@ -61,7 +61,7 @@ This experiment compares **six conditions** to understand the interaction betwee
 - **Model**: `lora_science_0p5` (RAG-trained)
 - **Training**: WITH RAG contexts
 - **Evaluation**: WITH RAG contexts
-- **Config**: `lora_science_v1_rag_trained_ollama.yaml`
+- **Config**: `lora_rag_trained.yaml`
 - **Label**: `hybrid_science_0p5b_rag_trained`
 - **What it tests**: Optimal RAG+FT performance (matches Microsoft paper approach)
 - **Note**: This should perform best for RAG+FT because training matches evaluation
@@ -70,12 +70,12 @@ This experiment compares **six conditions** to understand the interaction betwee
 
 | Condition | Model | Training Contexts | Eval Contexts | Config File | Label |
 |-----------|-------|-------------------|---------------|-------------|-------|
-| Base Baseline | Base | N/A | ❌ No | `rag_baseline_ollama.yaml` | `base_baseline_0p5b` |
-| RAG Baseline | Base | N/A | ✅ Yes | `rag_baseline_ollama.yaml` | `rag_baseline_0p5b` |
-| FT Only (instruction-only) | Instruction-only | ❌ No | ❌ No | `lora_science_v1_instruction_only_ollama.yaml` | `lora_science_0p5b_ft_only` |
-| FT+RAG (instruction-only) | Instruction-only | ❌ No | ✅ Yes | `lora_science_v1_instruction_only_ollama.yaml` | `hybrid_science_0p5b_instruction_only` |
-| RAG-trained FT Only | RAG-trained | ✅ Yes | ❌ No | `lora_science_v1_rag_trained_ollama.yaml` | `lora_science_0p5b_rag_trained_ft_only` |
-| RAG-trained FT+RAG | RAG-trained | ✅ Yes | ✅ Yes | `lora_science_v1_rag_trained_ollama.yaml` | `hybrid_science_0p5b_rag_trained` |
+| Base Baseline | Base | N/A | ❌ No | `base_ollama.yaml` | `base_baseline_0p5b` |
+| RAG Baseline | Base | N/A | ✅ Yes | `base_ollama.yaml` | `rag_baseline_0p5b` |
+| FT Only (instruction-only) | Instruction-only | ❌ No | ❌ No | `lora_instruction_only.yaml` | `lora_science_0p5b_ft_only` |
+| FT+RAG (instruction-only) | Instruction-only | ❌ No | ✅ Yes | `lora_instruction_only.yaml` | `hybrid_science_0p5b_instruction_only` |
+| RAG-trained FT Only | RAG-trained | ✅ Yes | ❌ No | `lora_rag_trained.yaml` | `lora_science_0p5b_rag_trained_ft_only` |
+| RAG-trained FT+RAG | RAG-trained | ✅ Yes | ✅ Yes | `lora_rag_trained.yaml` | `hybrid_science_0p5b_rag_trained` |
 
 ## Complete 2x2 Matrix + Baselines
 
@@ -161,21 +161,21 @@ The question-level holdout is implemented in `scripts/split_dataset.py` via stra
 ### Configuration Files
 
 All configs are in `configs/`:
-- `rag_baseline_ollama.yaml`
-- `lora_science_v1_instruction_only_ollama.yaml`
-- `lora_science_v1_rag_trained_ollama.yaml`
+- `base_ollama.yaml`
+- `lora_instruction_only.yaml`
+- `lora_rag_trained.yaml`
 - `hybrid_science_v1_ollama.yaml` (legacy, moved to `vintage/configs/` - not used in current experiment)
 
 ### Comparison Plan
 
-The comparison plan is in `configs/evaluation/compare_0p5b_experiments.yaml` and includes all 6 conditions.
+The comparison plan is in `configs/evaluation/six_condition_experiment.yaml` and includes all 6 conditions.
 
 ## Running the Experiment
 
 ```bash
-python scripts/compare_models.py \
+python scripts/core/compare_models.py \
   --config configs/default.yaml \
-  --plan configs/evaluation/compare_0p5b_experiments.yaml
+  --plan configs/evaluation/six_condition_experiment.yaml
 ```
 
 This will run all 6 conditions and generate comparative results.

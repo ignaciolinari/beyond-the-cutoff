@@ -8,12 +8,12 @@ This document explains how to interpret the results of the 6-condition experimen
 
 | # | Condition | Training | Evaluation | Config |
 |---|-----------|----------|------------|--------|
-| 1 | Base Baseline | None | No RAG | `rag_baseline_ollama.yaml` + instruction mode |
-| 2 | RAG Baseline | None | With RAG | `rag_baseline_ollama.yaml` + rag mode |
-| 3 | FT Only (instruction) | Without contexts | No RAG | `lora_science_v1_instruction_only_ollama.yaml` |
-| 4 | FT+RAG (instruction) | Without contexts | With RAG | `lora_science_v1_instruction_only_ollama.yaml` + rag mode |
-| 5 | RAG-trained FT Only | With contexts | No RAG | `lora_science_v1_rag_trained_ollama.yaml` + instruction mode |
-| 6 | RAG-trained FT+RAG | With contexts | With RAG | `lora_science_v1_rag_trained_ollama.yaml` |
+| 1 | Base Baseline | None | No RAG | `base_ollama.yaml` + instruction mode |
+| 2 | RAG Baseline | None | With RAG | `base_ollama.yaml` + rag mode |
+| 3 | FT Only (instruction) | Without contexts | No RAG | `lora_instruction_only.yaml` |
+| 4 | FT+RAG (instruction) | Without contexts | With RAG | `lora_instruction_only.yaml` + rag mode |
+| 5 | RAG-trained FT Only | With contexts | No RAG | `lora_rag_trained.yaml` + instruction mode |
+| 6 | RAG-trained FT+RAG | With contexts | With RAG | `lora_rag_trained.yaml` |
 
 ## Evaluation Strategy
 
@@ -21,12 +21,12 @@ This document explains how to interpret the results of the 6-condition experimen
 
 We use different judges depending on whether RAG contexts are provided:
 
-**`scientific_default_instruction.yaml`** (Conditions 1, 3, 5):
+**`instruction.yaml`** (Conditions 1, 3, 5):
 - No citation checking (model has no contexts to cite)
 - Weights: 50% factuality + 30% completeness + 20% communication
 - Grounding score = 0.0 (not applicable)
 
-**`scientific_default_rag.yaml`** (Conditions 2, 4, 6):
+**`rag.yaml`** (Conditions 2, 4, 6):
 - Full citation checking (model should cite provided contexts)
 - Weights: 40% factuality + 30% grounding + 20% completeness + 10% communication
 - Checks for missing/hallucinated citations
@@ -59,10 +59,10 @@ When comparing across groups (e.g., 3 vs 4), be aware:
 
 The two judges use different weighting schemes:
 
-**Instruction-only judge** (`scientific_default_instruction.yaml`):
+**Instruction-only judge** (`instruction.yaml`):
 - 50% factuality + 30% completeness + 20% communication = **100%**
 
-**RAG judge** (`scientific_default_rag.yaml`):
+**RAG judge** (`rag.yaml`):
 - 40% factuality + 30% grounding + 20% completeness + 10% communication = **100%**
 
 **The problem**: Even if two models perform identically on factuality, completeness, and communication:

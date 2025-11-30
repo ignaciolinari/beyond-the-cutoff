@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from scripts.split_dataset import (
+from scripts.data.split_dataset import (
     SplitStats,
     extract_paper_id,
     load_dataset,
