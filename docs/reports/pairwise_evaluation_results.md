@@ -1,7 +1,8 @@
 # Pairwise Evaluation Results: Base+RAG vs FT-RAG+RAG
 
 **Date:** December 2, 2025
-**Evaluator:** Gemini 3 Pro
+**Primary Evaluator:** Gemini 3 Pro
+**Replication Evaluator:** Qwen 2.5 8B Instruct
 **Method:** Pairwise comparison with randomized A/B presentation order
 
 ---
@@ -13,11 +14,11 @@ We conducted a comprehensive pairwise evaluation comparing two model configurati
 - **Base+RAG** (`rag_baseline_0p5b`): Qwen 0.5B base model with RAG retrieval
 - **FT-RAG+RAG** (`hybrid_science_0p5b_rag_trained`): Qwen 0.5B fine-tuned on RAG examples, with RAG retrieval
 
-Using Gemini 3 Pro as the judge, we evaluated **154 head-to-head comparisons** across scientific Q&A tasks based on recent arXiv papers (post-training cutoff).
+Using Gemini 3 Pro as the primary judge, we evaluated **154 head-to-head comparisons** across scientific Q&A tasks based on recent arXiv papers (post-training cutoff). A replication study using Qwen 2.5 8B is included separately.
 
 ### Key Finding
 
-**FT-RAG+RAG shows a modest advantage (54.9% win rate) but the difference is not statistically significant (p=0.35).**
+**FT-RAG+RAG shows a modest advantage (54.9% win rate) but the difference is not statistically significant (p=0.35).** The evidence is insufficient to conclude that fine-tuning provides a meaningful improvement for this task.
 
 ---
 
@@ -279,8 +280,148 @@ Despite non-significance, response-level analysis reveals:
 
 ---
 
+## Replication Study: Qwen 8B Judge
+
+**Date:** December 2 2025
+**Evaluator:** Qwen 2.5 8B Instruct (via Ollama)
+**Method:** Pairwise comparison with randomized A/B presentation order
+
+### Results Summary
+
+#### Overall Match Outcomes
+
+| Outcome | Count | Percentage |
+|---------|-------|------------|
+| **FT-RAG+RAG wins** | 42 | 27.3% |
+| **Base+RAG wins** | 44 | 28.6% |
+| **Ties** | 68 | 44.2% |
+| **Total** | 154 | 100% |
+
+#### Win Rate Analysis (Excluding Ties)
+
+| Model | Wins | Win Rate | 95% CI (Wilson) |
+|-------|------|----------|-----------------|
+| **Base+RAG** | 44 | **51.2%** | 40.8% - 61.4% |
+| **FT-RAG+RAG** | 42 | 48.8% | 38.6% - 59.2% |
+
+**Observed difference:** -2.3 percentage points (Base+RAG slightly ahead)
+
+#### Statistical Analysis
+
+| Metric | Value |
+|--------|-------|
+| Total comparisons (N) | 154 |
+| Decisive matches | 86 |
+| Ties | 68 |
+| Sign test p-value (two-tailed) | **0.914** |
+| Statistically significant at α=0.05? | ❌ No |
+| Effect size (Cohen's h) | -0.047 (negligible) |
+
+### High Tie Rate Investigation
+
+The Qwen 8B judge produced a substantially higher tie rate (44.2%) compared to Gemini 3 Pro (26.6%). Analysis of these ties revealed:
+
+| Tie Category | Count | Percentage |
+|--------------|-------|------------|
+| **Parse failures** | 63 | 92.6% |
+| **Genuine ties** | 5 | 7.4% |
+| **Total ties** | 68 | 100% |
+
+**Critical finding:** 63 of 68 ties (92.6%) resulted from parsing failures where the judge's response could not be mapped to a clear A/B/tie verdict. When the judge successfully parsed, the tie rate dropped to only 5/91 = 5.5%, substantially lower than Gemini 3 Pro's genuine tie rate.
+
+### Valid Judgments Analysis
+
+Excluding parse failures (N = 91 valid judgments):
+
+| Outcome | Count | Percentage |
+|---------|-------|------------|
+| Base+RAG wins | 44 | 48.4% |
+| FT-RAG+RAG wins | 42 | 46.2% |
+| Ties | 5 | 5.5% |
+
+The near-equal split among valid judgments strongly supports the conclusion of no meaningful difference between models.
+
+### Position Bias Assessment
+
+| Position | Wins | Win Rate |
+|----------|------|----------|
+| Position A | 44 | 51.2% |
+| Position B | 42 | 48.8% |
+
+Presentation order was randomized: A-first (81 matches) vs B-first (73 matches). No significant position bias detected.
+
+### Reasoning Quality Patterns
+
+Among valid judgments, the judge cited these differentiating factors:
+
+| Reasoning Pattern | Frequency | % of Matches |
+|-------------------|-----------|--------------|
+| Accuracy/correctness | 50 | 32.5% |
+| Explanation/detail quality | 36 | 23.4% |
+| Completeness/comprehensiveness | 35 | 22.7% |
+| Neither adequate | 15 | 9.7% |
+| Relevance | 10 | 6.5% |
+| Directly addresses question | 9 | 5.8% |
+
+### Comparison: Gemini 3 Pro vs Qwen 8B
+
+| Metric | Gemini 3 Pro | Qwen 8B |
+|--------|--------------|---------|
+| Total matches | 154 | 154 |
+| Decisive matches | 113 | 86 |
+| Tie rate | 26.6% | 44.2%* |
+| FT-RAG+RAG win rate | **54.9%** | **48.8%** |
+| Base+RAG win rate | 45.1% | 51.2% |
+| p-value | 0.347 | 0.914 |
+| Effect size (Cohen's h) | 0.20 (small) | -0.047 (negligible) |
+| Direction | FT-RAG favored | Base+RAG favored |
+
+*44.2% includes 63 parse failures; genuine tie rate among valid judgments is 5.5%
+
+### Inter-Judge Agreement Analysis
+
+The two judges show **opposing directional preferences**:
+- Gemini 3 Pro: Favors FT-RAG+RAG (+9.7 pp)
+- Qwen 8B: Favors Base+RAG (+2.3 pp)
+
+This directional disagreement, combined with neither result achieving statistical significance, strongly suggests:
+
+1. **The true effect is near zero:** Both judges are sampling from a distribution centered around 50%, with observed differences attributable to noise
+2. **Judge variability exists:** Different LLM judges may have subtle systematic biases that affect relative preferences
+3. **Model equivalence is likely:** The fine-tuning intervention did not produce a reliable, judge-independent improvement
+
+### Conclusions from Replication
+
+1. **Non-replication of directional trend:** The Qwen 8B judge does not confirm Gemini 3 Pro's slight preference for FT-RAG+RAG
+
+2. **Both results non-significant:** p-values of 0.347 and 0.914 both fail to reject the null hypothesis of equal performance
+
+3. **Effect size convergence:** When averaged across judges, the effect size approaches zero (mean h ≈ 0.08)
+
+4. **Robust null finding:** The combination of two independent judges both failing to find significant differences provides stronger evidence for model equivalence than either study alone
+
+5. **Judge reliability concern:** The high parse failure rate (40.9%) with Qwen 8B suggests this model may be less suitable as a pairwise evaluation judge, despite its larger parameter count
+
+### Overall Conclusions
+
+The Qwen 8B replication provides additional evidence supporting the null hypothesis:
+
+1. **Both judges find no significant difference:** p = 0.347 (Gemini 3 Pro) and p = 0.914 (Qwen 8B)
+
+2. **Opposing directional preferences:** The judges favor different models, suggesting the true effect is near zero
+
+3. **Convergent conclusion:** Despite methodological differences (parse failures in Qwen 8B), both studies support model equivalence
+
+4. **Judge reliability matters:** The high parse failure rate (40.9%) with Qwen 8B highlights the importance of using capable, well-calibrated judge models like Gemini 3 Pro
+
+**Final interpretation:** The Gemini 3 Pro evaluation remains the primary result. The Qwen 8B replication, despite its limitations, corroborates the conclusion that fine-tuning does not produce a statistically significant improvement in this task.
+
+---
+
 ## Data Availability
 
-- **Evaluation results:** `evaluation/exports/batches/evaluation_results.json`
+- **Gemini 3 Pro results:** `evaluation/exports/batches/evaluation_results.json`
+- **Qwen 8B results:** `evaluation/results/tournament/base_rag_vs_ft_rag_extended.json`
+- **Qwen 8B detailed matches:** `evaluation/results/tournament/base_rag_vs_ft_rag_extended.jsonl`
 - **Batch mapping:** `evaluation/exports/batches/batch_mapping.json`
 - **Batch files:** `evaluation/exports/batches/batch_*.txt`
