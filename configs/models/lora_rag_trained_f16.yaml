@@ -1,0 +1,18 @@
+provider: ollama
+# Model tag for RAG-trained fine-tuned model (F16 / non-quantized version)
+# This model is used for quantization comparison experiments
+# Ollama tag: lora_science_0p5_f16
+model: lora_science_0p5_f16
+model_type: rag_trained  # Explicitly mark as RAG-trained model
+host: http://localhost
+port: 11434
+timeout: 480.0
+device: auto
+torch_dtype: auto
+max_new_tokens: 512
+temperature: 0.0
+top_p: 0.9
+repetition_penalty: 1.05
+stop_sequences:
+  - "<|im_start|>"
+  - "<|im_end|>"

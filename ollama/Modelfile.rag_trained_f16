@@ -1,21 +1,28 @@
 # F16 (full precision) Modelfile for RAG-trained model
 # Use this for quantization comparison experiments
 # To create: ollama create lora_science_0p5_f16 -f ollama/Modelfile.rag_trained_f16
+#
+# IMPORTANT: This file must be IDENTICAL to Modelfile.rag_trained except for the GGUF path.
+# This ensures the only variable being tested is quantization (F16 vs Q4_K_M).
 
-FROM outputs/lora_science_v1/merged_full_model/Qwen2.5-0.5B-lora_science_v1.gguf
+FROM ../outputs/lora_science_v1/merged_full_model/Qwen2.5-0.5B-lora_science_v1.gguf
 
-PARAMETER temperature 0.0
+PARAMETER temperature 0
 PARAMETER top_p 0.9
 PARAMETER repeat_penalty 1.05
 PARAMETER num_ctx 4096
 PARAMETER stop "<|im_start|>"
 PARAMETER stop "<|im_end|>"
 
-SYSTEM """You are a scientific research assistant specialized in analyzing academic papers. Your role is to:
-1. Answer questions accurately based on the provided context from research papers
-2. Cite sources using [#] notation corresponding to the numbered context snippets
-3. Synthesize information across multiple sources when relevant
-4. Acknowledge when information is not available in the provided context
-5. Maintain scientific accuracy and precision in your responses
+TEMPLATE """
+{{- if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{- end }}{{- range .Messages }}<|im_start|>{{ .Role }}
+{{ .Content }}<|im_end|>
+{{- end }}<|im_start|>assistant
+"""
 
-When citing, use the exact bracket notation [1], [2], etc. that corresponds to the numbered excerpts in the context. Always ground your answers in the provided evidence."""
+# System prompt: MUST match Modelfile.rag_trained exactly for valid comparison
+# Training uses: "You are a scientific research assistant who answers with concise,
+# evidence-grounded prose and includes inline numeric citations like [1], [2], etc."
+SYSTEM "You are a scientific research assistant who answers with concise, evidence-grounded prose and includes inline numeric citations like [1], [2], etc."

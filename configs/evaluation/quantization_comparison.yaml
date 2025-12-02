@@ -1,0 +1,53 @@
+# =============================================================================
+# Quantization Comparison Experiment
+# =============================================================================
+# Compares F16 (full precision) vs Q4_K_M (4-bit quantized) versions of the same model
+#
+# Scientific Design:
+# - Both models are the SAME fine-tuned checkpoint (lora_science_v1)
+# - ONLY difference is quantization level (F16 vs Q4_K_M)
+# - Same system prompt, temperature, and all other parameters
+# - Same evaluation dataset and RAG contexts
+# - This isolates the effect of quantization on model quality
+#
+# Usage:
+#   python scripts/core/generate_responses.py \
+#     --config configs/default.yaml \
+#     --plan configs/evaluation/quantization_comparison.yaml \
+#     --output-dir evaluation/responses/ \
+#     --conditions hybrid_science_0p5b_rag_trained_f16
+#
+#   python scripts/core/pairwise_tournament.py \
+#     --model-a hybrid_science_0p5b_rag_trained \
+#     --model-b hybrid_science_0p5b_rag_trained_f16 \
+#     --output evaluation/results/tournament/quantization_q4_vs_f16.json
+# =============================================================================
+
+defaults:
+  dataset: ../../evaluation/datasets/eval_dataset.jsonl
+  judge_config: ../judges/rag.yaml
+  judge_inference: ../judges/qwen3_8b_thinking.yaml
+  output_dir: ../../evaluation/results
+  metrics_filename: metrics.json
+  details_filename: details.jsonl
+  metadata_filename: metadata.jsonl
+  limit: null
+  max_retries: 2
+  retry_delay: 15.0
+  skip_if_exists: true
+  prompt_mode: rag
+
+runs:
+  # F16 version (non-quantized, ~994 MB)
+  # Full precision weights, no quantization loss
+  - label: hybrid_science_0p5b_rag_trained_f16
+    model_config: ../models/lora_rag_trained_f16.yaml
+    prompt_mode: rag
+    judge_config: ../judges/rag.yaml
+
+  # Q4_K_M version (quantized, ~397 MB) - already have responses
+  # 4-bit quantization with K-quant medium
+  - label: hybrid_science_0p5b_rag_trained
+    model_config: ../models/lora_rag_trained.yaml
+    prompt_mode: rag
+    judge_config: ../judges/rag.yaml
