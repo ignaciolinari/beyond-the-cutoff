@@ -61,15 +61,47 @@ class TournamentResults:
 
 
 def load_responses(results_dir: Path, condition: str) -> dict[str, dict[str, Any]]:
-    """Load all responses for a condition, keyed by task_id."""
-    details_file = results_dir / condition / "details.jsonl"
+    """Load all responses for a condition, keyed by task_id.
+
+    Supports two formats:
+    1. Direct .jsonl file: results_dir/{condition}.jsonl
+    2. Subdirectory: results_dir/{condition}/details.jsonl
+    """
     responses: dict[str, dict[str, Any]] = {}
-    with open(details_file) as f:
-        for line in f:
-            record = json.loads(line)
-            task_id = record["task_id"]
-            responses[task_id] = record
-    return responses
+
+    # Try direct .jsonl file first (evaluation/responses/*.jsonl format)
+    direct_file = results_dir / f"{condition}.jsonl"
+    if direct_file.exists():
+        with open(direct_file) as f:
+            for line in f:
+                if line.strip():
+                    record = json.loads(line)
+                    task_id = record.get("task_id", record.get("id", ""))
+                    if task_id:
+                        # Normalize field names
+                        if "response" in record and "model_answer" not in record:
+                            record["model_answer"] = record["response"]
+                        responses[task_id] = record
+        return responses
+
+    # Fallback to subdirectory format (evaluation/results/interleaved/{condition}/details.jsonl)
+    details_file = results_dir / condition / "details.jsonl"
+    if details_file.exists():
+        with open(details_file) as f:
+            for line in f:
+                if line.strip():
+                    record = json.loads(line)
+                    task_id = record.get("task_id", record.get("id", ""))
+                    if task_id:
+                        if "response" in record and "model_answer" not in record:
+                            record["model_answer"] = record["response"]
+                        responses[task_id] = record
+        return responses
+
+    raise FileNotFoundError(
+        f"Could not find responses for {condition} in {results_dir}. "
+        f"Tried: {direct_file} and {details_file}"
+    )
 
 
 def create_pairwise_prompt(
@@ -512,16 +544,34 @@ def run_tournament(
     stat_significance = compute_statistical_significance(wins_a, wins_b, ties)
 
     # Print summary
+    total = len(matches)
+    decisive = wins_a + wins_b
+
     print(f"\n{'='*70}")
     print("  TOURNAMENT RESULTS")
     print(f"{'='*70}")
-    print("\n  📊 MATCH OUTCOMES")
-    print(f"  Total matches: {len(matches)}")
-    print(f"  {model_a}: {wins_a} wins ({wins_a/len(matches)*100:.1f}%)")
-    print(f"  {model_b}: {wins_b} wins ({wins_b/len(matches)*100:.1f}%)")
-    print(f"  Ties: {ties} ({ties/len(matches)*100:.1f}%)")
 
-    print("\n  🎯 ELO RATINGS")
+    print("\n  📊 MATCH OUTCOMES")
+    print(f"  Total matches: {total}")
+    print(f"  Decisive: {decisive} | Ties: {ties} ({ties/total*100:.1f}%)")
+
+    print("\n  🏆 WIN RATE (excluding ties)")
+    if decisive > 0:
+        wr_a = wins_a / decisive * 100
+        wr_b = wins_b / decisive * 100
+        print(f"  {model_a}: {wins_a}/{decisive} = {wr_a:.1f}%")
+        print(f"  {model_b}: {wins_b}/{decisive} = {wr_b:.1f}%")
+        print(f"  Difference: {abs(wr_a - wr_b):.1f} percentage points")
+    else:
+        print("  No decisive matches (all ties)")
+
+    print("\n  📈 WIN RATE (including ties as 0.5)")
+    wr_with_ties_a = (wins_a + ties * 0.5) / total * 100
+    wr_with_ties_b = (wins_b + ties * 0.5) / total * 100
+    print(f"  {model_a}: {wr_with_ties_a:.1f}%")
+    print(f"  {model_b}: {wr_with_ties_b:.1f}%")
+
+    print("\n  🎯 ELO RATINGS (reference only)")
     print(f"  {model_a}: {elo_a:.0f}")
     print(f"  {model_b}: {elo_b:.0f}")
     print(f"  Difference: {abs(elo_a - elo_b):.0f} points")
@@ -557,13 +607,27 @@ def run_tournament(
     else:
         print("  ✗ Not statistically significant (p >= 0.05)")
 
-    # Winner announcement
-    winner = model_a if elo_a > elo_b else model_b if elo_b > elo_a else "Tie"
+    # Winner announcement based on win count (not ELO)
+    if wins_a > wins_b:
+        winner = model_a
+        winner_wr = wins_a / decisive * 100 if decisive > 0 else 50
+    elif wins_b > wins_a:
+        winner = model_b
+        winner_wr = wins_b / decisive * 100 if decisive > 0 else 50
+    else:
+        winner = "Tie"
+        winner_wr = 50
+
     print(f"\n  {'='*66}")
     if ss["significant"]:
-        print(f"  🏆 WINNER: {winner} (statistically significant)")
+        print(f"  🏆 WINNER: {winner}")
+        print(f"     Win rate: {winner_wr:.1f}% (p={ss['p_value']:.4f}, statistically significant)")
     else:
-        print("  🤝 RESULT: No clear winner (difference not statistically significant)")
+        if winner != "Tie":
+            print(f"  📊 LEADING: {winner} ({winner_wr:.1f}% win rate)")
+            print(f"     But NOT statistically significant (p={ss['p_value']:.4f})")
+        else:
+            print("  🤝 RESULT: Exactly tied")
     print(f"  {'='*66}\n")
 
     return TournamentResults(
@@ -583,11 +647,17 @@ def run_tournament(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Pairwise Tournament between two models")
+
+    # Default to responses/ if it exists (has more data), otherwise interleaved/
+    default_dir = Path("evaluation/responses")
+    if not default_dir.exists():
+        default_dir = Path("evaluation/results/interleaved")
+
     parser.add_argument(
         "--results-dir",
         type=Path,
-        default=Path("evaluation/results/interleaved"),
-        help="Directory with evaluation results",
+        default=default_dir,
+        help="Directory with evaluation results (default: evaluation/responses or evaluation/results/interleaved)",
     )
     parser.add_argument(
         "--model-a", type=str, default="rag_baseline_0p5b", help="First model (condition name)"
