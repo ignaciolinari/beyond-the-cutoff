@@ -5,6 +5,8 @@
 **Replication Evaluator:** Qwen 2.5 8B Instruct
 **Method:** Pairwise comparison with randomized A/B presentation order
 
+> ⚠️ **Scope Limitation**: This comparison applies to **Qwen 2.5 0.5B** only. Larger models may show statistically significant differences due to increased capacity for knowledge retention during fine-tuning. See [Scaling Guide](../scaling/README.md).
+
 ---
 
 ## Executive Summary

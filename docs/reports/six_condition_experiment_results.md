@@ -5,6 +5,8 @@
 **Method:** Interleaved evaluation with multi-dimensional scoring
 **Dataset:** 154 scientific Q&A pairs from papers published after model training cutoff
 
+> ⚠️ **Scope Limitation**: These results apply to **Qwen 2.5 0.5B** only. Larger models with more parameter capacity may show different patterns, particularly for fine-tuning benefits. See [Scaling Guide](../scaling/README.md) for testing with larger models.
+
 ---
 
 ## Executive Summary

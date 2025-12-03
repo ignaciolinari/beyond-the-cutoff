@@ -1,17 +1,74 @@
 # Beyond the Cutoff
 
-Evaluating how large language models update knowledge beyond their training data cutoff by comparing **fine-tuning** and **retrieval-augmented generation (RAG)** on recent scientific papers.
+A reproducible pipeline for evaluating how language models acquire knowledge beyond their training data cutoff, comparing **fine-tuning** and **retrieval-augmented generation (RAG)** approaches.
+
+> **📊 Experiment Status: COMPLETED** — This pipeline was tested on Qwen 2.5 0.5B (a small language model). Results and methodology are documented below. The pipeline is model-agnostic and can be adapted for larger models.
 
 ## Overview
 
-This project investigates how LLMs can acquire new scientific knowledge published after their training cutoff. We compare two adaptation strategies:
+This project provides an end-to-end framework for investigating how LLMs can acquire new scientific knowledge published after their training cutoff. We compare two adaptation strategies:
 
 | Strategy | Approach | Pros | Cons |
 |----------|----------|------|------|
 | **Fine-tuning** | Update model weights with new data | Internalizes knowledge | Expensive, may forget |
 | **RAG** | Retrieve relevant context at inference | No retraining needed | Depends on retrieval quality |
 
-The benchmark uses **2025 arXiv papers** that are out-of-distribution for current open-weight LLMs.
+The benchmark uses **2025 arXiv papers** (post-cutoff for current open-weight models) as the knowledge source.
+
+### Completed Experiment
+
+| Aspect | Configuration |
+|--------|---------------|
+| **Subject Model** | Qwen 2.5 0.5B Instruct (small language model, Q4_K_M quantized) |
+| **Judge Model** | Qwen 3 8B (thinking mode) + Gemini 3 Pro (pairwise) |
+| **Dataset** | 120 arXiv papers (2025), 154 evaluation QA pairs |
+| **Quantization** | Q4_K_M (4-bit) vs F16 comparison |
+
+> ⚠️ **Scope**: The findings below apply to **Qwen 2.5 0.5B** — a small language model with limited capacity. Larger models (3B, 7B, 14B+) may exhibit different patterns, particularly regarding fine-tuning benefits. This pipeline is designed to test such hypotheses.
+
+---
+
+## Experimental Results (Qwen 2.5 0.5B)
+
+### 1. Six-Condition Experiment
+
+We evaluated 6 conditions crossing training approach (none, instruction-only FT, RAG-trained FT) with inference mode (with/without RAG):
+
+| Finding | Evidence |
+|---------|----------|
+| **RAG provides substantial improvement** | 4-5x improvement in pass rate (22% vs 4%) |
+| **Fine-tuning provides marginal gains** | +1.3% when training format matches inference |
+| **Training format affects transfer** | RAG-trained models perform better with RAG at inference |
+| **Fine-tuning alone insufficient** | FT-only models (no RAG) perform similarly to base (4-6%) |
+
+### 2. Pairwise Comparison (Top 2 Candidates)
+
+| Comparison | Result |
+|------------|--------|
+| **Base+RAG vs FT+RAG** | 54.9% vs 45.1% win rate (p=0.35, **not statistically significant**) |
+| **Judge** | Gemini 3 pro (62 FT wins, 51 Base wins, 41 ties) |
+| **Interpretation** | Insufficient evidence that fine-tuning improves RAG performance for this model size |
+
+### 3. Quantization Impact (Q4_K_M vs F16)
+
+| Metric | Result |
+|--------|--------|
+| **Win rate** | 48.4% vs 51.6% (p=0.84, **no significant difference**) |
+| **Size reduction** | 60% smaller (397MB vs 994MB) |
+| **Conclusion** | Q4_K_M quantization does not degrade quality for this model |
+
+### Summary
+
+For **Qwen 2.5 0.5B** on post-cutoff scientific QA:
+
+1. **RAG is essential** — provides the primary performance gain
+2. **Fine-tuning has minimal impact** — Base+RAG achieves ~95% of best performance
+3. **Q4_K_M is viable** — no measurable quality loss vs F16
+4. **Open question** — larger models may show different fine-tuning benefits
+
+📖 **Detailed reports**: [Six-Condition Results](docs/reports/six_condition_experiment_results.md) | [Pairwise Evaluation](docs/reports/pairwise_evaluation_results.md) | [Quantization Analysis](docs/reports/quantization_comparison_results.md)
+
+---
 
 ## Pipeline Overview
 
@@ -171,6 +228,49 @@ pytest tests/              # Run tests
 pre-commit run --all-files # Linting & formatting
 mypy src/                  # Type checking
 ```
+
+---
+
+## Adapting the Pipeline
+
+This pipeline is **model-agnostic**. To test with different models:
+
+### Changing the Subject Model
+
+| Model Size | Ollama Tag | Notes |
+|------------|------------|-------|
+| **3B** | `qwen2.5:3b-instruct` | Moderate capacity increase |
+| **7B** | `qwen2.5:7b-instruct-q4_K_M` | ~11GB VRAM |
+| **14B+** | `qwen2.5:14b-instruct-q4_K_M` | ~16GB VRAM |
+
+1. Update `configs/models/base_ollama.yaml` with the new model tag
+2. Fine-tune using the notebooks (adjust for model size)
+3. Re-run the evaluation pipeline
+
+### Hypotheses for Larger Models
+
+| Aspect | 0.5B (Observed) | Larger Models (Hypothesis) |
+|--------|-----------------|----------------------------|
+| **FT benefit** | Marginal (+1.3%) | May increase with capacity |
+| **Knowledge retention** | Limited | Better with more parameters |
+| **RAG dependence** | Critical | May decrease |
+
+📖 See [docs/scaling/](docs/scaling/) for detailed instructions.
+
+---
+
+## Future Work
+
+Features implemented but not executed in this experiment:
+
+| Feature | Script | Purpose |
+|---------|--------|---------|
+| **Live retrieval evaluation** | `scripts/future/evaluate_end_to_end.py` | Test with dynamic retrieval |
+| **Retrieval ablation** | `scripts/future/run_retrieval_ablation.py` | Optimize top_k and rerankers |
+| **ELO tournament** | `scripts/future/compute_elo_rankings.py` | Multi-model ranking |
+| **Human evaluation** | `apps/human_annotation.py` | Validate judge reliability |
+
+See [docs/future/](docs/future/) and [scripts/future/README.md](scripts/future/README.md).
 
 ## License
 

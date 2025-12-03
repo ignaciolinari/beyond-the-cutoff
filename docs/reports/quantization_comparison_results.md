@@ -4,6 +4,8 @@
 **Judge Model:** Gemini 3 Pro
 **Evaluation Method:** Blinded pairwise comparison with randomized presentation order
 
+> ⚠️ **Scope Limitation**: This analysis applies to **Qwen 2.5 0.5B**. Larger models typically show similar quantization resilience with Q4_K_M, but testing is recommended for production deployments. See [Scaling Guide](../scaling/README.md).
+
 ---
 
 ## Executive Summary
