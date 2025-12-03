@@ -180,21 +180,7 @@ python scripts/core/compare_models.py \
 
 This will run all 6 conditions and generate comparative results.
 
-## Relationship to Microsoft Paper
-
-The Microsoft paper likely used:
-- **RAG Baseline**: Base model + RAG
-- **FT Only**: Fine-tuned model (trained with contexts, evaluated without) - *matches our condition #5 (RAG-trained FT Only)*
-- **RAG-trained FT+RAG**: Fine-tuned model (trained with contexts, evaluated with contexts) - **matches our condition #6**
-
-**Key Difference**: Our experiment includes additional conditions that the Microsoft paper did not:
-- **Condition 3 (FT Only)**: Trained WITHOUT contexts, evaluated WITHOUT contexts - Tests if fine-tuning can memorize knowledge without RAG
-- **Condition 4 (FT+RAG instruction-only)**: Trained WITHOUT contexts, evaluated WITH contexts - Tests transfer learning (can a model trained without contexts benefit from RAG?)
-
-This creates a complete 2×2 matrix that allows us to isolate the effects of training mode vs evaluation mode, providing more comprehensive insights than the Microsoft paper's setup.
-
 ## Related Documentation
 
 - **[Experiment Analysis Guide](analysis_guide.md)**: Detailed guide for interpreting results, understanding which metrics are comparable across conditions, and expected findings
 - **[Pipeline Plan](../reference/pipeline.md)**: Step-by-step pipeline for running the experiment, including dataset splitting
-- **[ELO Ranking](../future/elo_and_human_eval.md)**: Pairwise comparison methodology

@@ -184,21 +184,59 @@ python scripts/ask.py "What are the main contributions of paper X?"
 
 ```
 beyond-the-cutoff/
+├── apps/                      # Interactive Streamlit applications
+│   ├── human_annotation.py    # Human evaluation annotation UI
+│   └── offline_task_viewer.py # Browse generated QA tasks
+├── artifacts/                 # Training artifacts and checkpoints
 ├── configs/
-│   ├── models/           # Model configurations
-│   ├── evaluation/       # Experiment plans
-│   └── judges/           # LLM judge configs
-├── scripts/
-│   ├── core/             # Main pipeline (compare_models, generate_responses)
-│   ├── data/             # Data processing (fetch, ingest, split, generate)
-│   └── validation/       # Experiment validation
-├── src/beyond_the_cutoff/  # Core library
+│   ├── default.yaml          # Main pipeline configuration
+│   ├── models/               # Model configurations (base, fine-tuned)
+│   ├── evaluation/           # Experiment plans (6-condition, pairwise, etc.)
+│   └── judges/               # LLM judge configurations
+├── data/
+│   ├── raw/                  # Downloaded PDFs from arXiv
+│   ├── processed/            # Extracted text and manifests
+│   └── external/             # FAISS index and embeddings
+├── docs/
+│   ├── experiment/           # Experiment design and methodology
+│   ├── reports/              # Analysis results and findings
+│   ├── reference/            # Technical documentation
+│   ├── scaling/              # Guide for larger models
+│   └── future/               # Planned features
 ├── evaluation/
-│   ├── datasets/         # Train/eval datasets
-│   ├── responses/        # Pre-generated model responses
-│   └── results/          # Evaluation results
-├── notebooks/finetuning/ # Cloud training notebooks
-└── docs/                 # Documentation
+│   ├── datasets/             # Train/eval JSONL datasets
+│   ├── responses/            # Pre-generated model responses
+│   ├── results/              # Evaluation metrics and details
+│   └── exports/              # Batch files for external judges
+├── notebooks/
+│   ├── finetuning/           # LoRA training notebooks (Colab/Kaggle)
+│   └── data_quality/         # Data analysis notebooks
+├── ollama/                   # Modelfiles for Ollama registration
+├── outputs/                  # Fine-tuned model weights (GGUF)
+├── prompts/                  # Prompt templates
+├── scripts/
+│   ├── ask.py                # Interactive RAG assistant
+│   ├── bootstrap_env.py      # Environment setup
+│   ├── core/                 # Main evaluation pipeline
+│   │   ├── compare_models.py
+│   │   ├── generate_responses.py
+│   │   └── interleaved_evaluation.py
+│   ├── data/                 # Data processing scripts
+│   │   ├── fetch_arxiv_corpus.py
+│   │   ├── ingest_and_index.py
+│   │   ├── generate_offline_dataset.py
+│   │   └── split_dataset.py
+│   ├── future/               # Advanced evaluation (ELO, retrieval ablation)
+│   ├── utility/              # Analysis and inspection tools
+│   └── validation/           # Experiment validation scripts
+├── src/beyond_the_cutoff/    # Core Python library
+│   ├── data/                 # PDF loading, chunking, extraction
+│   ├── retrieval/            # FAISS indexing and querying
+│   ├── evaluation/           # Judges, metrics, scoring
+│   ├── datasets/             # Dataset generation
+│   └── models/               # Model interfaces
+├── tests/                    # Pytest test suite
+└── vintage/                  # Archived configs and scripts
 ```
 
 ## Documentation
@@ -208,7 +246,6 @@ beyond-the-cutoff/
 | [📋 Experiment Setup](docs/experiment/setup.md) | 6-condition design |
 | [📊 Methodology](docs/experiment/methodology.md) | Evaluation metrics |
 | [🔧 Pipeline Reference](docs/reference/pipeline.md) | Full technical details |
-| [📖 Detailed Usage](docs/reference/detailed_usage.md) | Complete command reference |
 
 See [docs/README.md](docs/README.md) for the complete documentation index.
 
@@ -268,7 +305,6 @@ Features implemented but not executed in this experiment:
 | **Live retrieval evaluation** | `scripts/future/evaluate_end_to_end.py` | Test with dynamic retrieval |
 | **Retrieval ablation** | `scripts/future/run_retrieval_ablation.py` | Optimize top_k and rerankers |
 | **ELO tournament** | `scripts/future/compute_elo_rankings.py` | Multi-model ranking |
-| **Human evaluation** | `apps/human_annotation.py` | Validate judge reliability |
 
 See [docs/future/](docs/future/) and [scripts/future/README.md](scripts/future/README.md).
 

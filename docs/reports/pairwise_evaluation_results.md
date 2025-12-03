@@ -282,7 +282,7 @@ Despite non-significance, response-level analysis reveals:
 
 ---
 
-## Replication Study: Qwen 8B Judge
+## Local Replication Study: Qwen 8B Judge
 
 **Date:** December 2 2025
 **Evaluator:** Qwen 2.5 8B Instruct (via Ollama)
