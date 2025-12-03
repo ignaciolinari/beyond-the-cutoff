@@ -80,9 +80,9 @@ After completing the 6-condition evaluation, identify the best model based on:
 
 Expected winner: `lora_science_0p5` (Condition 6: FT + RAG)
 
-#### Step 2: Create End-to-End Evaluation Script
+#### Step 2: End-to-End Evaluation Script
 
-Create `scripts/evaluate_end_to_end.py` that:
+Use `scripts/future/evaluate_end_to_end.py` that:
 
 1. Loads the retrieval index from `data/processed/faiss_index/`
 2. For each evaluation question:
@@ -256,43 +256,39 @@ We use `BAAI/bge-reranker-v2-m3` (568M parameters) as the state-of-the-art open-
 
 ```bash
 # Generate responses for all retrieval conditions
-python scripts/run_retrieval_ablation.py \
-    --config configs/default.yaml \
-    --plan configs/evaluation/retrieval_ablation.yaml \
-    --output-dir evaluation/results/retrieval_ablation/
+python scripts/future/run_retrieval_ablation.py \
+  --config configs/default.yaml \
+  --plan configs/evaluation/retrieval_ablation.yaml \
+  --output-dir evaluation/results/retrieval_ablation/
 
 # Run specific conditions only
-python scripts/run_retrieval_ablation.py \
-    --config configs/default.yaml \
-    --plan configs/evaluation/retrieval_ablation.yaml \
-    --output-dir evaluation/results/retrieval_ablation/ \
-    --conditions dense_top4_baseline dense_top4_rerank
+python scripts/future/run_retrieval_ablation.py \
+  --config configs/default.yaml \
+  --plan configs/evaluation/retrieval_ablation.yaml \
+  --output-dir evaluation/results/retrieval_ablation/ \
+  --conditions dense_top4_baseline dense_top4_rerank
 
 # Quick test with limit
-python scripts/run_retrieval_ablation.py \
-    --config configs/default.yaml \
-    --plan configs/evaluation/retrieval_ablation.yaml \
-    --output-dir evaluation/results/retrieval_ablation/ \
-    --limit 10
-```
-
-### Compute ELO Rankings
+python scripts/future/run_retrieval_ablation.py \
+  --config configs/default.yaml \
+  --plan configs/evaluation/retrieval_ablation.yaml \
+  --output-dir evaluation/results/retrieval_ablation/ \
+  --limit 10
+```### Compute ELO Rankings
 
 After generating responses for all conditions:
 
 ```bash
 # Run pairwise comparisons
-python scripts/run_pairwise_evaluation.py \
-    --results evaluation/results/retrieval_ablation/*.jsonl \
-    --output evaluation/results/retrieval_ablation/pairwise/
+python scripts/future/run_pairwise_evaluation.py \
+  --results evaluation/results/retrieval_ablation/*.jsonl \
+  --output evaluation/results/retrieval_ablation/pairwise/
 
 # Compute ELO rankings
-python scripts/compute_elo_rankings.py \
-    --comparisons evaluation/results/retrieval_ablation/pairwise/pairwise_results.jsonl \
-    --output evaluation/results/retrieval_ablation/elo_rankings.json
-```
-
-### Future Work: BM25 and Hybrid Search
+python scripts/future/compute_elo_rankings.py \
+  --comparisons evaluation/results/retrieval_ablation/pairwise/pairwise_results.jsonl \
+  --output evaluation/results/retrieval_ablation/elo_rankings.json
+```### Future Work: BM25 and Hybrid Search
 
 The current implementation only supports **dense retrieval** (FAISS + sentence-transformers). To add BM25/hybrid search:
 
@@ -321,28 +317,26 @@ The `run_evaluation_pipeline.py` script orchestrates complete evaluation workflo
 
 ```bash
 # Full 6-condition comparison
-python scripts/run_evaluation_pipeline.py full-comparison \
-    --plan configs/evaluation/six_condition_experiment.yaml \
-    --output-dir evaluation/results/six_condition/
+python scripts/future/run_evaluation_pipeline.py full-comparison \
+  --plan configs/evaluation/six_condition_experiment.yaml \
+  --output-dir evaluation/results/six_condition/
 
 # Quantization comparison (Q4_K_M vs F16)
-python scripts/run_evaluation_pipeline.py quantization \
-    --plan configs/evaluation/quantization_comparison.yaml \
-    --output-dir evaluation/results/quantization/ \
-    --register-f16  # Optional: registers F16 model first
+python scripts/future/run_evaluation_pipeline.py quantization \
+  --plan configs/evaluation/quantization_comparison.yaml \
+  --output-dir evaluation/results/quantization/ \
+  --register-f16  # Optional: registers F16 model first
 
 # Retrieval ablation with ELO ranking
-python scripts/run_evaluation_pipeline.py retrieval-ablation \
-    --plan configs/evaluation/retrieval_ablation.yaml \
-    --output-dir evaluation/results/retrieval_ablation/
+python scripts/future/run_evaluation_pipeline.py retrieval-ablation \
+  --plan configs/evaluation/retrieval_ablation.yaml \
+  --output-dir evaluation/results/retrieval_ablation/
 
 # End-to-end validation with live retrieval
-python scripts/run_evaluation_pipeline.py end-to-end \
-    --plan configs/evaluation/end_to_end.yaml \
-    --output-dir evaluation/results/end_to_end/
-```
-
-### Workflow Options
+python scripts/future/run_evaluation_pipeline.py end-to-end \
+  --plan configs/evaluation/end_to_end.yaml \
+  --output-dir evaluation/results/end_to_end/
+```### Workflow Options
 
 | Workflow | Purpose | Outputs |
 |----------|---------|---------|
@@ -390,11 +384,11 @@ python scripts/run_evaluation_pipeline.py end-to-end \
 |---------|------|
 | Response generation (Phase 1) | `scripts/core/generate_responses.py` |
 | Comparison evaluation (Phase 2) | `scripts/core/compare_models.py` |
-| Unified pipeline orchestrator | `scripts/run_evaluation_pipeline.py` |
-| Retrieval ablation | `scripts/run_retrieval_ablation.py` |
-| End-to-end evaluation | `scripts/evaluate_end_to_end.py` |
-| Pairwise evaluation | `scripts/run_pairwise_evaluation.py` |
-| ELO ranking computation | `scripts/compute_elo_rankings.py` |
+| Unified pipeline orchestrator | `scripts/future/run_evaluation_pipeline.py` |
+| Retrieval ablation | `scripts/future/run_retrieval_ablation.py` |
+| End-to-end evaluation | `scripts/future/evaluate_end_to_end.py` |
+| Pairwise evaluation | `scripts/future/run_pairwise_evaluation.py` |
+| ELO ranking computation | `scripts/future/compute_elo_rankings.py` |
 | Result visualization | `scripts/core/visualize_comparison.py` |
 
 ### Configuration Files

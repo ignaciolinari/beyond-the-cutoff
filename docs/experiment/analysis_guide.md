@@ -211,14 +211,22 @@ Performance
 
 ### Step 1: Run All Evaluations
 
+Use the comparison script with the experiment plan:
+
 ```bash
-# Use eval_dataset.jsonl for all conditions
-python scripts/evaluate_models.py \
-  --dataset evaluation/datasets/eval_dataset.jsonl \
-  --model-config <config> \
-  --judge-config <appropriate_judge> \
-  --prompt-mode <rag|instruction> \
-  --output evaluation/results/<condition_label>/
+# Run all 6 conditions via comparison plan
+python scripts/core/compare_models.py \
+  --config configs/default.yaml \
+  --plan configs/evaluation/six_condition_experiment.yaml \
+  --dataset evaluation/datasets/eval_dataset.jsonl
+```
+
+Or use the interleaved evaluation for balanced progress:
+
+```bash
+# Interleaved evaluation across all conditions
+python scripts/core/interleaved_evaluation.py \
+  --plan configs/evaluation/six_condition_experiment.yaml
 ```
 
 ### Step 2: Collect Metrics

@@ -122,7 +122,7 @@ Example `.quality.json`:
 Quality metrics are automatically generated during PDF ingestion:
 
 ```bash
-python scripts/ingest_and_index.py --config configs/default.yaml
+python scripts/data/ingest_and_index.py --config configs/default.yaml
 ```
 
 No additional flags required. Quality analysis is performed for every converted PDF.

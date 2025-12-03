@@ -60,7 +60,6 @@ Comprehensive technical documentation.
 
 - **[pipeline.md](reference/pipeline.md)** - Full pipeline design and implementation plan
 - **[model_implementation.md](reference/model_implementation.md)** - Model architecture and training details
-- **[detailed_usage.md](reference/detailed_usage.md)** - Detailed CLI usage and examples
 
 ### `scaling/` - Scaling Guide
 How to adapt the pipeline for different models.

@@ -271,6 +271,6 @@ This will reveal:
 ## Related Documentation
 
 - [Main README](../README.md) - Project overview and results
-- [Pipeline Reference](reference/pipeline.md) - Full pipeline documentation
-- [Experiment Setup](experiment/setup.md) - 6-condition design
-- [Methodology](experiment/methodology.md) - Evaluation approach
+- [Pipeline Reference](../reference/pipeline.md) - Full pipeline documentation
+- [Experiment Setup](../experiment/setup.md) - 6-condition design
+- [Methodology](../experiment/methodology.md) - Evaluation approach

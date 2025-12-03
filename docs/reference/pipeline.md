@@ -92,13 +92,13 @@ print(f'Generator model: {config.dataset_generation.generator.model}')
 
 ```bash
 # Download 100+ papers from arXiv (2025, post-cutoff)
-python scripts/fetch_arxiv_corpus.py \
+python scripts/data/fetch_arxiv_corpus.py \
   --contact-email your.email@example.com \
   --total 100 \
   --output-dir data/raw/arxiv_2025
 
 # Optional: Filter by specific categories
-python scripts/fetch_arxiv_corpus.py \
+python scripts/data/fetch_arxiv_corpus.py \
   --contact-email your.email@example.com \
   --total 120 \
   --category cs.AI \
@@ -129,7 +129,7 @@ cat data/raw/arxiv_2025/manifest.json | jq '.document_count'
 
 ```bash
 # Process PDFs, extract text, build FAISS index
-python scripts/ingest_and_index.py \
+python scripts/data/ingest_and_index.py \
   --config configs/default.yaml
 
 # Note: PDF conversion now includes automatic extraction quality analysis.
@@ -138,12 +138,12 @@ python scripts/ingest_and_index.py \
 # integrity, and a confidence score (0.0-1.0).
 
 # Optional: Specify custom source directory
-python scripts/ingest_and_index.py \
+python scripts/data/ingest_and_index.py \
   --config configs/default.yaml \
   --source data/raw/arxiv_2025
 
 # Optional: Skip per-page JSONL sidecars (faster, less detailed)
-python scripts/ingest_and_index.py \
+python scripts/data/ingest_and_index.py \
   --config configs/default.yaml \
   --no-page-sidecars
 ```
@@ -168,11 +168,11 @@ head -n 3 data/processed/*.jsonl
 
 ```bash
 # Rebuild catalog from existing manifest
-python scripts/build_metadata_catalog.py \
+python scripts/data/build_metadata_catalog.py \
   --config configs/default.yaml
 
 # With custom output prefix
-python scripts/build_metadata_catalog.py \
+python scripts/data/build_metadata_catalog.py \
   --config configs/default.yaml \
   --output-prefix data/processed/custom_catalog
 ```
@@ -187,19 +187,19 @@ The offline dataset generation system uses a modular architecture with separate 
 
 ```bash
 # Generate QA/summary/citation tasks using 7B generator model
-python scripts/generate_offline_dataset.py \
+python scripts/data/generate_offline_dataset.py \
   --config configs/default.yaml \
   --output evaluation/datasets/offline_dataset.jsonl \
   --raw-tasks evaluation/datasets/offline_tasks.jsonl
 
 # Optional: Limit number of documents for testing
-python scripts/generate_offline_dataset.py \
+python scripts/data/generate_offline_dataset.py \
   --config configs/default.yaml \
   --max-docs 10 \
   --output evaluation/datasets/offline_dataset_sample.jsonl
 
 # Optional: Use custom index directory
-python scripts/generate_offline_dataset.py \
+python scripts/data/generate_offline_dataset.py \
   --config configs/default.yaml \
   --index-dir data/external/index
 ```
@@ -228,18 +228,18 @@ head -n 1 evaluation/datasets/offline_tasks.jsonl | jq '.'
 
 ```bash
 # Quick quality check on a sample of 50 examples
-python scripts/evaluate_dataset_quality.py \
+python scripts/data/evaluate_dataset_quality.py \
   --dataset evaluation/datasets/offline_dataset.jsonl \
   --sample-size 50
 
 # Full evaluation with detailed output
-python scripts/evaluate_dataset_quality.py \
+python scripts/data/evaluate_dataset_quality.py \
   --dataset evaluation/datasets/offline_dataset.jsonl \
   --output evaluation/quality_report.json \
   --include-verdicts
 
 # Filter to specific task types (e.g., focus on citations)
-python scripts/evaluate_dataset_quality.py \
+python scripts/data/evaluate_dataset_quality.py \
   --dataset evaluation/datasets/offline_dataset.jsonl \
   --task-type citations \
   --sample-size 30
@@ -273,27 +273,27 @@ If the pass rate is below 75%, review `quality_report.json` for common issues an
 
 ```bash
 # Default split: 70% train, 30% eval
-python scripts/split_dataset.py \
+python scripts/data/split_dataset.py \
   --input evaluation/datasets/offline_dataset.jsonl \
   --train-output evaluation/datasets/train_dataset.jsonl \
   --eval-output evaluation/datasets/eval_dataset.jsonl
 
 # Custom split with 25% eval
-python scripts/split_dataset.py \
+python scripts/data/split_dataset.py \
   --input evaluation/datasets/offline_dataset.jsonl \
   --train-output evaluation/datasets/train_dataset.jsonl \
   --eval-output evaluation/datasets/eval_dataset.jsonl \
   --eval-ratio 0.25
 
 # Ensure at least 2 eval examples per paper
-python scripts/split_dataset.py \
+python scripts/data/split_dataset.py \
   --input evaluation/datasets/offline_dataset.jsonl \
   --train-output evaluation/datasets/train_dataset.jsonl \
   --eval-output evaluation/datasets/eval_dataset.jsonl \
   --min-eval-per-paper 2
 
 # Preview split without writing files
-python scripts/split_dataset.py \
+python scripts/data/split_dataset.py \
   --input evaluation/datasets/offline_dataset.jsonl \
   --train-output evaluation/datasets/train_dataset.jsonl \
   --eval-output evaluation/datasets/eval_dataset.jsonl \
@@ -304,7 +304,7 @@ python scripts/split_dataset.py \
 | File | Purpose | Used By |
 |------|---------|---------|
 | `train_dataset.jsonl` | Fine-tuning training data | Colab/Kaggle notebooks |
-| `eval_dataset.jsonl` | Final experiment evaluation | `evaluate_models.py` |
+| `eval_dataset.jsonl` | Final experiment evaluation | `compare_models.py` |
 
 **Why question-level holdout?**
 - Models see paper content (via training questions) but not exact eval questions
@@ -456,80 +456,55 @@ print(f'Model: {config.inference.model}')
 
 ```bash
 # Validate configuration files
-python scripts/validate_experiment.py \
+python scripts/validation/validate_experiment.py \
   --config configs/default.yaml \
   --model-config configs/models/base_ollama.yaml \
   --judge-config configs/judges/rag.yaml \
   --prompt-mode rag
 
 # Validate eval dataset versioning (use eval_dataset.jsonl!)
-python scripts/validate_experiment.py \
+python scripts/validation/validate_experiment.py \
   --dataset evaluation/datasets/eval_dataset.jsonl \
   --dataset evaluation/results/rag_baseline_0p5b/details.jsonl
 
 # Validate experiment metadata (after first run)
-python scripts/validate_experiment.py \
+python scripts/validation/validate_experiment.py \
   --metadata evaluation/results/rag_baseline_0p5b/metadata.jsonl
 ```
 
-### 7.2 Run Single Model Evaluation
+### 7.2 Run Evaluation via Comparison Plan
+
+The recommended approach is to run all conditions via the comparison plan. Individual conditions can be selected using the `--conditions` flag:
 
 **Note:** All commands use `--dataset evaluation/datasets/eval_dataset.jsonl` to evaluate on held-out questions.
 
 ```bash
-# Evaluate base baseline (condition 1)
-python scripts/evaluate_models.py \
+# Run specific conditions from the plan
+# Condition 1: Base baseline
+python scripts/core/compare_models.py \
   --config configs/default.yaml \
+  --plan configs/evaluation/six_condition_experiment.yaml \
   --dataset evaluation/datasets/eval_dataset.jsonl \
-  --model-config configs/models/base_ollama.yaml \
-  --judge-config configs/judges/instruction.yaml \
-  --prompt-mode instruction \
-  --output evaluation/results/base_baseline_0p5b/
+  --conditions base_baseline_0p5b
 
-# Evaluate RAG baseline (condition 2)
-python scripts/evaluate_models.py \
+# Condition 2: RAG baseline
+python scripts/core/compare_models.py \
   --config configs/default.yaml \
+  --plan configs/evaluation/six_condition_experiment.yaml \
   --dataset evaluation/datasets/eval_dataset.jsonl \
-  --model-config configs/models/base_ollama.yaml \
-  --judge-config configs/judges/rag.yaml \
-  --prompt-mode rag \
-  --output evaluation/results/rag_baseline_0p5b/
+  --conditions rag_baseline_0p5b
 
-# Evaluate instruction-only FT-only (condition 3)
-python scripts/evaluate_models.py \
+# Run multiple specific conditions
+python scripts/core/compare_models.py \
   --config configs/default.yaml \
+  --plan configs/evaluation/six_condition_experiment.yaml \
   --dataset evaluation/datasets/eval_dataset.jsonl \
-  --model-config configs/models/lora_instruction_only.yaml \
-  --judge-config configs/judges/instruction.yaml \
-  --prompt-mode instruction \
-  --output evaluation/results/lora_science_0p5b_ft_only/
+  --conditions base_baseline_0p5b rag_baseline_0p5b
 
-# Evaluate instruction-only FT+RAG (condition 4)
-python scripts/evaluate_models.py \
-  --config configs/default.yaml \
-  --dataset evaluation/datasets/eval_dataset.jsonl \
-  --model-config configs/models/lora_instruction_only.yaml \
-  --judge-config configs/judges/rag.yaml \
-  --prompt-mode rag \
-  --output evaluation/results/hybrid_science_0p5b_instruction_only/
-
-# Evaluate RAG-trained FT-only (condition 5)
-python scripts/evaluate_models.py \
-  --config configs/default.yaml \
-  --dataset evaluation/datasets/eval_dataset.jsonl \
-  --model-config configs/models/lora_rag_trained.yaml \
-  --judge-config configs/judges/instruction.yaml \
-  --prompt-mode instruction \
-  --output evaluation/results/lora_science_0p5b_rag_trained_ft_only/
-
-# Evaluate RAG-trained FT+RAG (condition 6)
-python scripts/evaluate_models.py \
-  --config configs/default.yaml \
-  --dataset evaluation/datasets/eval_dataset.jsonl \
-  --model-config configs/models/lora_rag_trained.yaml \
-  --judge-config configs/judges/rag.yaml \
-  --prompt-mode rag \
-  --output evaluation/results/hybrid_science_0p5b_rag_trained/
+# Or use interleaved evaluation for balanced progress across all conditions
+python scripts/core/interleaved_evaluation.py \
+  --plan configs/evaluation/six_condition_experiment.yaml \
+  --limit 30  # Optional: limit examples for testing
 ```
 
 ### 7.3 Run Complete 6-Condition Comparison
@@ -550,7 +525,7 @@ python scripts/core/compare_models.py \
 
 ```bash
 # Compute metrics for a single model's predictions (use eval_dataset.jsonl!)
-python scripts/evaluation_harness.py \
+python scripts/future/evaluation_harness.py \
   --dataset evaluation/datasets/eval_dataset.jsonl \
   --predictions evaluation/results/rag_baseline_0p5b/details.jsonl \
   --output evaluation/results/rag_baseline_0p5b/automatic_metrics.json \
@@ -624,18 +599,18 @@ For complete evaluation workflows, use the unified orchestrator script:
 
 ```bash
 # Full 6-condition model comparison (generation + judging + visualization)
-python scripts/run_evaluation_pipeline.py full-comparison \
+python scripts/future/run_evaluation_pipeline.py full-comparison \
   --plan configs/evaluation/six_condition_experiment.yaml \
   --output-dir evaluation/results/six_condition/
 
 # Skip generation if responses already exist
-python scripts/run_evaluation_pipeline.py full-comparison \
+python scripts/future/run_evaluation_pipeline.py full-comparison \
   --plan configs/evaluation/six_condition_experiment.yaml \
   --output-dir evaluation/results/six_condition/ \
   --skip-generation
 
 # Skip evaluation to only generate responses
-python scripts/run_evaluation_pipeline.py full-comparison \
+python scripts/future/run_evaluation_pipeline.py full-comparison \
   --plan configs/evaluation/six_condition_experiment.yaml \
   --output-dir evaluation/results/six_condition/ \
   --skip-evaluation
@@ -660,12 +635,12 @@ See Section 9 for post-experiment optimization workflows.
 
 ```bash
 # Validate metrics and details
-python scripts/validate_experiment_results.py \
+python scripts/validation/validate_experiment_results.py \
   --metrics evaluation/results/rag_baseline_0p5b/metrics.json \
   --details evaluation/results/rag_baseline_0p5b/details.jsonl
 
 # Validate comparison report
-python scripts/validate_experiment_results.py \
+python scripts/validation/validate_experiment_results.py \
   --comparison evaluation/results/comparison_report.json
 ```
 
@@ -715,7 +690,7 @@ Use judge models to automatically compare model outputs head-to-head and compute
 ```bash
 # Run pairwise evaluation using 8B judges for consensus
 # Note: Qwen 7B excluded to avoid self-preference bias with the generator
-python scripts/run_pairwise_evaluation.py \
+python scripts/future/run_pairwise_evaluation.py \
   --results base_baseline=evaluation/results/base_baseline_0p5b \
   --results rag_baseline=evaluation/results/rag_baseline_0p5b \
   --results ft_only=evaluation/results/lora_science_0p5b_ft_only \
@@ -727,11 +702,11 @@ python scripts/run_pairwise_evaluation.py \
   --output evaluation/results/elo_rankings
 
 # Or use a predefined evaluation plan
-python scripts/run_pairwise_evaluation.py \
+python scripts/future/run_pairwise_evaluation.py \
   --plan configs/evaluation/pairwise_evaluation_plan.yaml
 
 # Compute ELO from existing comparison data
-python scripts/compute_elo_rankings.py \
+python scripts/future/compute_elo_rankings.py \
   --comparisons evaluation/results/elo_rankings/all_comparisons.jsonl \
   --output evaluation/results/elo_rankings/leaderboard.json \
   --head-to-head evaluation/results/elo_rankings/h2h_matrix.json
@@ -751,7 +726,7 @@ For validating judge reliability or collecting additional annotations:
 streamlit run apps/human_annotation.py
 
 # Compute ELO from human annotations
-python scripts/compute_elo_rankings.py \
+python scripts/future/compute_elo_rankings.py \
   --annotations-dir evaluation/human_annotations \
   --output evaluation/results/human_leaderboard.json
 
@@ -803,7 +778,7 @@ ollama list | grep lora_science
 
 ```bash
 # Using unified pipeline
-python scripts/run_evaluation_pipeline.py quantization \
+python scripts/future/run_evaluation_pipeline.py quantization \
   --plan configs/evaluation/quantization_comparison.yaml \
   --output-dir evaluation/results/quantization/ \
   --register-f16
@@ -842,25 +817,25 @@ Optimize retrieval configuration using ELO tournament with different top_k value
 
 ```bash
 # Using unified pipeline (runs all phases)
-python scripts/run_evaluation_pipeline.py retrieval-ablation \
+python scripts/future/run_evaluation_pipeline.py retrieval-ablation \
   --plan configs/evaluation/retrieval_ablation.yaml \
   --output-dir evaluation/results/retrieval_ablation/
 
 # Or run generation phase separately
-python scripts/run_retrieval_ablation.py \
+python scripts/future/run_retrieval_ablation.py \
   --config configs/default.yaml \
   --plan configs/evaluation/retrieval_ablation.yaml \
   --output-dir evaluation/results/retrieval_ablation/
 
 # Run specific conditions only
-python scripts/run_retrieval_ablation.py \
+python scripts/future/run_retrieval_ablation.py \
   --config configs/default.yaml \
   --plan configs/evaluation/retrieval_ablation.yaml \
   --output-dir evaluation/results/retrieval_ablation/ \
   --conditions dense_top4_baseline dense_top4_rerank
 
 # Quick test
-python scripts/run_retrieval_ablation.py \
+python scripts/future/run_retrieval_ablation.py \
   --config configs/default.yaml \
   --plan configs/evaluation/retrieval_ablation.yaml \
   --output-dir evaluation/results/retrieval_ablation/ \
@@ -871,7 +846,7 @@ python scripts/run_retrieval_ablation.py \
 
 ```bash
 # Run pairwise evaluation on retrieval ablation results
-python scripts/run_pairwise_evaluation.py \
+python scripts/future/run_pairwise_evaluation.py \
   --results evaluation/results/retrieval_ablation/*.jsonl \
   --judge configs/judges/pairwise_qwen3_8b.yaml \
   --output evaluation/results/retrieval_ablation/pairwise/
@@ -881,7 +856,7 @@ python scripts/run_pairwise_evaluation.py \
 
 ```bash
 # Compute ELO from pairwise comparisons
-python scripts/compute_elo_rankings.py \
+python scripts/future/compute_elo_rankings.py \
   --comparisons evaluation/results/retrieval_ablation/pairwise/pairwise_results.jsonl \
   --output evaluation/results/retrieval_ablation/elo_rankings.json \
   --bootstrap-samples 1000
@@ -901,18 +876,18 @@ Validate the complete pipeline with live retrieval (not pre-computed contexts) u
 
 ```bash
 # Using unified pipeline
-python scripts/run_evaluation_pipeline.py end-to-end \
+python scripts/future/run_evaluation_pipeline.py end-to-end \
   --plan configs/evaluation/end_to_end.yaml \
   --output-dir evaluation/results/end_to_end/
 
 # Or run directly with custom retrieval settings
-python scripts/evaluate_end_to_end.py \
+python scripts/future/evaluate_end_to_end.py \
   --config configs/default.yaml \
   --model-config configs/models/lora_rag_trained.yaml \
   --output evaluation/results/end_to_end/
 
 # With custom retrieval parameters
-python scripts/evaluate_end_to_end.py \
+python scripts/future/evaluate_end_to_end.py \
   --config configs/default.yaml \
   --model-config configs/models/lora_rag_trained.yaml \
   --top-k 8 \
@@ -920,7 +895,7 @@ python scripts/evaluate_end_to_end.py \
   --output evaluation/results/end_to_end_optimized/
 
 # Compare with pre-computed contexts
-python scripts/evaluate_end_to_end.py \
+python scripts/future/evaluate_end_to_end.py \
   --config configs/default.yaml \
   --model-config configs/models/lora_rag_trained.yaml \
   --compare-precomputed \
@@ -964,7 +939,7 @@ python scripts/utility/check_processed_corpus.py \
   --manifest data/processed/manifest.json
 
 # Verify index artifacts
-python scripts/validate_index_artifacts.py \
+python scripts/validation/validate_index_artifacts.py \
   --index-dir data/external/index
 ```
 
@@ -996,16 +971,16 @@ source .venv/bin/activate
 ollama pull qwen2.5:0.5b-instruct qwen2.5:7b-instruct-q4_K_M
 
 # 2. Data collection
-python scripts/fetch_arxiv_corpus.py \
+python scripts/data/fetch_arxiv_corpus.py \
   --contact-email your.email@example.com \
   --total 100 \
   --output-dir data/raw/arxiv_2025
 
 # 3. Ingestion
-python scripts/ingest_and_index.py --config configs/default.yaml
+python scripts/data/ingest_and_index.py --config configs/default.yaml
 
 # 4. Dataset generation
-python scripts/generate_offline_dataset.py --config configs/default.yaml
+python scripts/data/generate_offline_dataset.py --config configs/default.yaml
 
 # 5. Fine-tuning (in Colab/Kaggle - see section 5)
 # Upload notebooks/finetuning/*.ipynb and run
@@ -1028,15 +1003,15 @@ python scripts/core/visualize_comparison.py \
   --output evaluation/results/visualizations/
 
 # 9. Post-experiment optimization (after identifying best model)
-python scripts/run_evaluation_pipeline.py quantization \
+python scripts/future/run_evaluation_pipeline.py quantization \
   --plan configs/evaluation/quantization_comparison.yaml \
   --output-dir evaluation/results/quantization/
 
-python scripts/run_evaluation_pipeline.py retrieval-ablation \
+python scripts/future/run_evaluation_pipeline.py retrieval-ablation \
   --plan configs/evaluation/retrieval_ablation.yaml \
   --output-dir evaluation/results/retrieval_ablation/
 
-python scripts/run_evaluation_pipeline.py end-to-end \
+python scripts/future/run_evaluation_pipeline.py end-to-end \
   --plan configs/evaluation/end_to_end.yaml \
   --output-dir evaluation/results/end_to_end/
 ```
@@ -1049,8 +1024,8 @@ python scripts/run_evaluation_pipeline.py end-to-end \
 
 1. **Ollama connection errors**: Ensure Ollama daemon is running (`ollama serve` or check system service)
 2. **Model not found**: Verify model tags match config files (`ollama list`)
-3. **Index not found**: Re-run `ingest_and_index.py` to rebuild index
-4. **Dataset errors**: Check dataset format with `analyze_offline_dataset.py`
+3. **Index not found**: Re-run `scripts/data/ingest_and_index.py` to rebuild index
+4. **Dataset errors**: Check dataset format with `scripts/utility/analyze_offline_dataset.py`
 5. **Memory issues**: Reduce batch sizes in config or use smaller models
 
 ### Getting Help
@@ -1080,9 +1055,10 @@ After completing the pipeline:
 beyond-the-cutoff/
 ├── configs/                    # Configuration files
 │   ├── default.yaml            # Main config
-│   ├── base_ollama.yaml
-│   ├── models/lora_instruction_only.yaml
-│   ├── models/lora_rag_trained.yaml
+│   ├── models/
+│   │   ├── base_ollama.yaml
+│   │   ├── lora_instruction_only.yaml
+│   │   └── lora_rag_trained.yaml
 │   └── evaluation/
 │       ├── six_condition_experiment.yaml    # 6-condition experiment
 │       ├── quantization_comparison.yaml     # Q4_K_M vs F16
@@ -1101,24 +1077,32 @@ beyond-the-cutoff/
 │   ├── lora_science_v1_instruction_only/
 │   └── lora_science_v1/
 ├── scripts/
-│   ├── generate_responses.py           # Phase 1: Response generation
-│   ├── compare_models.py               # Phase 2: Evaluation with judge
-│   ├── run_evaluation_pipeline.py      # Unified pipeline orchestrator
-│   ├── run_retrieval_ablation.py       # Retrieval optimization
-│   ├── evaluate_end_to_end.py          # Live retrieval evaluation
-│   ├── run_pairwise_evaluation.py      # Pairwise comparisons
-│   ├── compute_elo_rankings.py         # ELO ranking computation
-│   └── visualize_comparison.py         # Result visualization
+│   ├── core/                   # Main evaluation scripts
+│   │   ├── generate_responses.py           # Phase 1: Response generation
+│   │   ├── compare_models.py               # Phase 2: Evaluation with judge
+│   │   └── visualize_comparison.py         # Result visualization
+│   ├── data/                   # Data processing scripts
+│   │   ├── fetch_arxiv_corpus.py
+│   │   ├── ingest_and_index.py
+│   │   ├── generate_offline_dataset.py
+│   │   └── split_dataset.py
+│   ├── future/                 # Future/optional scripts
+│   │   ├── run_evaluation_pipeline.py      # Unified pipeline orchestrator
+│   │   ├── run_retrieval_ablation.py       # Retrieval optimization
+│   │   ├── evaluate_end_to_end.py          # Live retrieval evaluation
+│   │   ├── run_pairwise_evaluation.py      # Pairwise comparisons
+│   │   └── compute_elo_rankings.py         # ELO ranking computation
+│   └── validation/             # Validation scripts
 ├── ollama/
 │   ├── Modelfile.instruction_only
 │   ├── Modelfile.rag_trained
 │   └── Modelfile.rag_trained_f16       # F16 version for quantization study
 ├── notebooks/finetuning/               # Training notebooks
 └── docs/
-    ├── pipeline_plan.md                # This document
-    └── evaluation_methodology.md       # Detailed evaluation methodology
+    ├── reference/pipeline.md           # This document
+    └── experiment/methodology.md       # Detailed evaluation methodology
 ```
 
 ---
 
-_Last updated: 2025-11-28_
+_Last updated: 2025-12-02_

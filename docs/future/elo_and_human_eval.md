@@ -69,18 +69,18 @@ for i, rating in enumerate(leaderboard):
 
 ```bash
 # From JSONL comparisons file
-python scripts/compute_elo_rankings.py \
+python scripts/future/compute_elo_rankings.py \
     --comparisons evaluation/comparisons.jsonl \
     --output evaluation/results/leaderboard.json
 
 # From human annotation batches
-python scripts/compute_elo_rankings.py \
+python scripts/future/compute_elo_rankings.py \
     --annotations-dir evaluation/human_annotations \
     --output evaluation/results/human_leaderboard.json \
     --format markdown
 
 # From evaluation result files (creates synthetic comparisons)
-python scripts/compute_elo_rankings.py \
+python scripts/future/compute_elo_rankings.py \
     --eval-results results/model_a.json results/model_b.json results/model_c.json \
     --output evaluation/results/auto_leaderboard.json \
     --head-to-head evaluation/results/h2h_matrix.json
@@ -135,12 +135,12 @@ The following 8B parameter models provide strong judging capabilities while rema
 
 ```bash
 # Run with evaluation plan (recommended)
-python scripts/run_pairwise_evaluation.py \
+python scripts/future/run_pairwise_evaluation.py \
     --plan configs/evaluation/pairwise_evaluation_plan.yaml \
     --output evaluation/results/pairwise_rankings
 
 # Ad-hoc comparison between models using result directories
-python scripts/run_pairwise_evaluation.py \
+python scripts/future/run_pairwise_evaluation.py \
     --results base=evaluation/results/base_baseline_0p5b \
     --results rag=evaluation/results/rag_baseline_0p5b \
     --judge configs/judges/pairwise_qwen3_8b.yaml \
@@ -148,7 +148,7 @@ python scripts/run_pairwise_evaluation.py \
     --output evaluation/results/pairwise_rankings
 
 # Use single judge configuration
-python scripts/run_pairwise_evaluation.py \
+python scripts/future/run_pairwise_evaluation.py \
     --results baseline=evaluation/results/base_baseline_0p5b \
     --results finetuned=evaluation/results/lora_science_0p5b_ft_only \
     --judge configs/judges/pairwise_qwen3_8b.yaml \
@@ -163,7 +163,7 @@ and then combines the comparison results:
 
 ```bash
 # Step 1: Run first judge (Qwen 3 8B)
-python scripts/run_pairwise_evaluation.py \
+python scripts/future/run_pairwise_evaluation.py \
     --plan configs/evaluation/pairwise_evaluation_plan.yaml \
     --judge configs/judges/pairwise_qwen3_8b.yaml \
     --output evaluation/results/elo_qwen3
@@ -173,13 +173,13 @@ ollama rm qwen3:8b  # Optional: free VRAM
 ollama run llama3.1:8b  # Pre-load model
 
 # Step 3: Run second judge (Llama 3.1 8B)
-python scripts/run_pairwise_evaluation.py \
+python scripts/future/run_pairwise_evaluation.py \
     --plan configs/evaluation/pairwise_evaluation_plan.yaml \
     --judge configs/judges/pairwise_llama31_8b.yaml \
     --output evaluation/results/elo_llama31
 
 # Step 4: Combine comparisons and compute final ELO rankings
-python scripts/compute_elo_rankings.py \
+python scripts/future/compute_elo_rankings.py \
     --comparisons evaluation/results/elo_qwen3/all_comparisons.jsonl \
     --comparisons evaluation/results/elo_llama31/all_comparisons.jsonl \
     --output evaluation/results/combined_leaderboard.json \
@@ -372,7 +372,7 @@ Complete workflow for model comparison:
 
 ```bash
 # 1. Run evaluations to get predictions
-python scripts/evaluate_models.py --config configs/default.yaml
+python scripts/core/evaluate_models.py --config configs/default.yaml
 
 # 2. Create pairwise comparison tasks
 python -c "
@@ -392,7 +392,7 @@ with open('evaluation/datasets/pairwise_tasks.jsonl', 'w') as f:
 streamlit run apps/human_annotation.py
 
 # 4. Compute ELO rankings from annotations
-python scripts/compute_elo_rankings.py \
+python scripts/future/compute_elo_rankings.py \
     --annotations-dir evaluation/human_annotations \
     --output evaluation/results/final_leaderboard.json \
     --format markdown
@@ -409,8 +409,8 @@ cat evaluation/results/final_leaderboard.json
 | `src/beyond_the_cutoff/evaluation/pairwise_judge.py` | Automated pairwise evaluation with LLM judges |
 | `src/beyond_the_cutoff/evaluation/human_evaluation.py` | Human evaluation protocol and agreement metrics |
 | `apps/human_annotation.py` | Streamlit UI for human annotators |
-| `scripts/compute_elo_rankings.py` | CLI for computing rankings |
-| `scripts/run_pairwise_evaluation.py` | CLI for automated pairwise evaluation |
+| `scripts/future/compute_elo_rankings.py` | CLI for computing rankings |
+| `scripts/future/run_pairwise_evaluation.py` | CLI for automated pairwise evaluation |
 | `configs/judges/pairwise_qwen3_8b.yaml` | Qwen3 8B judge configuration |
 | `configs/judges/pairwise_llama31_8b.yaml` | Llama 3.1 8B judge configuration |
 | `configs/judges/pairwise_qwen7b.yaml` | Qwen 2.5 7B judge (excluded from main experiment to avoid self-preference bias) |

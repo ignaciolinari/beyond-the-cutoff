@@ -144,7 +144,7 @@ This experiment uses **question-level holdout**, meaning:
 - Document-level holdout would test a different question: "Can the model handle entirely unseen content?"
 - This tests retrieval and knowledge transfer to new domains rather than question generalization on known content
 
-The question-level holdout is implemented in `scripts/split_dataset.py` via stratified sampling that maintains paper representation across splits.
+The question-level holdout is implemented in `scripts/data/split_dataset.py` via stratified sampling that maintains paper representation across splits.
 
 ## Setup Requirements
 
@@ -195,6 +195,6 @@ This creates a complete 2×2 matrix that allows us to isolate the effects of tra
 
 ## Related Documentation
 
-- **[Experiment Analysis Guide](experiment_analysis_guide.md)**: Detailed guide for interpreting results, understanding which metrics are comparable across conditions, and expected findings
-- **[Pipeline Plan](pipeline_plan.md)**: Step-by-step pipeline for running the experiment, including dataset splitting
-- **[ELO Ranking](elo_ranking_and_human_evaluation.md)**: Pairwise comparison methodology
+- **[Experiment Analysis Guide](analysis_guide.md)**: Detailed guide for interpreting results, understanding which metrics are comparable across conditions, and expected findings
+- **[Pipeline Plan](../reference/pipeline.md)**: Step-by-step pipeline for running the experiment, including dataset splitting
+- **[ELO Ranking](../future/elo_and_human_eval.md)**: Pairwise comparison methodology
