@@ -13,7 +13,7 @@ This directory contains Modelfiles for registering fine-tuned models with Ollama
 
 ### `Modelfile.rag_trained`
 - Same as `Modelfile` - explicit version for clarity
-- **Status**: ✅ **USED** in 0.5B experiment (for conditions 5-6)
+- **Status**: ✓ **USED** in 0.5B experiment (for conditions 5-6)
 - **Location**: `ollama/Modelfile.rag_trained`
 
 ### `Modelfile.instruction_only`

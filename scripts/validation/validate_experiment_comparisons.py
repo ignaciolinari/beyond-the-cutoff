@@ -277,7 +277,7 @@ def generate_comparison_summary(results: list[ComparisonResult]) -> str:
         lines.append(f"**Models**: {result.model_a} vs {result.model_b}")
 
         if result.warning:
-            lines.append(f"⚠️ **Warning**: {result.warning}")
+            lines.append(f"WARNING:  **Warning**: {result.warning}")
 
         lines.append("")
         lines.append("**Metric Differences** (model_b - model_a):")
@@ -416,12 +416,12 @@ def main() -> int:
     print(f"  Conditions loaded: {validation.conditions_loaded}/6")
 
     if validation.missing_results:
-        print("\n⚠️  Missing results:")
+        print("\nWARNING:   Missing results:")
         for missing in validation.missing_results:
             print(f"    - {missing}")
 
     if validation.warnings:
-        print("\n⚠️  Warnings:")
+        print("\nWARNING:   Warnings:")
         for warning in validation.warnings:
             print(f"    - {warning}")
 
@@ -429,7 +429,7 @@ def main() -> int:
         print("\n[Dry run mode - not running comparisons]")
 
         # Show what comparisons would be run
-        print("\n📋 Planned comparisons:")
+        print("\nChecklist Planned comparisons:")
 
         within_config = config.get("within_group_comparisons", {})
         cross_config = config.get("cross_group_comparisons", {})
@@ -446,13 +446,13 @@ def main() -> int:
         for comp in cross_config.get("comparisons", []):
             print(f"    - {comp['name']}: {comp['model_a']} vs {comp['model_b']}")
             if comp.get("warning"):
-                print(f"      ⚠️  {comp['warning']}")
+                print(f"      WARNING:   {comp['warning']}")
 
         return 0 if validation.all_results_exist else 1
 
     # Check if we have enough data to proceed
     if not validation.all_results_exist:
-        print("\n❌ Cannot run comparisons - missing result files")
+        print("\n✗ Cannot run comparisons - missing result files")
         print("   Run evaluations first, then re-run this script")
         return 1
 
@@ -497,7 +497,7 @@ def main() -> int:
                 comparison_results.append(result)
                 print(f"    ✓ {result.name}")
                 if result.warning:
-                    print(f"      ⚠️  {result.warning}")
+                    print(f"      WARNING:   {result.warning}")
 
     # Generate report
     report = generate_full_report(config, conditions, comparison_results)
@@ -507,7 +507,7 @@ def main() -> int:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         with open(args.output, "w") as f:
             json.dump(report, f, indent=2)
-        print(f"\n✅ JSON report saved to: {args.output}")
+        print(f"\n✓ JSON report saved to: {args.output}")
 
     if args.output_markdown:
         args.output_markdown.parent.mkdir(parents=True, exist_ok=True)
@@ -542,7 +542,7 @@ def main() -> int:
 
         with open(args.output_markdown, "w") as f:
             f.write(markdown)
-        print(f"✅ Markdown report saved to: {args.output_markdown}")
+        print(f"✓ Markdown report saved to: {args.output_markdown}")
 
     # Print summary
     print("\n" + "=" * 70)

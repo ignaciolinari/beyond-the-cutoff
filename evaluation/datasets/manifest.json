@@ -1,0 +1,41 @@
+{
+  "note": "Large dataset artifacts are not tracked in Git; this file can record hashes for reproducibility.",
+  "generated_at_utc": "2025-12-27",
+  "artifacts": [
+    {
+      "path": "evaluation/datasets/eval_dataset_filtered.jsonl",
+      "sha256": "e6451b7f9d390cb74826cedf39f2c4f24514e0b8e4abbde42d260accd29d821a",
+      "lines": 113
+    },
+    {
+      "path": "evaluation/datasets/eval_dataset.jsonl",
+      "sha256": "2a0b89a821c35baf9cf8074bc62f9b3df70cc4fc4b19076b684ddbc7930cf00d",
+      "lines": 154
+    },
+    {
+      "path": "evaluation/datasets/offline_dataset_filtered.jsonl",
+      "sha256": "e51b8fa3e6dd56412cbe7bd58668f45db22a626c02823351a034efa48f782662",
+      "lines": 569
+    },
+    {
+      "path": "evaluation/datasets/offline_dataset.jsonl",
+      "sha256": "5ec5c1e2d4f79d8791afd6b126ef3cd0075b0ea0dc16a08ecb1333c09b441bc6",
+      "lines": 747
+    },
+    {
+      "path": "evaluation/datasets/offline_tasks.jsonl",
+      "sha256": "9080d76e854b73575b613c8c066c5f75a5a9fe5bb4c4be080db7beba55b0a6bf",
+      "lines": 115
+    },
+    {
+      "path": "evaluation/datasets/train_dataset_filtered.jsonl",
+      "sha256": "2024d8413c76007fde52676c65f2acdc0718a238feba6e8a250c9aba44d98b79",
+      "lines": 456
+    },
+    {
+      "path": "evaluation/datasets/train_dataset.jsonl",
+      "sha256": "4da10f042c495fba7d9de702c6c6741059ea756fb6d13250bb6949a2b8290081",
+      "lines": 593
+    }
+  ]
+}

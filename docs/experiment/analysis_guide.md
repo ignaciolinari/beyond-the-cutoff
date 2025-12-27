@@ -33,7 +33,7 @@ We use different judges depending on whether RAG contexts are provided:
 
 ### Fair Comparison Considerations
 
-#### ✅ Fair Comparisons (Same Evaluation Mode)
+#### ✓ Fair Comparisons (Same Evaluation Mode)
 
 **Within instruction-only group (1, 3, 5):**
 - All use same judge, same metrics, no contexts provided
@@ -43,19 +43,19 @@ We use different judges depending on whether RAG contexts are provided:
 - All use same judge, same metrics, contexts provided
 - Direct comparison on all metrics including citation grounding
 
-#### ⚠️ Cross-Group Comparisons (Different Evaluation Modes)
+#### WARNING:  Cross-Group Comparisons (Different Evaluation Modes)
 
 When comparing across groups (e.g., 3 vs 4), be aware:
 
 | Metric | Cross-Group Comparable? | Notes |
 |--------|------------------------|-------|
-| Factuality | ✅ Yes | Both judges evaluate factual accuracy |
-| Completeness | ✅ Yes | Both judges evaluate answer coverage |
-| Communication | ✅ Yes | Both judges evaluate clarity |
-| Grounding/Citations | ❌ No | Only applicable to RAG conditions |
-| **Weighted Total** | ❌ **NO** | **Different weighting schemes - NOT comparable** |
+| Factuality | ✓ Yes | Both judges evaluate factual accuracy |
+| Completeness | ✓ Yes | Both judges evaluate answer coverage |
+| Communication | ✓ Yes | Both judges evaluate clarity |
+| Grounding/Citations | ✗ No | Only applicable to RAG conditions |
+| **Weighted Total** | ✗ **NO** | **Different weighting schemes - NOT comparable** |
 
-#### 🚨 Critical: Weighted Totals Are NOT Comparable Across Groups
+#### ALERT: Weighted Totals Are NOT Comparable Across Groups
 
 The two judges use different weighting schemes:
 
@@ -268,7 +268,7 @@ For each condition, extract from `metrics.json`:
 | 5. FT-rag | | | | No | RAG |
 | 6. FT-rag+RAG | | | | Yes | RAG |
 
-> ⚠️ **Important**: Do NOT include weighted totals in cross-group comparisons. The different weighting schemes make them incomparable.
+> WARNING:  **Important**: Do NOT include weighted totals in cross-group comparisons. The different weighting schemes make them incomparable.
 
 ### Step 4: Statistical Analysis (Optional)
 
@@ -287,7 +287,7 @@ Answer the key research questions using **raw dimension scores**:
 4. **FT+RAG synergy**: Compare 6's raw scores to 2 and 3's raw scores
 5. **Training alignment**: 6.factuality - 4.factuality (both have RAG, same judge)
 
-> 🎯 **Key principle**: Within-group can use weighted totals. Cross-group must use raw dimensions.
+> Goal **Key principle**: Within-group can use weighted totals. Cross-group must use raw dimensions.
 
 ## Limitations & Caveats
 
@@ -295,7 +295,7 @@ Answer the key research questions using **raw dimension scores**:
 - Don't compare grounding scores between RAG and non-RAG conditions
 - Models without contexts literally cannot cite
 
-### 2. ⚠️ Weighted Totals NOT Cross-Comparable
+### 2. WARNING:  Weighted Totals NOT Cross-Comparable
 - **RAG judge**: 40% factuality + 30% grounding + 20% completeness + 10% communication
 - **Instruction judge**: 50% factuality + 30% completeness + 20% communication
 - The instruction-only models get **100% of their score from fact/comp/comm**

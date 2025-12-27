@@ -578,7 +578,7 @@ class TestReportGeneration:
 
         summary = generate_comparison_summary([result])
 
-        assert "⚠️" in summary
+        assert "WARNING: " in summary
         assert "Do NOT compare weighted totals" in summary
 
     def test_generate_full_report_structure(

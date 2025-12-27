@@ -32,7 +32,7 @@ def load_mapping() -> list[dict[str, Any]]:
     """Load the batch mapping to know which model was A/B."""
     mapping_file = BATCH_DIR / "batch_mapping.json"
     if not mapping_file.exists():
-        print(f"❌ Error: {mapping_file} not found")
+        print(f"✗ Error: {mapping_file} not found")
         print("   Run generate_quantization_batches.py first")
         sys.exit(1)
     with open(mapping_file) as f:
@@ -131,7 +131,7 @@ def compute_wilson_ci(wins: int, total: int, z: float = 1.96) -> tuple[float, fl
 def print_final_results(results: list[dict[str, Any]]) -> None:
     """Print final aggregated results for quantization comparison."""
     if not results:
-        print("\n❌ No results to analyze")
+        print("\n✗ No results to analyze")
         return
 
     # Count wins
@@ -173,12 +173,12 @@ def print_final_results(results: list[dict[str, Any]]) -> None:
     print("  QUANTIZATION COMPARISON RESULTS (Q4_K_M vs F16)")
     print("=" * 70)
 
-    print(f"\n📊 MATCH OUTCOMES ({total} total)")
+    print(f"\nStats MATCH OUTCOMES ({total} total)")
     print(f"  Q4_K_M (quantized):     {q4_wins:3d} wins ({q4_wins/total*100:5.1f}%)")
     print(f"  F16 (non-quantized):    {f16_wins:3d} wins ({f16_wins/total*100:5.1f}%)")
     print(f"  Ties:                   {ties:3d}      ({ties/total*100:5.1f}%)")
 
-    print(f"\n📈 WIN RATE (excluding {ties} ties)")
+    print(f"\nTrend WIN RATE (excluding {ties} ties)")
     print(
         f"  Q4_K_M: {q4_win_rate*100:.1f}% (95% CI: {q4_ci_low*100:.1f}% - {q4_ci_high*100:.1f}%)"
     )
@@ -186,12 +186,12 @@ def print_final_results(results: list[dict[str, Any]]) -> None:
         f"  F16:    {f16_win_rate*100:.1f}% (95% CI: {f16_ci_low*100:.1f}% - {f16_ci_high*100:.1f}%)"
     )
 
-    print("\n🎯 ELO RATINGS")
+    print("\nGoal ELO RATINGS")
     print(f"  Q4_K_M: {elo_q4:.0f}")
     print(f"  F16:    {elo_f16:.0f}")
     print(f"  Difference: {abs(elo_q4 - elo_f16):.0f} points")
 
-    print("\n📈 STATISTICAL SIGNIFICANCE (Sign Test)")
+    print("\nTrend STATISTICAL SIGNIFICANCE (Sign Test)")
     print(f"  Decisive matches: {decisive}")
     print(f"  p-value: {p_value:.4f}")
     if is_significant:
@@ -199,7 +199,7 @@ def print_final_results(results: list[dict[str, Any]]) -> None:
     else:
         print("  ✗ Not statistically significant (p >= 0.05)")
 
-    print("\n🔄 POSITION BIAS ANALYSIS")
+    print("\nRepeat POSITION BIAS ANALYSIS")
     if q4_first_matches and f16_first_matches:
         print(f"  When Q4 presented as A ({len(q4_first_matches)} matches):")
         print(
@@ -210,7 +210,7 @@ def print_final_results(results: list[dict[str, Any]]) -> None:
             f"    Q4 wins: {q4_wins_when_second}, F16 wins: {sum(1 for r in f16_first_matches if r['winner_model'] == MODEL_F16)}"
         )
 
-    print("\n🔍 JUDGE CONFIDENCE")
+    print("\nSearch JUDGE CONFIDENCE")
     print(f"  High:   {high_conf:3d} ({high_conf/total*100:5.1f}%)")
     print(f"  Medium: {med_conf:3d} ({med_conf/total*100:5.1f}%)")
     print(f"  Low:    {low_conf:3d} ({low_conf/total*100:5.1f}%)")
@@ -222,17 +222,17 @@ def print_final_results(results: list[dict[str, Any]]) -> None:
 
     if is_significant:
         if q4_wins > f16_wins:
-            print("  🏆 Q4_K_M (quantized) is SIGNIFICANTLY BETTER than F16")
+            print("  Winner Q4_K_M (quantized) is SIGNIFICANTLY BETTER than F16")
             print("     This is unexpected - quantization usually loses quality")
         else:
-            print("  🏆 F16 (non-quantized) is SIGNIFICANTLY BETTER than Q4_K_M")
+            print("  Winner F16 (non-quantized) is SIGNIFICANTLY BETTER than Q4_K_M")
             print("     Quantization causes measurable quality loss")
     else:
         if ties > (q4_wins + f16_wins):
-            print("  🤝 MODELS ARE EQUIVALENT")
+            print("  Agreement MODELS ARE EQUIVALENT")
             print("     Majority of responses are ties - quantization has minimal impact")
         else:
-            print("  📊 NO SIGNIFICANT DIFFERENCE DETECTED")
+            print("  Stats NO SIGNIFICANT DIFFERENCE DETECTED")
             print("     The evidence is insufficient to conclude quantization affects quality")
 
         # Effect size interpretation
@@ -307,7 +307,7 @@ def interactive_mode() -> None:
 
         parsed = parse_json_response(text)
         if not parsed or "evaluations" not in parsed:
-            print(f"  ⚠️  Could not parse JSON for batch {batch_num}, skipping")
+            print(f"  WARNING:   Could not parse JSON for batch {batch_num}, skipping")
             continue
 
         evaluations = parsed["evaluations"]
@@ -319,7 +319,7 @@ def interactive_mode() -> None:
 
             mapping_item = next((m for m in batch_items if m["example"] == example_num), None)
             if not mapping_item:
-                print(f"  ⚠️  No mapping found for example {example_num}")
+                print(f"  WARNING:   No mapping found for example {example_num}")
                 continue
 
             if verdict == "A":
@@ -348,7 +348,7 @@ def interactive_mode() -> None:
     output_file = BATCH_DIR / "evaluation_results.json"
     with open(output_file, "w") as f:
         json.dump(all_results, f, indent=2)
-    print(f"\n💾 Processed results saved to {output_file}")
+    print(f"\nSave Processed results saved to {output_file}")
 
     raw_file = BATCH_DIR / "raw_judge_responses.json"
     with open(raw_file, "w") as f:
@@ -357,7 +357,7 @@ def interactive_mode() -> None:
             f,
             indent=2,
         )
-    print(f"💾 Raw judge responses saved to {raw_file}")
+    print(f"Save Raw judge responses saved to {raw_file}")
 
     audit_file = BATCH_DIR / "evaluation_audit.json"
     audit_data = {
@@ -373,7 +373,7 @@ def interactive_mode() -> None:
     }
     with open(audit_file, "w") as f:
         json.dump(audit_data, f, indent=2)
-    print(f"💾 Full audit trail saved to {audit_file}")
+    print(f"Save Full audit trail saved to {audit_file}")
 
 
 def continue_adding_batches() -> None:
@@ -407,11 +407,11 @@ def continue_adding_batches() -> None:
     pending_batches = sorted(all_batches - evaluated_batches)
 
     if not pending_batches:
-        print(f"\n✅ All {len(all_batches)} batches have been evaluated!")
+        print(f"\n✓ All {len(all_batches)} batches have been evaluated!")
         print("   Use option 3 to replace specific batches if needed.")
         return
 
-    print("\n📊 Status:")
+    print("\nStats Status:")
     print(f"   Total batches in mapping: {len(all_batches)}")
     print(f"   Already evaluated: {len(evaluated_batches)}")
     print(f"   Pending: {len(pending_batches)}")
@@ -455,7 +455,7 @@ def continue_adding_batches() -> None:
 
         parsed = parse_json_response(text)
         if not parsed or "evaluations" not in parsed:
-            print(f"  ⚠️  Could not parse JSON for batch {batch_num}")
+            print(f"  WARNING:   Could not parse JSON for batch {batch_num}")
             continue
 
         evaluations = parsed["evaluations"]
@@ -493,11 +493,11 @@ def continue_adding_batches() -> None:
 
     with open(results_file, "w") as f:
         json.dump(existing_results, f, indent=2)
-    print(f"\n💾 Updated results saved to {results_file}")
+    print(f"\nSave Updated results saved to {results_file}")
 
     with open(raw_file, "w") as f:
         json.dump(raw_responses, f, indent=2)
-    print(f"💾 Updated raw responses saved to {raw_file}")
+    print(f"Save Updated raw responses saved to {raw_file}")
 
     print_final_results(existing_results)
 
@@ -539,7 +539,7 @@ def add_specific_batches(batch_numbers: list[int]) -> None:
 
     for batch_num in batch_numbers:
         if batch_num not in batches:
-            print(f"⚠️  Batch {batch_num} not found in mapping, skipping")
+            print(f"WARNING:   Batch {batch_num} not found in mapping, skipping")
             continue
 
         batch_items = batches[batch_num]
@@ -565,7 +565,7 @@ def add_specific_batches(batch_numbers: list[int]) -> None:
 
         parsed = parse_json_response(text)
         if not parsed or "evaluations" not in parsed:
-            print(f"  ⚠️  Could not parse JSON for batch {batch_num}")
+            print(f"  WARNING:   Could not parse JSON for batch {batch_num}")
             continue
 
         evaluations = parsed["evaluations"]
@@ -603,11 +603,11 @@ def add_specific_batches(batch_numbers: list[int]) -> None:
 
     with open(results_file, "w") as f:
         json.dump(existing_results, f, indent=2)
-    print(f"\n💾 Updated results saved to {results_file}")
+    print(f"\nSave Updated results saved to {results_file}")
 
     with open(raw_file, "w") as f:
         json.dump(raw_responses, f, indent=2)
-    print(f"💾 Updated raw responses saved to {raw_file}")
+    print(f"Save Updated raw responses saved to {raw_file}")
 
     print_final_results(existing_results)
 
@@ -642,7 +642,7 @@ def main() -> int:
 
         print(f"Found existing results: {total_examples} examples from {evaluated_batches} batches")
         if total_batches > evaluated_batches:
-            print(f"⚠️  {total_batches - evaluated_batches} batches pending evaluation")
+            print(f"WARNING:   {total_batches - evaluated_batches} batches pending evaluation")
 
         print("\nOptions:")
         print("  1. Analyze existing results")

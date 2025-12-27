@@ -5,9 +5,9 @@ This directory contains scripts for planned features that were **not executed** 
 ## Why These Are "Future Work"
 
 The main experiment focused on:
-1. **Six-condition comparison** → Completed ✅
-2. **Pairwise comparison of best candidates** (Base+RAG vs FT+RAG) → Completed ✅
-3. **Quantization impact analysis** (Q4_K_M vs F16) → Completed ✅
+1. **Six-condition comparison** → Completed ✓
+2. **Pairwise comparison of best candidates** (Base+RAG vs FT+RAG) → Completed ✓
+3. **Quantization impact analysis** (Q4_K_M vs F16) → Completed ✓
 
 The scripts in this directory extend beyond that scope to enable more sophisticated evaluation workflows.
 

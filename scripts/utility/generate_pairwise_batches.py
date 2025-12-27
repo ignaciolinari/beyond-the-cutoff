@@ -131,7 +131,7 @@ def generate_batches(append_mode: bool = False) -> None:
     print(f"Available new examples: {len(available_ids)}")
 
     if not available_ids:
-        print("\n⚠️  No new examples available to generate batches")
+        print("\nWARNING:   No new examples available to generate batches")
         return
 
     # Shuffle for randomization (use different seed for new batches)
@@ -202,7 +202,7 @@ def generate_batches(append_mode: bool = False) -> None:
     print(f"\nSaved mapping to {mapping_file}")
 
     new_batches = batch_num - start_batch + 1
-    print(f"\n✅ Generated {new_batches} new batches with {len(new_mapping)} examples")
+    print(f"\n✓ Generated {new_batches} new batches with {len(new_mapping)} examples")
     print(f"   Total batches: {batch_num}")
     print(f"   Total examples: {len(combined_mapping)}")
     print(f"   Output directory: {output_dir}")
@@ -270,7 +270,9 @@ def main() -> int:
         if choice == "1":
             generate_batches(append_mode=True)
         elif choice == "2":
-            confirm = input("⚠️  This will OVERWRITE existing batches. Type 'yes' to confirm: ")
+            confirm = input(
+                "WARNING:   This will OVERWRITE existing batches. Type 'yes' to confirm: "
+            )
             if confirm.lower() == "yes":
                 generate_batches(append_mode=False)
             else:
@@ -283,7 +285,7 @@ def main() -> int:
                 b = item["batch"]
                 batches[b] = batches.get(b, 0) + 1
 
-            print("\n📊 Batch Statistics:")
+            print("\nStats Batch Statistics:")
             for b in sorted(batches.keys()):
                 print(f"  Batch {b:02d}: {batches[b]} examples")
             print(f"\n  Total: {num_examples} examples in {num_batches} batches")

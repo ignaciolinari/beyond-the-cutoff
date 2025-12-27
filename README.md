@@ -2,7 +2,7 @@
 
 A reproducible pipeline for evaluating how language models acquire knowledge beyond their training data cutoff, comparing **fine-tuning** and **retrieval-augmented generation (RAG)** approaches.
 
-> **📊 Experiment Status: COMPLETED** — This pipeline was tested on Qwen 2.5 0.5B (a small language model). Results and methodology are documented below. The pipeline is model-agnostic and can be adapted for larger models.
+> **Experiment Status: COMPLETED** — This pipeline was tested on Qwen 2.5 0.5B (a small language model). Results and methodology are documented below. The pipeline is model-agnostic and can be adapted for larger models.
 
 ## Overview
 
@@ -24,7 +24,7 @@ The benchmark uses **2025 arXiv papers** (post-cutoff for current open-weight mo
 | **Dataset** | 120 arXiv papers (2025), 154 evaluation QA pairs |
 | **Quantization** | Q4_K_M (4-bit) vs F16 comparison |
 
-> ⚠️ **Scope**: The findings below apply to **Qwen 2.5 0.5B** — a small language model with limited capacity. Larger models (3B, 7B, 14B+) may exhibit different patterns, particularly regarding fine-tuning benefits. This pipeline is designed to test such hypotheses.
+> **Scope**: The findings below apply to **Qwen 2.5 0.5B** — a small language model with limited capacity. Larger models (3B, 7B, 14B+) may exhibit different patterns, particularly regarding fine-tuning benefits. This pipeline is designed to test such hypotheses.
 
 ---
 
@@ -66,7 +66,7 @@ For **Qwen 2.5 0.5B** on post-cutoff scientific QA:
 3. **Q4_K_M is viable** — no measurable quality loss vs F16
 4. **Open question** — larger models may show different fine-tuning benefits
 
-📖 **Detailed reports**: [Six-Condition Results](docs/reports/six_condition_experiment_results.md) | [Pairwise Evaluation](docs/reports/pairwise_evaluation_results.md) | [Quantization Analysis](docs/reports/quantization_comparison_results.md)
+**Detailed reports**: [Six-Condition Results](docs/reports/six_condition_experiment_results.md) | [Pairwise Evaluation](docs/reports/pairwise_evaluation_results.md) | [Quantization Analysis](docs/reports/quantization_comparison_results.md)
 
 ---
 
@@ -138,18 +138,18 @@ ollama create lora_science_0p5 -f ollama/Modelfile.rag_trained
 
 | # | Condition | Training | RAG at Eval | Purpose |
 |---|-----------|----------|-------------|---------|
-| 1 | Base Baseline | None | ❌ | Lower bound |
-| 2 | RAG Baseline | None | ✅ | RAG-only benefit |
-| 3 | FT Only (instruction) | Instruction-only | ❌ | FT-only benefit |
-| 4 | FT+RAG (instruction) | Instruction-only | ✅ | Transfer learning test |
-| 5 | FT Only (RAG-trained) | RAG-trained | ❌ | Degradation test |
-| 6 | FT+RAG (RAG-trained) | RAG-trained | ✅ | Optimal setup |
+| 1 | Base Baseline | None | ✗ | Lower bound |
+| 2 | RAG Baseline | None | ✓ | RAG-only benefit |
+| 3 | FT Only (instruction) | Instruction-only | ✗ | FT-only benefit |
+| 4 | FT+RAG (instruction) | Instruction-only | ✓ | Transfer learning test |
+| 5 | FT Only (RAG-trained) | RAG-trained | ✗ | Degradation test |
+| 6 | FT+RAG (RAG-trained) | RAG-trained | ✓ | Optimal setup |
 
 ```bash
 python scripts/core/compare_models.py --plan configs/evaluation/six_condition_experiment.yaml
 ```
 
-📖 See [docs/experiment/](docs/experiment/) for detailed methodology.
+See [docs/experiment/](docs/experiment/) for detailed methodology.
 
 ## Quick Start
 
@@ -168,7 +168,7 @@ python scripts/bootstrap_env.py
 source .venv/bin/activate
 
 # Pull required models
-ollama pull qwen2.5:0.5b-instruct   # Base model
+ollama pull qwen2.5:0.5b-instruct    # Base model
 ollama pull qwen3:8b                 # Judge model
 ```
 
@@ -243,9 +243,9 @@ beyond-the-cutoff/
 
 | Section | Description |
 |---------|-------------|
-| [📋 Experiment Setup](docs/experiment/setup.md) | 6-condition design |
-| [📊 Methodology](docs/experiment/methodology.md) | Evaluation metrics |
-| [🔧 Pipeline Reference](docs/reference/pipeline.md) | Full technical details |
+| [Experiment Setup](docs/experiment/setup.md) | 6-condition design |
+| [Methodology](docs/experiment/methodology.md) | Evaluation metrics |
+| [Pipeline Reference](docs/reference/pipeline.md) | Full technical details |
 
 See [docs/README.md](docs/README.md) for the complete documentation index.
 
@@ -288,11 +288,11 @@ This pipeline is **model-agnostic**. To test with different models:
 
 | Aspect | 0.5B (Observed) | Larger Models (Hypothesis) |
 |--------|-----------------|----------------------------|
-| **FT benefit** | Marginal (+1.3%) | May increase with capacity |
+| **FT benefit** | Marginal | May increase with capacity |
 | **Knowledge retention** | Limited | Better with more parameters |
 | **RAG dependence** | Critical | May decrease |
 
-📖 See [docs/scaling/](docs/scaling/) for detailed instructions.
+See [docs/scaling/](docs/scaling/) for detailed instructions.
 
 ---
 

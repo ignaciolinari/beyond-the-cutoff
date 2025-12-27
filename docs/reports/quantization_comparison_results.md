@@ -4,7 +4,7 @@
 **Judge Model:** Gemini 3 Pro
 **Evaluation Method:** Blinded pairwise comparison with randomized presentation order
 
-> ⚠️ **Scope Limitation**: This analysis applies to **Qwen 2.5 0.5B**. Larger models typically show similar quantization resilience with Q4_K_M, but testing is recommended for production deployments. See [Scaling Guide](../scaling/README.md).
+> **Scope Limitation**: This analysis applies to **Qwen 2.5 0.5B**. Larger models typically show similar quantization resilience with Q4_K_M, but testing is recommended for production deployments. See [Scaling Guide](../scaling/README.md).
 
 ---
 
@@ -43,13 +43,13 @@ The high tie rate (39.6%) and near-equal win distribution indicate that Q4_K_M q
 
 All parameters were held constant except quantization:
 
-- ✅ Same fine-tuned checkpoint (lora_science_v1)
-- ✅ Same system prompt
-- ✅ Same temperature (0), top_p (0.9), repeat_penalty (1.05)
-- ✅ Same context length (4096)
-- ✅ Same evaluation dataset (154 examples)
-- ✅ Same RAG contexts for each question
-- ✅ Independent generation (no conversation context)
+- ✓ Same fine-tuned checkpoint (lora_science_v1)
+- ✓ Same system prompt
+- ✓ Same temperature (0), top_p (0.9), repeat_penalty (1.05)
+- ✓ Same context length (4096)
+- ✓ Same evaluation dataset (154 examples)
+- ✓ Same RAG contexts for each question
+- ✓ Independent generation (no conversation context)
 
 ### Blinding
 
@@ -88,7 +88,7 @@ The confidence intervals overlap substantially, indicating no reliable differenc
 | Test | Result |
 |------|--------|
 | Sign Test p-value | 0.8357 |
-| Significance (α=0.05) | ❌ Not significant |
+| Significance (α=0.05) | ✗ Not significant |
 | Effect size | 0.03 (negligible) |
 | Decisive matches | 93 |
 
@@ -199,9 +199,9 @@ All artifacts are saved:
 
 **Q4_K_M quantization does not degrade response quality** for this fine-tuned scientific QA model. The 4-bit quantization achieves:
 
-- ✅ **Equivalent accuracy** (p=0.8357, no significant difference)
-- ✅ **60% size reduction** (994MB → 397MB)
-- ✅ **High tie rate** (39.6%) indicating genuinely similar outputs
+- ✓ **Equivalent accuracy** (p=0.8357, no significant difference)
+- ✓ **60% size reduction** (994MB → 397MB)
+- ✓ **High tie rate** (39.6%) indicating genuinely similar outputs
 
 **Recommendation:** Deploy the Q4_K_M version for production use. The smaller model size provides deployment benefits (lower memory, potentially faster inference) with no measurable quality trade-off.
 

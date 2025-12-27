@@ -2,7 +2,7 @@
 
 _Last updated: 2025-12-02_
 
-> ✅ **EXPERIMENT COMPLETED** — The 6-condition experiment on Qwen 2.5 0.5B has been completed. This checklist is preserved for reference when running experiments with larger models.
+> ✓ **EXPERIMENT COMPLETED** — The 6-condition experiment on Qwen 2.5 0.5B has been completed. This checklist is preserved for reference when running experiments with larger models.
 
 Use this checklist before running the 0.5B model comparison experiments to ensure everything is properly configured.
 
@@ -151,7 +151,7 @@ After running the comparison, verify:
 
 ## Next Steps After 0.5B Experiments
 
-✅ **Completed:**
+✓ **Completed:**
 1. Analyzed results and documented findings (see `docs/reports/`)
 2. Ran pairwise comparison between top candidates
 3. Ran quantization comparison (Q4_K_M vs F16)

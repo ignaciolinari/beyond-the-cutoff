@@ -201,11 +201,11 @@ def compare_judges(
         print(f"\n  {'Overall average difference:':<43} {avg_all:>8.3f}")
 
         if avg_all < 0.1:
-            print("\n  ✅ Judges show HIGH agreement (diff < 0.1)")
+            print("\n  ✓ Judges show HIGH agreement (diff < 0.1)")
         elif avg_all < 0.2:
-            print("\n  ⚠️  Judges show MODERATE agreement (0.1 < diff < 0.2)")
+            print("\n  WARNING:   Judges show MODERATE agreement (0.1 < diff < 0.2)")
         else:
-            print("\n  ❌ Judges show LOW agreement (diff > 0.2)")
+            print("\n  ✗ Judges show LOW agreement (diff > 0.2)")
 
 
 def main() -> None:

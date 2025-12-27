@@ -670,7 +670,7 @@ def run_interleaved_evaluation(
                 else 0
             )
             print(
-                f"\n  📊 Progress: {progress} | "
+                f"\n  Stats Progress: {progress} | "
                 f"Rate: {rate:.2f}/s | "
                 f"ETA: {remaining/60:.1f}min",
                 file=sys.stderr,

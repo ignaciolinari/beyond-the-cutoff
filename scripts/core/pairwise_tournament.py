@@ -551,11 +551,11 @@ def run_tournament(
     print("  TOURNAMENT RESULTS")
     print(f"{'='*70}")
 
-    print("\n  📊 MATCH OUTCOMES")
+    print("\n  Stats MATCH OUTCOMES")
     print(f"  Total matches: {total}")
     print(f"  Decisive: {decisive} | Ties: {ties} ({ties/total*100:.1f}%)")
 
-    print("\n  🏆 WIN RATE (excluding ties)")
+    print("\n  Winner WIN RATE (excluding ties)")
     if decisive > 0:
         wr_a = wins_a / decisive * 100
         wr_b = wins_b / decisive * 100
@@ -565,19 +565,19 @@ def run_tournament(
     else:
         print("  No decisive matches (all ties)")
 
-    print("\n  📈 WIN RATE (including ties as 0.5)")
+    print("\n  Trend WIN RATE (including ties as 0.5)")
     wr_with_ties_a = (wins_a + ties * 0.5) / total * 100
     wr_with_ties_b = (wins_b + ties * 0.5) / total * 100
     print(f"  {model_a}: {wr_with_ties_a:.1f}%")
     print(f"  {model_b}: {wr_with_ties_b:.1f}%")
 
-    print("\n  🎯 ELO RATINGS (reference only)")
+    print("\n  Goal ELO RATINGS (reference only)")
     print(f"  {model_a}: {elo_a:.0f}")
     print(f"  {model_b}: {elo_b:.0f}")
     print(f"  Difference: {abs(elo_a - elo_b):.0f} points")
 
     # Position bias analysis
-    print("\n  🔄 POSITION BIAS ANALYSIS")
+    print("\n  Repeat POSITION BIAS ANALYSIS")
     pb = position_bias
     print(f"  When A presented first ({pb['when_a_first']['total']} matches):")
     print(
@@ -589,12 +589,12 @@ def run_tournament(
     )
     print(f"  First position win rate: {pb['first_position_win_rate']:.1f}% (expected: 50%)")
     if pb["significant_bias"]:
-        print(f"  ⚠️  SIGNIFICANT POSITION BIAS DETECTED (p={pb['p_value']:.4f})")
+        print(f"  WARNING:   SIGNIFICANT POSITION BIAS DETECTED (p={pb['p_value']:.4f})")
     else:
         print(f"  ✓ No significant position bias (p={pb['p_value']:.4f})")
 
     # Statistical significance
-    print("\n  📈 STATISTICAL SIGNIFICANCE (Sign Test)")
+    print("\n  Trend STATISTICAL SIGNIFICANCE (Sign Test)")
     ss = stat_significance
     print(f"  Decisive matches: {ss['n_decisive']} (excluding {ties} ties)")
     print(
@@ -620,14 +620,14 @@ def run_tournament(
 
     print(f"\n  {'='*66}")
     if ss["significant"]:
-        print(f"  🏆 WINNER: {winner}")
+        print(f"  Winner WINNER: {winner}")
         print(f"     Win rate: {winner_wr:.1f}% (p={ss['p_value']:.4f}, statistically significant)")
     else:
         if winner != "Tie":
-            print(f"  📊 LEADING: {winner} ({winner_wr:.1f}% win rate)")
+            print(f"  Stats LEADING: {winner} ({winner_wr:.1f}% win rate)")
             print(f"     But NOT statistically significant (p={ss['p_value']:.4f})")
         else:
-            print("  🤝 RESULT: Exactly tied")
+            print("  Agreement RESULT: Exactly tied")
     print(f"  {'='*66}\n")
 
     return TournamentResults(

@@ -181,7 +181,7 @@ def print_summary(result: DatasetQualityResult) -> None:
     elif result.pass_rate >= 0.75:
         print("✓ GOOD: Dataset quality is acceptable (≥75% pass rate)", file=sys.stderr)
     elif result.pass_rate >= 0.6:
-        print("⚠ FAIR: Dataset has quality issues (60-75% pass rate)", file=sys.stderr)
+        print("WARNING:  FAIR: Dataset has quality issues (60-75% pass rate)", file=sys.stderr)
     else:
         print("✗ POOR: Dataset needs significant cleanup (<60% pass rate)", file=sys.stderr)
     print("=" * 60 + "\n", file=sys.stderr)

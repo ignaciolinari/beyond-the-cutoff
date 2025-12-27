@@ -70,12 +70,12 @@ This experiment compares **six conditions** to understand the interaction betwee
 
 | Condition | Model | Training Contexts | Eval Contexts | Config File | Label |
 |-----------|-------|-------------------|---------------|-------------|-------|
-| Base Baseline | Base | N/A | ❌ No | `base_ollama.yaml` | `base_baseline_0p5b` |
-| RAG Baseline | Base | N/A | ✅ Yes | `base_ollama.yaml` | `rag_baseline_0p5b` |
-| FT Only (instruction-only) | Instruction-only | ❌ No | ❌ No | `lora_instruction_only.yaml` | `lora_science_0p5b_ft_only` |
-| FT+RAG (instruction-only) | Instruction-only | ❌ No | ✅ Yes | `lora_instruction_only.yaml` | `hybrid_science_0p5b_instruction_only` |
-| RAG-trained FT Only | RAG-trained | ✅ Yes | ❌ No | `lora_rag_trained.yaml` | `lora_science_0p5b_rag_trained_ft_only` |
-| RAG-trained FT+RAG | RAG-trained | ✅ Yes | ✅ Yes | `lora_rag_trained.yaml` | `hybrid_science_0p5b_rag_trained` |
+| Base Baseline | Base | N/A | ✗ No | `base_ollama.yaml` | `base_baseline_0p5b` |
+| RAG Baseline | Base | N/A | ✓ Yes | `base_ollama.yaml` | `rag_baseline_0p5b` |
+| FT Only (instruction-only) | Instruction-only | ✗ No | ✗ No | `lora_instruction_only.yaml` | `lora_science_0p5b_ft_only` |
+| FT+RAG (instruction-only) | Instruction-only | ✗ No | ✓ Yes | `lora_instruction_only.yaml` | `hybrid_science_0p5b_instruction_only` |
+| RAG-trained FT Only | RAG-trained | ✓ Yes | ✗ No | `lora_rag_trained.yaml` | `lora_science_0p5b_rag_trained_ft_only` |
+| RAG-trained FT+RAG | RAG-trained | ✓ Yes | ✓ Yes | `lora_rag_trained.yaml` | `hybrid_science_0p5b_rag_trained` |
 
 ## Complete 2x2 Matrix + Baselines
 

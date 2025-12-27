@@ -5,7 +5,7 @@
 **Method:** Interleaved evaluation with multi-dimensional scoring
 **Dataset:** 154 scientific Q&A pairs from papers published after model training cutoff
 
-> ⚠️ **Scope Limitation**: These results apply to **Qwen 2.5 0.5B** only. Larger models with more parameter capacity may show different patterns, particularly for fine-tuning benefits. See [Scaling Guide](../scaling/README.md) for testing with larger models.
+> **Scope Limitation**: These results apply to **Qwen 2.5 0.5B** only. Larger models with more parameter capacity may show different patterns, particularly for fine-tuning benefits. See [Scaling Guide](../scaling/README.md) for testing with larger models.
 
 ---
 
@@ -20,7 +20,7 @@ We conducted a comparative evaluation of **6 model configurations** on scientifi
 3. **Training format matters:** Fine-tuning on RAG-formatted data yields better results than instruction-only fine-tuning
 4. **Fine-tuning cannot replace retrieval:** LoRA-only models (no RAG at inference) perform as poorly as base model
 
-> 📊 **Metrics Note:** Pass rates and LLM judge scores are the primary valid metrics for cross-condition comparison. Reference-based metrics (BERTScore, BLEU) have limited validity for instruction-only conditions due to reference answer methodology — see [Limitations](#limitations).
+> **Metrics Note:** Pass rates and LLM judge scores are the primary valid metrics for cross-condition comparison. Reference-based metrics (BERTScore, BLEU) have limited validity for instruction-only conditions due to reference answer methodology — see [Limitations](#limitations).
 
 ---
 
@@ -49,7 +49,7 @@ This experiment tests three key questions:
 
 ### Reference Answer Generation
 
-> ⚠️ **Methodological Note:** Reference answers (`expected_response`) were generated using **RAG with retrieved context** and contain inline citations (e.g., `[1] Section: ... | Page N`). This has implications for metrics interpretation — see [Reference-Based Metrics](#reference-based-metrics) section.
+> **Methodological Note:** Reference answers (`expected_response`) were generated using **RAG with retrieved context** and contain inline citations (e.g., `[1] Section: ... | Page N`). This has implications for metrics interpretation — see [Reference-Based Metrics](#reference-based-metrics) section.
 
 The reference answers are grounded in specific retrieved passages and contain:
 - Factual claims derived from post-cutoff paper content
@@ -99,7 +99,7 @@ base_baseline          █░░░░░░░░░░░░░░░░░░
 
 ### Reference-Based Metrics
 
-> ⚠️ **Interpretability Warning:** Reference answers were generated with RAG context and contain citations. Comparing instruction-only model outputs (which lack context access) against these references is **methodologically problematic** — the models are being evaluated against answers they cannot possibly produce. These metrics are provided for completeness but should be interpreted with caution.
+> **Interpretability Warning:** Reference answers were generated with RAG context and contain citations. Comparing instruction-only model outputs (which lack context access) against these references is **methodologically problematic** — the models are being evaluated against answers they cannot possibly produce. These metrics are provided for completeness but should be interpreted with caution.
 
 #### RAG Conditions (Valid Comparison)
 
@@ -143,11 +143,11 @@ These models **do not receive retrieved context** but are compared against conte
 
 | Metric | RAG Models (avg) | Non-RAG Models (avg) | Gap | Validity |
 |--------|------------------|----------------------|-----|----------|
-| Pass Rate | 22.2% | 4.7% | **4.7x** | ✅ Valid |
-| Factuality | 0.42 | 0.30 | +40% | ✅ Valid |
-| Completeness | 0.45 | 0.35 | +29% | ✅ Valid |
-| BERTScore F1 | 0.87 | 0.83 | +5% | ⚠️ Limited* |
-| BLEU | 0.11 | 0.03 | **3.7x** | ⚠️ Limited* |
+| Pass Rate | 22.2% | 4.7% | **4.7x** | ✓ Valid |
+| Factuality | 0.42 | 0.30 | +40% | ✓ Valid |
+| Completeness | 0.45 | 0.35 | +29% | ✓ Valid |
+| BERTScore F1 | 0.87 | 0.83 | +5% | WARNING:  Limited* |
+| BLEU | 0.11 | 0.03 | **3.7x** | WARNING:  Limited* |
 
 *Reference-based metrics (BERTScore, BLEU) compare against RAG-generated references. The gap partially reflects access to context rather than model quality.
 
@@ -254,11 +254,11 @@ With ~72 examples per model, statistical power is limited:
 
 ### Research Questions Answered
 
-1. **Does RAG help?** ✅ **Yes, dramatically.** 4-5x improvement in pass rate (valid metric).
+1. **Does RAG help?** ✓ **Yes, dramatically.** 4-5x improvement in pass rate (valid metric).
 
-2. **Does fine-tuning help?** ⚠️ **Marginally.** Only +1.3% when training format matches inference format.
+2. **Does fine-tuning help?** WARNING:  **Marginally.** Only +1.3% when training format matches inference format.
 
-3. **What training format is best?** ✅ **RAG-formatted training.** Instruction-only training actually hurts RAG inference.
+3. **What training format is best?** ✓ **RAG-formatted training.** Instruction-only training actually hurts RAG inference.
 
 ### Validity of Conclusions
 
@@ -279,10 +279,10 @@ They are **not** well-supported by reference-based metrics (BERTScore, BLEU) for
 
 ### Key Takeaways
 
-1. ✅ **Always use RAG for post-cutoff knowledge tasks** — the improvement is dramatic and fine-tuning cannot compensate
-2. ✅ **If fine-tuning, match training format to inference format** — instruction-only FT hurts RAG performance
-3. ✅ **Fine-tuning is optional** — Base+RAG achieves 95% of the best model's performance
-4. ❌ **Don't expect fine-tuning to encode new knowledge** — retrieval is still required at inference time
+1. ✓ **Always use RAG for post-cutoff knowledge tasks** — the improvement is dramatic and fine-tuning cannot compensate
+2. ✓ **If fine-tuning, match training format to inference format** — instruction-only FT hurts RAG performance
+3. ✓ **Fine-tuning is optional** — Base+RAG achieves 95% of the best model's performance
+4. ✗ **Don't expect fine-tuning to encode new knowledge** — retrieval is still required at inference time
 
 ---
 

@@ -135,7 +135,7 @@ def load_all_batches(batch_dir: Path) -> list[AnnotationBatch]:
 
 def render_sidebar() -> str:
     """Render the sidebar with navigation and settings."""
-    st.sidebar.title("🏷️ Human Annotation")
+    st.sidebar.title("Tag Human Annotation")
 
     # Annotator ID
     annotator_id = st.sidebar.text_input(
@@ -152,9 +152,9 @@ def render_sidebar() -> str:
     page: str = str(
         st.sidebar.radio(
             "Navigation",
-            ["📝 Annotate", "📊 Progress", "🏆 Leaderboard", "⚙️ Settings"],
+            ["Notes Annotate", "Stats Progress", "Winner Leaderboard", "Settings"],
         )
-        or "📝 Annotate"
+        or "Notes Annotate"
     )
 
     st.sidebar.divider()
@@ -175,7 +175,7 @@ def render_annotation_page() -> None:
     st.title("Model Output Comparison")
 
     if not st.session_state.annotator_id:
-        st.warning("⚠️ Please enter your Annotator ID in the sidebar.")
+        st.warning("WARNING:  Please enter your Annotator ID in the sidebar.")
         return
 
     # Batch selection
@@ -197,7 +197,7 @@ def render_annotation_page() -> None:
     if st.session_state.current_batch:
         render_current_task()
     else:
-        st.info("👆 Select or create a batch to start annotating.")
+        st.info("Up Select or create a batch to start annotating.")
 
 
 def create_new_batch() -> None:
@@ -262,7 +262,7 @@ def render_current_task() -> None:
     idx = st.session_state.current_task_idx
 
     if idx >= len(batch.tasks):
-        st.success("🎉 All tasks in this batch are complete!")
+        st.success("Done All tasks in this batch are complete!")
 
         # Option to finalize
         if st.button("Finalize Batch"):
@@ -289,12 +289,12 @@ def render_current_task() -> None:
 
     # Reference (if available)
     if task.reference:
-        with st.expander("📚 Reference Answer"):
+        with st.expander("References Reference Answer"):
             st.write(task.reference)
 
     # Context (if available)
     if task.contexts:
-        with st.expander(f"📄 Retrieved Context ({len(task.contexts)} passages)"):
+        with st.expander(f"Document Retrieved Context ({len(task.contexts)} passages)"):
             for i, ctx in enumerate(task.contexts):
                 st.markdown(f"**Passage {i+1}:**")
                 st.text(ctx[:500] + "..." if len(ctx) > 500 else ctx)
@@ -401,7 +401,7 @@ def render_current_task() -> None:
 
 def render_progress_page() -> None:
     """Render the progress tracking page."""
-    st.title("📊 Annotation Progress")
+    st.title("Stats Annotation Progress")
 
     batch_dir = get_batch_dir()
     batches = load_all_batches(batch_dir)
@@ -462,7 +462,7 @@ def render_progress_page() -> None:
 
 def render_leaderboard_page() -> None:
     """Render the ELO leaderboard page."""
-    st.title("🏆 Model Leaderboard")
+    st.title("Winner Model Leaderboard")
 
     batch_dir = get_batch_dir()
     batches = load_all_batches(batch_dir)
@@ -505,7 +505,7 @@ def render_leaderboard_page() -> None:
     for i, rating in enumerate(leaderboard):
         col1, col2, col3, col4 = st.columns([1, 3, 2, 2])
 
-        medal = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else f"{i+1}."
+        medal = "1st" if i == 0 else "2nd" if i == 1 else "3rd" if i == 2 else f"{i+1}."
         col1.write(medal)
         col2.write(f"**{rating.model}**")
 
@@ -558,7 +558,7 @@ def render_leaderboard_page() -> None:
 
 def render_settings_page() -> None:
     """Render the settings page."""
-    st.title("⚙️ Settings")
+    st.title("Settings")
 
     # Paths
     st.subheader("Data Paths")
@@ -623,20 +623,20 @@ def main() -> None:
     """Main app entry point."""
     st.set_page_config(
         page_title="Human Annotation Tool",
-        page_icon="🏷️",
+        page_icon="Tag",
         layout="wide",
     )
 
     init_session_state()
     page = render_sidebar()
 
-    if page == "📝 Annotate":
+    if page == "Notes Annotate":
         render_annotation_page()
-    elif page == "📊 Progress":
+    elif page == "Stats Progress":
         render_progress_page()
-    elif page == "🏆 Leaderboard":
+    elif page == "Winner Leaderboard":
         render_leaderboard_page()
-    elif page == "⚙️ Settings":
+    elif page == "Settings":
         render_settings_page()
 
 

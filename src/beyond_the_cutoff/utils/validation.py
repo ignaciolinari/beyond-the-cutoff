@@ -637,7 +637,7 @@ def print_validation_result(result: ValidationResult, *, file: Any = sys.stderr)
     print(f"[{'✓' if result.passed else '✗'}] {result.summary}", file=file)
     if result.issues:
         for issue in result.issues:
-            icon = {"error": "✗", "warning": "⚠", "info": "ℹ"}.get(issue.severity, "•")
+            icon = {"error": "✗", "warning": "WARNING: ", "info": "ℹ"}.get(issue.severity, "•")
             print(f"  {icon} [{issue.severity.upper()}] {issue.message}", file=file)
             if issue.context:
                 for key, value in issue.context.items():

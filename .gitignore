@@ -42,9 +42,10 @@ evaluation/results/*
 !evaluation/results/.gitkeep
 evaluation/responses/*
 !evaluation/responses/.gitkeep
-evaluation/datasets/*
-evaluation/*
+evaluation/datasets/*.jsonl
 !evaluation/datasets/.gitkeep
+!evaluation/datasets/README.md
+!evaluation/datasets/manifest.json
 notebooks/.ipynb_checkpoints/
 artifacts/
 outputs/

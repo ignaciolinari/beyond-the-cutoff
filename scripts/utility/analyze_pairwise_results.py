@@ -25,7 +25,7 @@ def load_mapping() -> list[dict[str, Any]]:
     """Load the batch mapping to know which model was A/B."""
     mapping_file = Path("evaluation/exports/batches/batch_mapping.json")
     if not mapping_file.exists():
-        print(f"❌ Error: {mapping_file} not found")
+        print(f"✗ Error: {mapping_file} not found")
         print("   Run generate_pairwise_batches.py first")
         sys.exit(1)
     with open(mapping_file) as f:
@@ -176,7 +176,7 @@ def interactive_mode() -> None:
         # Parse JSON
         parsed = parse_json_response(text)
         if not parsed or "evaluations" not in parsed:
-            print(f"  ⚠️  Could not parse JSON for batch {batch_num}, skipping")
+            print(f"  WARNING:   Could not parse JSON for batch {batch_num}, skipping")
             continue
 
         evaluations = parsed["evaluations"]
@@ -190,7 +190,7 @@ def interactive_mode() -> None:
             # Find the mapping for this example
             mapping_item = next((m for m in batch_items if m["example"] == example_num), None)
             if not mapping_item:
-                print(f"  ⚠️  No mapping found for example {example_num}")
+                print(f"  WARNING:   No mapping found for example {example_num}")
                 continue
 
             # Convert verdict to actual model
@@ -220,7 +220,7 @@ def interactive_mode() -> None:
     output_file = Path("evaluation/exports/batches/evaluation_results.json")
     with open(output_file, "w") as f:
         json.dump(all_results, f, indent=2)
-    print(f"\n💾 Processed results saved to {output_file}")
+    print(f"\nSave Processed results saved to {output_file}")
 
     # Save raw responses for reproducibility
     raw_file = Path("evaluation/exports/batches/raw_judge_responses.json")
@@ -230,7 +230,7 @@ def interactive_mode() -> None:
             f,
             indent=2,
         )
-    print(f"💾 Raw judge responses saved to {raw_file}")
+    print(f"Save Raw judge responses saved to {raw_file}")
 
     # Save full audit trail
     audit_file = Path("evaluation/exports/batches/evaluation_audit.json")
@@ -246,7 +246,7 @@ def interactive_mode() -> None:
     }
     with open(audit_file, "w") as f:
         json.dump(audit_data, f, indent=2)
-    print(f"💾 Full audit trail saved to {audit_file}")
+    print(f"Save Full audit trail saved to {audit_file}")
 
 
 def print_final_results(
@@ -254,7 +254,7 @@ def print_final_results(
 ) -> None:
     """Print final aggregated results."""
     if not results:
-        print("\n❌ No results to analyze")
+        print("\n✗ No results to analyze")
         return
 
     # Count wins
@@ -278,7 +278,7 @@ def print_final_results(
     print("  FINAL RESULTS")
     print("=" * 70)
 
-    print(f"\n📊 MATCH OUTCOMES ({total} total)")
+    print(f"\nStats MATCH OUTCOMES ({total} total)")
     print(
         f"  Base+RAG (rag_baseline):     {baseline_wins:3d} wins ({baseline_wins/total*100:5.1f}%)"
     )
@@ -287,12 +287,12 @@ def print_final_results(
     )
     print(f"  Ties:                        {ties:3d}      ({ties/total*100:5.1f}%)")
 
-    print("\n🎯 ELO RATINGS")
+    print("\nGoal ELO RATINGS")
     print(f"  Base+RAG:     {elo_baseline:.0f}")
     print(f"  FT-RAG+RAG:   {elo_finetuned:.0f}")
     print(f"  Difference:   {abs(elo_baseline - elo_finetuned):.0f} points")
 
-    print("\n📈 STATISTICAL SIGNIFICANCE (Sign Test)")
+    print("\nTrend STATISTICAL SIGNIFICANCE (Sign Test)")
     print(f"  Decisive matches: {baseline_wins + finetuned_wins}")
     print(f"  p-value: {p_value:.4f}")
     if is_significant:
@@ -300,7 +300,7 @@ def print_final_results(
     else:
         print("  ✗ Not statistically significant (p >= 0.05)")
 
-    print("\n🔍 JUDGE CONFIDENCE")
+    print("\nSearch JUDGE CONFIDENCE")
     print(f"  High:   {high_conf:3d} ({high_conf/total*100:5.1f}%)")
     print(f"  Medium: {med_conf:3d} ({med_conf/total*100:5.1f}%)")
     print(f"  Low:    {low_conf:3d} ({low_conf/total*100:5.1f}%)")
@@ -318,10 +318,10 @@ def print_final_results(
         winner_elo = (elo_baseline + elo_finetuned) / 2
 
     if is_significant:
-        print(f"  🏆 WINNER: {winner}")
+        print(f"  Winner WINNER: {winner}")
         print(f"     (ELO: {winner_elo:.0f}, statistically significant)")
     else:
-        print("  🤝 RESULT: No clear winner")
+        print("  Agreement RESULT: No clear winner")
         print("     (Difference not statistically significant)")
     print("=" * 70)
 
@@ -368,7 +368,7 @@ def add_specific_batches(batch_numbers: list[int]) -> None:
 
     for batch_num in batch_numbers:
         if batch_num not in batches:
-            print(f"⚠️  Batch {batch_num} not found in mapping, skipping")
+            print(f"WARNING:   Batch {batch_num} not found in mapping, skipping")
             continue
 
         batch_items = batches[batch_num]
@@ -394,7 +394,7 @@ def add_specific_batches(batch_numbers: list[int]) -> None:
 
         parsed = parse_json_response(text)
         if not parsed or "evaluations" not in parsed:
-            print(f"  ⚠️  Could not parse JSON for batch {batch_num}")
+            print(f"  WARNING:   Could not parse JSON for batch {batch_num}")
             continue
 
         evaluations = parsed["evaluations"]
@@ -433,11 +433,11 @@ def add_specific_batches(batch_numbers: list[int]) -> None:
     # Save updated results
     with open(results_file, "w") as f:
         json.dump(existing_results, f, indent=2)
-    print(f"\n💾 Updated results saved to {results_file}")
+    print(f"\nSave Updated results saved to {results_file}")
 
     with open(raw_file, "w") as f:
         json.dump(raw_responses, f, indent=2)
-    print(f"💾 Updated raw responses saved to {raw_file}")
+    print(f"Save Updated raw responses saved to {raw_file}")
 
     # Show updated stats
     print_final_results(existing_results, model_baseline, model_finetuned)
@@ -492,11 +492,11 @@ def continue_adding_batches() -> None:
     pending_batches = sorted(all_batches - evaluated_batches)
 
     if not pending_batches:
-        print(f"\n✅ All {len(all_batches)} batches have been evaluated!")
+        print(f"\n✓ All {len(all_batches)} batches have been evaluated!")
         print("   Use option 3 to replace specific batches if needed.")
         return
 
-    print("\n📊 Status:")
+    print("\nStats Status:")
     print(f"   Total batches in mapping: {len(all_batches)}")
     print(f"   Already evaluated: {len(evaluated_batches)}")
     print(f"   Pending: {len(pending_batches)}")
@@ -543,7 +543,7 @@ def continue_adding_batches() -> None:
 
         parsed = parse_json_response(text)
         if not parsed or "evaluations" not in parsed:
-            print(f"  ⚠️  Could not parse JSON for batch {batch_num}")
+            print(f"  WARNING:   Could not parse JSON for batch {batch_num}")
             continue
 
         evaluations = parsed["evaluations"]
@@ -582,11 +582,11 @@ def continue_adding_batches() -> None:
     # Save updated results
     with open(results_file, "w") as f:
         json.dump(existing_results, f, indent=2)
-    print(f"\n💾 Updated results saved to {results_file}")
+    print(f"\nSave Updated results saved to {results_file}")
 
     with open(raw_file, "w") as f:
         json.dump(raw_responses, f, indent=2)
-    print(f"💾 Updated raw responses saved to {raw_file}")
+    print(f"Save Updated raw responses saved to {raw_file}")
 
     # Show updated stats
     print_final_results(existing_results, model_baseline, model_finetuned)
@@ -614,7 +614,7 @@ def main() -> int:
 
         print(f"Found existing results: {total_examples} examples from {evaluated_batches} batches")
         if total_batches > evaluated_batches:
-            print(f"⚠️  {total_batches - evaluated_batches} batches pending evaluation")
+            print(f"WARNING:   {total_batches - evaluated_batches} batches pending evaluation")
 
         print("\nOptions:")
         print("  1. Analyze existing results")

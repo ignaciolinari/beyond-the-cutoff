@@ -196,11 +196,11 @@ def generate_batches() -> None:
     with open(mapping_file, "w") as f:
         json.dump(mapping, f, indent=2)
 
-    print(f"\n✅ Generated {batch_num} batches with {len(mapping)} examples")
+    print(f"\n✓ Generated {batch_num} batches with {len(mapping)} examples")
     print(f"   Batch size: {BATCH_SIZE}")
     print(f"   Output directory: {output_dir}")
     print(f"   Mapping file: {mapping_file}")
-    print("\n📋 Copy each batch file content into Gemini for evaluation")
+    print("\nChecklist Copy each batch file content into Gemini for evaluation")
 
 
 def main() -> int:
@@ -208,7 +208,7 @@ def main() -> int:
     output_dir = Path("evaluation/exports/quantization_batches")
 
     if output_dir.exists() and any(output_dir.glob("batch_*.txt")):
-        print("⚠️  Existing batches found!")
+        print("WARNING:   Existing batches found!")
         confirm = input("Regenerate all batches? (yes/no): ").strip().lower()
         if confirm != "yes":
             print("Cancelled.")

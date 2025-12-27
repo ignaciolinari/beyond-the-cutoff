@@ -264,12 +264,12 @@ def print_results(stats: dict[str, Any]) -> None:
     print("  TOURNAMENT RESULTS")
     print(f"{'='*70}")
 
-    print(f"\n📊 MATCH OUTCOMES ({stats['total_matches']} total)")
+    print(f"\nStats MATCH OUTCOMES ({stats['total_matches']} total)")
     print(
         f"  Decisive: {stats['decisive']} | Ties: {stats['ties']} ({stats['ties']/stats['total_matches']*100:.1f}%)"
     )
 
-    print("\n🏆 WIN RATE (excluding ties)")
+    print("\nWinner WIN RATE (excluding ties)")
     if stats["decisive"] > 0:
         print(
             f"  {stats['model_a']}: {stats['wins_a']}/{stats['decisive']} = {stats['win_rate_a']*100:.1f}%"
@@ -281,7 +281,7 @@ def print_results(stats: dict[str, Any]) -> None:
             f"  Difference: {abs(stats['win_rate_a'] - stats['win_rate_b'])*100:.1f} percentage points"
         )
 
-    print("\n📈 STATISTICAL SIGNIFICANCE (Sign Test)")
+    print("\nTrend STATISTICAL SIGNIFICANCE (Sign Test)")
     print(f"  p-value: {stats['p_value']:.4f}")
     if stats["significant"]:
         print("  ✓ STATISTICALLY SIGNIFICANT (p < 0.05)")
@@ -302,13 +302,13 @@ def print_results(stats: dict[str, Any]) -> None:
 
     if winner:
         if stats["significant"]:
-            print(f"  🏆 WINNER: {winner}")
+            print(f"  Winner WINNER: {winner}")
             print(f"     Win rate: {wr:.1f}% (statistically significant)")
         else:
-            print(f"  📊 LEADING: {winner} ({wr:.1f}% win rate)")
+            print(f"  Stats LEADING: {winner} ({wr:.1f}% win rate)")
             print(f"     But NOT statistically significant (p={stats['p_value']:.4f})")
     else:
-        print("  🤝 RESULT: Exactly tied")
+        print("  Agreement RESULT: Exactly tied")
     print(f"{'='*70}\n")
 
 
@@ -344,7 +344,7 @@ def run_extended_tournament(
     print(f"New examples to process: {len(new_ids)}")
 
     if not new_ids:
-        print("\n✅ All examples already processed!")
+        print("\n✓ All examples already processed!")
         stats = compute_statistics(existing_matches, model_a, model_b)
         print_results(stats)
         return stats
@@ -436,7 +436,7 @@ def run_extended_tournament(
             f,
             indent=2,
         )
-    print(f"💾 Results saved to {output_file}")
+    print(f"Save Results saved to {output_file}")
 
     return stats
 

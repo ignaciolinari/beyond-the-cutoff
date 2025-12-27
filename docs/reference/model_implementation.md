@@ -3,7 +3,7 @@
 This document provides a comprehensive analysis of all models used in the Beyond the Cutoff project, comparing our implementation against official documentation from Hugging Face and Ollama.
 
 **Last Updated:** November 2025
-**Status:** ✅ All implementations verified and corrected
+**Status:** ✓ All implementations verified and corrected
 
 ---
 
@@ -32,11 +32,11 @@ This document provides a comprehensive analysis of all models used in the Beyond
 
 | Specification | Official | Our Implementation | Status |
 |--------------|----------|-------------------|--------|
-| Embedding Dimension | 1024 | Auto-detected from model | ✅ |
-| Max Sequence Length | 8192 tokens | `chunk_size: 800` words | ✅ Conservative |
-| Normalization | L2 normalize for cosine similarity | `faiss.normalize_L2()` | ✅ |
-| Index Type | Inner Product (after L2 norm = cosine) | `IndexFlatIP` | ✅ |
-| Query Prefix | **None required** (unlike BGE v1.5) | No prefix used | ✅ |
+| Embedding Dimension | 1024 | Auto-detected from model | ✓ |
+| Max Sequence Length | 8192 tokens | `chunk_size: 800` words | ✓ Conservative |
+| Normalization | L2 normalize for cosine similarity | `faiss.normalize_L2()` | ✓ |
+| Index Type | Inner Product (after L2 norm = cosine) | `IndexFlatIP` | ✓ |
+| Query Prefix | **None required** (unlike BGE v1.5) | No prefix used | ✓ |
 
 ### Implementation Details
 
@@ -71,7 +71,7 @@ scores, idx = self._index.search(query_nd, top_k)
 
 3. **Chunk Size:** Official documentation supports up to 8192 tokens. Our conservative chunk size of 800 words (~1000 tokens) ensures we stay well within limits while maintaining semantic coherence.
 
-### Verification Status: ✅ CORRECT
+### Verification Status: ✓ CORRECT
 
 ---
 
@@ -85,10 +85,10 @@ scores, idx = self._index.search(query_nd, top_k)
 
 | Specification | Official | Our Implementation | Status |
 |--------------|----------|-------------------|--------|
-| Input Format | `[(query, passage), ...]` pairs | ✅ Correct format | ✅ |
-| Output | Raw relevance scores (higher = better) | Used for sorting | ✅ |
-| API | `CrossEncoder.predict(pairs)` | `_reranker.predict(pairs)` | ✅ |
-| Normalization | Optional sigmoid for 0-1 range | Raw scores used | ✅ |
+| Input Format | `[(query, passage), ...]` pairs | ✓ Correct format | ✓ |
+| Output | Raw relevance scores (higher = better) | Used for sorting | ✓ |
+| API | `CrossEncoder.predict(pairs)` | `_reranker.predict(pairs)` | ✓ |
+| Normalization | Optional sigmoid for 0-1 range | Raw scores used | ✓ |
 
 ### Implementation Details
 
@@ -126,7 +126,7 @@ results.sort(key=lambda c: c.reranker_score, reverse=True)
        # Falls back to similarity_score ordering
    ```
 
-### Verification Status: ✅ CORRECT
+### Verification Status: ✓ CORRECT
 
 ---
 
@@ -140,11 +140,11 @@ results.sort(key=lambda c: c.reranker_score, reverse=True)
 
 | Specification | Official | Our Implementation | Status |
 |--------------|----------|-------------------|--------|
-| Parameters | 0.49B (0.36B non-embedding) | Used as-is | ✅ |
-| Context Length | 32,768 tokens | `num_ctx: 4096` | ✅ Conservative |
-| Generation Length | Up to 8K tokens | `max_new_tokens: 512` | ✅ |
-| Architecture | Transformers with RoPE, SwiGLU, RMSNorm | N/A (used via transformers) | ✅ |
-| Chat Template | ChatML format | ✅ Implemented | ✅ |
+| Parameters | 0.49B (0.36B non-embedding) | Used as-is | ✓ |
+| Context Length | 32,768 tokens | `num_ctx: 4096` | ✓ Conservative |
+| Generation Length | Up to 8K tokens | `max_new_tokens: 512` | ✓ |
+| Architecture | Transformers with RoPE, SwiGLU, RMSNorm | N/A (used via transformers) | ✓ |
+| Chat Template | ChatML format | ✓ Implemented | ✓ |
 
 ### Chat Template (ChatML Format)
 
@@ -173,8 +173,8 @@ TEMPLATE """
 
 | Token | Purpose | Configured |
 |-------|---------|------------|
-| `<\|im_start\|>` | Start of message | ✅ |
-| `<\|im_end\|>` | End of message | ✅ |
+| `<\|im_start\|>` | Start of message | ✓ |
+| `<\|im_end\|>` | End of message | ✓ |
 
 **Configuration (`configs/default.yaml`):**
 ```yaml
@@ -184,7 +184,7 @@ inference:
     - "<|im_end|>"
 ```
 
-### Verification Status: ✅ CORRECT
+### Verification Status: ✓ CORRECT
 
 ---
 
@@ -196,9 +196,9 @@ inference:
 
 | Specification | Official | Our Implementation | Status |
 |--------------|----------|-------------------|--------|
-| Template | ChatML | ✅ Stop tokens configured | ✅ |
-| Context Window | 128K supported | 4096 used | ✅ |
-| Stop Tokens | `<\|im_start\|>`, `<\|im_end\|>` | ✅ Configured | ✅ |
+| Template | ChatML | ✓ Stop tokens configured | ✓ |
+| Context Window | 128K supported | 4096 used | ✓ |
+| Stop Tokens | `<\|im_start\|>`, `<\|im_end\|>` | ✓ Configured | ✓ |
 
 **Usage:** Primary inference model for RAG pipeline during 0.5B experiments.
 
@@ -217,13 +217,13 @@ inference:
 
 | Specification | Official | Our Implementation | Status |
 |--------------|----------|-------------------|--------|
-| Quantization | Q4_K_M (4-bit) | ✅ Correct tag | ✅ |
-| Template | ChatML | ✅ Stop tokens configured | ✅ |
-| Stop Tokens | `<\|im_start\|>`, `<\|im_end\|>` | ✅ Configured | ✅ |
+| Quantization | Q4_K_M (4-bit) | ✓ Correct tag | ✓ |
+| Template | ChatML | ✓ Stop tokens configured | ✓ |
+| Stop Tokens | `<\|im_start\|>`, `<\|im_end\|>` | ✓ Configured | ✓ |
 
 **Usage:**
 - **Dataset generation** (generator model in `configs/default.yaml`)
-- ⚠️ **NOT used as judge** to avoid self-preference bias
+- WARNING:  **NOT used as judge** to avoid self-preference bias
 
 **Why excluded from judging:**
 The Qwen 2.5 7B model generates the training dataset. Using it as a judge would cause
@@ -246,9 +246,9 @@ dataset_generation:
 
 | Specification | Official | Our Implementation | Status |
 |--------------|----------|-------------------|--------|
-| Template | ChatML | ✅ Stop tokens configured | ✅ |
-| Thinking Mode | Enabled when temp > 0 | ✅ `temperature: 0.6` | ✅ |
-| Stop Tokens | `<\|im_start\|>`, `<\|im_end\|>` | ✅ Configured | ✅ |
+| Template | ChatML | ✓ Stop tokens configured | ✓ |
+| Thinking Mode | Enabled when temp > 0 | ✓ `temperature: 0.6` | ✓ |
+| Stop Tokens | `<\|im_start\|>`, `<\|im_end\|>` | ✓ Configured | ✓ |
 
 **Thinking Mode Details:**
 
@@ -278,9 +278,9 @@ inference:
 
 | Specification | Official | Our Implementation | Status |
 |--------------|----------|-------------------|--------|
-| Template | Llama 3 Instruct format | ✅ | ✅ |
-| Context Window | 128K | Default used | ✅ |
-| Stop Tokens | `<\|start_header_id\|>`, `<\|end_header_id\|>`, `<\|eot_id\|>` | ✅ Configured | ✅ |
+| Template | Llama 3 Instruct format | ✓ | ✓ |
+| Context Window | 128K | Default used | ✓ |
+| Stop Tokens | `<\|start_header_id\|>`, `<\|end_header_id\|>`, `<\|eot_id\|>` | ✓ Configured | ✓ |
 
 **Template Format:**
 ```
@@ -354,13 +354,13 @@ SYSTEM "You are a scientific research assistant who answers with concise, eviden
 
 | Model | Role | Template | Stop Tokens | Status |
 |-------|------|----------|-------------|--------|
-| BAAI/bge-m3 | Embeddings | N/A | N/A | ✅ |
-| BAAI/bge-reranker-v2-m3 | Reranking | N/A | N/A | ✅ |
-| Qwen/Qwen2.5-0.5B-Instruct | Fine-tuning base | ChatML | `<\|im_start\|>`, `<\|im_end\|>` | ✅ |
-| qwen2.5:0.5b-instruct | Inference | ChatML | `<\|im_start\|>`, `<\|im_end\|>` | ✅ |
-| qwen2.5:7b-instruct-q4_K_M | **Generator** (NOT judge) | ChatML | `<\|im_start\|>`, `<\|im_end\|>` | ✅ |
-| qwen3:8b | **Judge** (thinking mode) | ChatML | `<\|im_start\|>`, `<\|im_end\|>` | ✅ |
-| llama3.1:8b | **Judge** (alternative) | Llama 3 Instruct | `<\|start_header_id\|>`, `<\|end_header_id\|>`, `<\|eot_id\|>` | ✅ |
+| BAAI/bge-m3 | Embeddings | N/A | N/A | ✓ |
+| BAAI/bge-reranker-v2-m3 | Reranking | N/A | N/A | ✓ |
+| Qwen/Qwen2.5-0.5B-Instruct | Fine-tuning base | ChatML | `<\|im_start\|>`, `<\|im_end\|>` | ✓ |
+| qwen2.5:0.5b-instruct | Inference | ChatML | `<\|im_start\|>`, `<\|im_end\|>` | ✓ |
+| qwen2.5:7b-instruct-q4_K_M | **Generator** (NOT judge) | ChatML | `<\|im_start\|>`, `<\|im_end\|>` | ✓ |
+| qwen3:8b | **Judge** (thinking mode) | ChatML | `<\|im_start\|>`, `<\|im_end\|>` | ✓ |
+| llama3.1:8b | **Judge** (alternative) | Llama 3 Instruct | `<\|start_header_id\|>`, `<\|end_header_id\|>`, `<\|eot_id\|>` | ✓ |
 
 ---
 
@@ -372,8 +372,8 @@ SYSTEM "You are a scientific research assistant who answers with concise, eviden
 | Qwen3 Judge | `configs/judges/pairwise_qwen3_8b.yaml` | qwen3:8b |
 | Qwen3 Dataset Judge | `configs/judges/dataset_quality_judge.yaml` | qwen3:8b |
 | Llama 3.1 Judge | `configs/judges/pairwise_llama31_8b.yaml` | llama3.1:8b |
-| Qwen 7B Generator | `configs/judges/ollama_qwen7b.yaml` | qwen2.5:7b (⚠️ for generation only) |
-| Qwen 7B Pairwise | `configs/judges/pairwise_qwen7b.yaml` | qwen2.5:7b (⚠️ EXCLUDED from experiments) |
+| Qwen 7B Generator | `configs/judges/ollama_qwen7b.yaml` | qwen2.5:7b (WARNING:  for generation only) |
+| Qwen 7B Pairwise | `configs/judges/pairwise_qwen7b.yaml` | qwen2.5:7b (WARNING:  EXCLUDED from experiments) |
 | Instruction-only FT | `ollama/Modelfile.instruction_only` | Custom LoRA |
 | RAG-trained FT | `ollama/Modelfile.rag_trained` | Custom LoRA |
 

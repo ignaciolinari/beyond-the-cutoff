@@ -16,8 +16,8 @@ A comparative smoke test was conducted with 3 judge configurations to evaluate w
 
 | Judge | Model | Temperature | Thinking Mode | Total Time (18 ex) |
 |-------|-------|-------------|---------------|---------------------|
-| Qwen3 + Think | qwen3:8b | 0.6 | ✅ Enabled | 29.0 min |
-| Qwen3 - Think | qwen3:8b | 0.0 | ❌ Disabled | 25.8 min |
+| Qwen3 + Think | qwen3:8b | 0.6 | ✓ Enabled | 29.0 min |
+| Qwen3 - Think | qwen3:8b | 0.0 | ✗ Disabled | 25.8 min |
 | Llama 3.1 | llama3.1:8b | 0.0 | N/A | 15.1 min |
 
 ---
@@ -31,7 +31,7 @@ A comparative smoke test was conducted with 3 judge configurations to evaluate w
 | base_baseline | 0.37 | 0.37 | 0.30 |
 | rag_baseline | 0.70 | 0.70 | 0.83 |
 | lora_ft_only | 0.30 | 0.30 | 0.27 |
-| hybrid_instruction_only | 0.40 | 0.47 | **0.77** ⚠️ |
+| hybrid_instruction_only | 0.40 | 0.47 | **0.77** WARNING:  |
 | lora_rag_trained_ft_only | 0.20 | 0.23 | 0.07 |
 | hybrid_rag_trained | 0.30 | 0.37 | 0.50 |
 
@@ -42,7 +42,7 @@ A comparative smoke test was conducted with 3 judge configurations to evaluate w
 | base_baseline | 0.00 | 0.00 | 0.00 |
 | rag_baseline | 0.65 | 0.87 | 0.83 |
 | lora_ft_only | 0.00 | 0.00 | 0.00 |
-| hybrid_instruction_only | 0.37 | 0.37 | **0.90** ⚠️ |
+| hybrid_instruction_only | 0.37 | 0.37 | **0.90** WARNING:  |
 | lora_rag_trained_ft_only | 0.00 | 0.00 | 0.00 |
 | hybrid_rag_trained | 0.50 | 0.53 | 0.47 |
 
@@ -88,8 +88,8 @@ This comparison measures "imperfect transfer" - a model trained WITHOUT RAG cont
 
 | Metric | Qwen3+Think | Qwen3-Think | Llama 3.1 |
 |--------|-------------|-------------|-----------|
-| Δ Factuality | +0.10 | +0.17 | **+0.50** ⚠️ |
-| Δ Grounding | +0.37 | +0.37 | **+0.90** ⚠️ |
+| Δ Factuality | +0.10 | +0.17 | **+0.50** WARNING:  |
+| Δ Grounding | +0.37 | +0.37 | **+0.90** WARNING:  |
 
 ### 3.3 Factuality Rankings
 
@@ -102,13 +102,13 @@ base ≈ lora_ft < hybrid_instr < rag_base ≤ hybrid_rag_trained
 ```
 lora_rag_trained(0.20) < lora_ft(0.30) = hybrid_rag(0.30) < base(0.37) < hybrid_instr(0.40) < rag_base(0.70)
 ```
-✅ Consistent with theoretical expectations
+✓ Consistent with theoretical expectations
 
 **Llama 3.1 (observed ranking):**
 ```
 lora_rag_trained(0.07) < lora_ft(0.27) < base(0.30) < hybrid_rag(0.50) < hybrid_instr(0.77) < rag_base(0.83)
 ```
-❌ `hybrid_instruction_only` (0.77) nearly equals `rag_baseline` (0.83) - scientifically incorrect
+✗ `hybrid_instruction_only` (0.77) nearly equals `rag_baseline` (0.83) - scientifically incorrect
 
 ---
 
@@ -174,11 +174,11 @@ The difference between Qwen3 with and without thinking mode is minimal:
 
 | Criterion | Qwen3 8B | Llama 3.1 8B |
 |-----------|----------|--------------|
-| **Discriminability** | ✅ High (clear gaps between conditions) | ⚠️ Low (generalized inflation) |
-| **Theoretical consistency** | ✅ Expected rankings | ❌ hybrid > rag_base in grounding |
-| **Citation rigor** | ✅ G=0.37 for FT without RAG | ❌ G=0.90 for FT without RAG |
-| **Calibration** | ✅ Conservative, interpretable | ❌ Too generous |
-| **Reasoning** | ✅ Detailed and specific | ⚠️ Less rigorous |
+| **Discriminability** | ✓ High (clear gaps between conditions) | WARNING:  Low (generalized inflation) |
+| **Theoretical consistency** | ✓ Expected rankings | ✗ hybrid > rag_base in grounding |
+| **Citation rigor** | ✓ G=0.37 for FT without RAG | ✗ G=0.90 for FT without RAG |
+| **Calibration** | ✓ Conservative, interpretable | ✗ Too generous |
+| **Reasoning** | ✓ Detailed and specific | WARNING:  Less rigorous |
 
 ---
 
@@ -210,7 +210,7 @@ The difference between Qwen3 with and without thinking mode is minimal:
 
 ### 8.2 Final Recommendation
 
-🎯 **Use Qwen3 8B WITH Thinking Mode** for the full evaluation
+**Use Qwen3 8B WITH Thinking Mode** for the full evaluation
 
 **Justification:**
 - Greater scientific rigor

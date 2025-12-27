@@ -413,7 +413,7 @@ def execute_generation_plan(
     print("\nGeneration Summary:", file=sys.stderr)
     print("-" * 60, file=sys.stderr)
     for r in generation_results:
-        status = "✓" if r["error_count"] == 0 else f"⚠ ({r['error_count']} errors)"
+        status = "✓" if r["error_count"] == 0 else f"WARNING:  ({r['error_count']} errors)"
         print(
             f"  {r['model_label']}: {r['generated_count']} generated, "
             f"{r['skipped_count']} skipped {status}",

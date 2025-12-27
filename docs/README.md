@@ -2,9 +2,9 @@
 
 This folder contains all project documentation organized by purpose.
 
-> **📊 Experiment Status: COMPLETED** — The Qwen 2.5 0.5B experiment is finished. See [Experiment Results](#-experiment-results-completed) for findings.
+> **Experiment Status: COMPLETED** — The Qwen 2.5 0.5B experiment is finished. See [Experiment Results](#-experiment-results-completed) for findings.
 
-## 📋 Quick Links
+## Quick Links
 
 | Document | Description |
 |----------|-------------|
@@ -17,7 +17,7 @@ This folder contains all project documentation organized by purpose.
 
 ---
 
-## 📊 Experiment Results (Completed)
+## Experiment Results (Completed)
 
 ### Key Findings
 
@@ -31,11 +31,11 @@ This folder contains all project documentation organized by purpose.
 
 ### Scope Limitation
 
-> ⚠️ These results apply to **Qwen 2.5 0.5B** only. Larger models may show different patterns due to increased capacity for knowledge retention. The pipeline is designed to test this — see [Scaling Guide](scaling/README.md).
+> These results apply to **Qwen 2.5 0.5B** only. Larger models may show different patterns due to increased capacity for knowledge retention. The pipeline is designed to test this — see [Scaling Guide](scaling/README.md).
 
 ---
 
-## 📁 Structure
+## Folder Structure
 
 ### `experiment/` - Main Experiment Documentation
 Core documentation for running and understanding the 6-condition RAG vs Fine-tuning experiment.
@@ -73,7 +73,7 @@ Documentation for features not yet implemented.
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 1. **New to the project?** Start with [Experiment Setup](experiment/setup.md)
 2. **Want results?** See [Six-Condition Results](reports/six_condition_experiment_results.md)
@@ -81,18 +81,18 @@ Documentation for features not yet implemented.
 4. **Analyzing results?** See [Analysis Guide](experiment/analysis_guide.md)
 5. **Scaling up?** See [Scaling Guide](scaling/README.md)
 
-## 📊 Completed Experiment
+## Experiment Results (Completed)
 
 The experiment evaluated 6 conditions on **Qwen 2.5 0.5B**:
 
 | # | Condition | Training | RAG at Eval | Pass Rate |
 |---|-----------|----------|-------------|-----------|
-| 1 | Base Baseline | None | ❌ | 4.2% |
-| 2 | RAG Baseline | None | ✅ | **22.8%** |
-| 3 | FT Only (instruction) | Instruction-only | ❌ | 4.3% |
-| 4 | FT+RAG (instruction) | Instruction-only | ✅ | 19.7% |
-| 5 | FT Only (RAG-trained) | RAG-trained | ❌ | 5.6% |
-| 6 | FT+RAG (RAG-trained) | RAG-trained | ✅ | **24.1%** |
+| 1 | Base Baseline | None | ✗ | 4.2% |
+| 2 | RAG Baseline | None | ✓ | **22.8%** |
+| 3 | FT Only (instruction) | Instruction-only | ✗ | 4.3% |
+| 4 | FT+RAG (instruction) | Instruction-only | ✓ | 19.7% |
+| 5 | FT Only (RAG-trained) | RAG-trained | ✗ | 5.6% |
+| 6 | FT+RAG (RAG-trained) | RAG-trained | ✓ | **24.1%** |
 
 **To reproduce:**
 ```bash

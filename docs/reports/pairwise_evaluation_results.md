@@ -5,7 +5,7 @@
 **Replication Evaluator:** Qwen 2.5 8B Instruct
 **Method:** Pairwise comparison with randomized A/B presentation order
 
-> ⚠️ **Scope Limitation**: This comparison applies to **Qwen 2.5 0.5B** only. Larger models may show statistically significant differences due to increased capacity for knowledge retention during fine-tuning. See [Scaling Guide](../scaling/README.md).
+> **Scope Limitation**: This comparison applies to **Qwen 2.5 0.5B** only. Larger models may show statistically significant differences due to increased capacity for knowledge retention during fine-tuning. See [Scaling Guide](../scaling/README.md).
 
 ---
 
@@ -51,7 +51,7 @@ Using Gemini 3 Pro as the primary judge, we evaluated **154 head-to-head compari
 | Total comparisons (N) | 154 |
 | Decisive matches | 113 |
 | Sign test p-value (two-tailed) | **0.347** |
-| Statistically significant at α=0.05? | ❌ No |
+| Statistically significant at α=0.05? | ✗ No |
 | Effect size (Cohen's h) | 0.20 (small) |
 
 The 95% confidence interval for the win rate difference spans from -8.0% to +27.5%, which includes zero, confirming non-significance.
@@ -316,7 +316,7 @@ Despite non-significance, response-level analysis reveals:
 | Decisive matches | 86 |
 | Ties | 68 |
 | Sign test p-value (two-tailed) | **0.914** |
-| Statistically significant at α=0.05? | ❌ No |
+| Statistically significant at α=0.05? | ✗ No |
 | Effect size (Cohen's h) | -0.047 (negligible) |
 
 ### High Tie Rate Investigation
