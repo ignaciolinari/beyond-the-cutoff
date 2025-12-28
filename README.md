@@ -164,8 +164,11 @@ See [docs/experiment/](docs/experiment/) for detailed methodology.
 ```bash
 git clone https://github.com/ignaciolinari/beyond-the-cutoff.git
 cd beyond-the-cutoff
-python scripts/bootstrap_env.py
+make init
 source .venv/bin/activate
+
+# (Alternative) If you prefer not to use Make:
+# python scripts/bootstrap_env.py
 
 # Pull required models
 ollama pull qwen2.5:0.5b-instruct    # Base model
@@ -187,7 +190,7 @@ beyond-the-cutoff/
 ├── apps/                      # Interactive Streamlit applications
 │   ├── human_annotation.py    # Human evaluation annotation UI
 │   └── offline_task_viewer.py # Browse generated QA tasks
-├── artifacts/                 # Training artifacts and checkpoints
+├── artifacts/                 # Training artifacts and checkpoints (generated locally; gitignored)
 ├── configs/
 │   ├── default.yaml          # Main pipeline configuration
 │   ├── models/               # Model configurations (base, fine-tuned)
@@ -212,7 +215,7 @@ beyond-the-cutoff/
 │   ├── finetuning/           # LoRA training notebooks (Colab/Kaggle)
 │   └── data_quality/         # Data analysis notebooks
 ├── ollama/                   # Modelfiles for Ollama registration
-├── outputs/                  # Fine-tuned model weights (GGUF)
+├── outputs/                  # Fine-tuned model weights (GGUF; generated locally; gitignored)
 ├── prompts/                  # Prompt templates
 ├── scripts/
 │   ├── ask.py                # Interactive RAG assistant

@@ -2,7 +2,7 @@
 
 This folder contains all project documentation organized by purpose.
 
-> **Experiment Status: COMPLETED** — The Qwen 2.5 0.5B experiment is finished. See [Experiment Results](#-experiment-results-completed) for findings.
+> **Experiment Status: COMPLETED** — The Qwen 2.5 0.5B experiment is finished. See [Experiment Results](#experiment-results-completed) for findings.
 
 ## Quick Links
 
@@ -81,7 +81,7 @@ Documentation for features not yet implemented.
 4. **Analyzing results?** See [Analysis Guide](experiment/analysis_guide.md)
 5. **Scaling up?** See [Scaling Guide](scaling/README.md)
 
-## Experiment Results (Completed)
+### Six-Condition Pass Rates
 
 The experiment evaluated 6 conditions on **Qwen 2.5 0.5B**:
 
